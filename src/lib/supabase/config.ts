@@ -76,7 +76,7 @@ export function validateEnvironmentConfig(): EnvValidationResult {
     DEFAULT_DATABASE_URL;
 
   return {
-    isConfigured: missingVariables.length === 0,
+    isConfigured: Boolean(supabaseUrl && supabaseAnonKey && supabaseServiceRoleKey),
     missingVariables,
     config: {
       supabaseUrl,
