@@ -1,0 +1,6 @@
+{
+  "name": "LiquorFlow",
+  "description": "Production-ready Liquor Shop and Bar Inventory & ERP application for Indian liquor shop and bar operations.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

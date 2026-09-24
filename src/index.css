@@ -1,0 +1,107 @@
+@import "tailwindcss";
+
+/* 1. ROOT ELEMENTS */
+html,
+body {
+  width: 100%;
+  min-width: 0;
+  min-height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+#root {
+  width: 100%;
+  min-width: 0;
+  min-height: 100vh;
+}
+
+/* 2. APP SHELL */
+.app-shell {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  min-height: 100vh;
+}
+
+/* 3. MAIN CONTENT */
+.main-content {
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+  max-width: none;
+}
+
+/* 4. SIDEBAR */
+.sidebar-container {
+  flex: 0 0 auto;
+}
+
+/* 5. HEADER */
+.header-container {
+  width: 100%;
+  min-width: 0;
+}
+
+.header-inner {
+  width: 100%;
+  min-width: 0;
+  display: flex;
+}
+
+.global-search-container {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* 6. DASHBOARD / PAGE CONTAINER */
+.page-container {
+  width: 100%;
+  max-width: 1600px;
+  margin-inline: auto;
+  min-width: 0;
+}
+
+/* 7. CARDS / GRID */
+.dashboard-grid {
+  width: 100%;
+  min-width: 0;
+}
+
+.dashboard-grid > * {
+  min-width: 0;
+}
+
+.flex-child {
+  min-width: 0;
+}
+
+/* 8. TABLES */
+.table-container {
+  width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* 9. MOBILE */
+@media (max-width: 767px) {
+  html,
+  body {
+    width: 100%;
+    min-width: 0;
+    overflow-x: hidden;
+  }
+
+  .app-shell,
+  .main-content,
+  .page-container {
+    width: 100%;
+    min-width: 0;
+  }
+}
