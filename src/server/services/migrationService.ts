@@ -55,7 +55,7 @@ export const REQUIRED_TABLES = [
 export const FORBIDDEN_TABLES = ['sales', 'sale_items', 'customers', 'payments'];
 
 const DEFAULT_DATABASE_URL =
-  'postgresql://postgres.ckscmohjxmayazxncjmq:Liquorflow9699@aws-0-ap-south-1.pooler.supabase.com:5432/postgres';
+  'postgres://postgres.sefhgbvocnmzcgicmntu:40Esni0NAhoU3ZO7@aws-0-ap-south-1.pooler.supabase.com:5432/postgres';
 
 function createPgPool(dbUrl: string): Pool {
   let cleanUrl = dbUrl;
@@ -76,6 +76,9 @@ export class MigrationService {
    */
   static getDatabaseUrl(): string {
     return (
+      process.env.STORAGE_POSTGRES_URL_NON_POOLING ||
+      process.env.STORAGE_POSTGRES_URL ||
+      process.env.STORAGE_POSTGRES_PRISMA_URL ||
       process.env.DATABASE_URL ||
       process.env.POSTGRES_URL ||
       process.env.SUPABASE_DB_URL ||

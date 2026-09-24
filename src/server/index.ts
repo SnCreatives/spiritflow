@@ -111,7 +111,7 @@ async function requireAuth(req: Request, res: Response, next: NextFunction) {
  */
 apiApp.get('/api/health', async (_req: Request, res: Response) => {
   const envCheck = validateEnvironmentConfig();
-  if (!envCheck.isConfigured) {
+  if (!envCheck.isConfigured && !envCheck.config) {
     return sendError(
       res,
       'MISSING_ENV_CONFIGURATION',
@@ -146,7 +146,7 @@ apiApp.get('/api/health', async (_req: Request, res: Response) => {
  */
 apiApp.get('/api/setup/status', async (_req: Request, res: Response) => {
   const envCheck = validateEnvironmentConfig();
-  if (!envCheck.isConfigured) {
+  if (!envCheck.isConfigured && !envCheck.config) {
     return sendError(
       res,
       'MISSING_ENV_CONFIGURATION',
@@ -173,7 +173,7 @@ apiApp.get('/api/setup/status', async (_req: Request, res: Response) => {
  */
 apiApp.post('/api/setup', async (req: Request, res: Response) => {
   const envCheck = validateEnvironmentConfig();
-  if (!envCheck.isConfigured) {
+  if (!envCheck.isConfigured && !envCheck.config) {
     return sendError(
       res,
       'MISSING_ENV_CONFIGURATION',
@@ -197,7 +197,7 @@ apiApp.post('/api/setup', async (req: Request, res: Response) => {
  */
 const handleLogin = async (req: Request, res: Response) => {
   const envCheck = validateEnvironmentConfig();
-  if (!envCheck.isConfigured) {
+  if (!envCheck.isConfigured && !envCheck.config) {
     return sendError(res, 'MISSING_ENV_CONFIGURATION', 'Database configuration missing in .env', 503);
   }
 
