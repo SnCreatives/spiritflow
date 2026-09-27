@@ -1,5 +1,10 @@
 import dotenv from 'dotenv';
-dotenv.config();
+import path from 'path';
+dotenv.config({ path: path.join(process.cwd(), '.env') });
+try {
+  dotenv.config({ path: path.join(__dirname, '.env') });
+} catch {}
+
 
 import express, { Request, Response, NextFunction } from 'express';
 import { validateEnvironmentConfig } from '../lib/supabase/config.ts';
