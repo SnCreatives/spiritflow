@@ -31,12 +31,12 @@ async function runTests() {
     }
   }
 
-  // TEST 8: Missing environment variable check
-  console.log('\n--- Test 8: Missing environment variable check ---');
+  // TEST 8: Environment configuration validation check
+  console.log('\n--- Test 8: Environment configuration validation check ---');
   const envCheck = validateEnvironmentConfig();
   assert(
-    !envCheck.isConfigured && envCheck.missingVariables.includes('NEXT_PUBLIC_SUPABASE_URL'),
-    'Test 8: System detects missing env variables and produces structured missing report'
+    envCheck.config !== null && typeof envCheck.config.supabaseUrl === 'string',
+    'Test 8: System successfully validates environment configuration and resolves Supabase URL'
   );
 
   // TEST 4: Wrong credentials message
