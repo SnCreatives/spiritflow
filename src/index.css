@@ -1,6 +1,6 @@
 @import "tailwindcss";
 
-/* 1. ROOT ELEMENTS */
+/* 1. ROOT & THEME TRANSITIONS */
 html,
 body {
   width: 100%;
@@ -8,6 +8,7 @@ body {
   min-height: 100%;
   margin: 0;
   padding: 0;
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 body {
@@ -21,7 +22,87 @@ body {
   min-height: 100vh;
 }
 
-/* 2. APP SHELL */
+/* 2. LIGHT MODE OVERRIDES */
+html.light {
+  color-scheme: light;
+}
+
+html.light body,
+html.light #root,
+html.light .app-shell {
+  background-color: #f8fafc !important; /* slate-50 */
+  color: #0f172a !important; /* slate-900 */
+}
+
+/* Background overrides for Light Mode */
+html.light [class*="bg-slate-950"],
+html.light [class*="bg-[#111113]"],
+html.light [class*="bg-[#151518]"] {
+  background-color: #f8fafc !important;
+}
+
+html.light [class*="bg-slate-900"] {
+  background-color: #ffffff !important;
+}
+
+html.light [class*="bg-slate-800"] {
+  background-color: #f1f5f9 !important;
+}
+
+/* Border overrides for Light Mode */
+html.light [class*="border-slate-800"],
+html.light [class*="border-slate-700"],
+html.light [class*="border-[#f2efeb]"] {
+  border-color: #cbd5e1 !important; /* slate-300 */
+}
+
+/* Text overrides for Light Mode */
+html.light [class*="text-slate-100"],
+html.light [class*="text-slate-200"],
+html.light [class*="text-white"],
+html.light [class*="text-[#f2efeb]"] {
+  color: #0f172a !important; /* slate-900 */
+}
+
+html.light [class*="text-slate-300"],
+html.light [class*="text-slate-400"] {
+  color: #334155 !important; /* slate-700 */
+}
+
+html.light [class*="text-slate-500"] {
+  color: #64748b !important; /* slate-500 */
+}
+
+/* Input, select, textarea styling in Light Mode */
+html.light input,
+html.light select,
+html.light textarea {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border-color: #cbd5e1 !important;
+}
+
+html.light input::placeholder,
+html.light textarea::placeholder {
+  color: #94a3b8 !important;
+}
+
+/* Table header & row styling in Light Mode */
+html.light th {
+  background-color: #f1f5f9 !important;
+  color: #334155 !important;
+}
+
+html.light tr:hover {
+  background-color: #f8fafc !important;
+}
+
+/* Modal backdrop in Light Mode */
+html.light .backdrop-blur {
+  backdrop-filter: blur(8px);
+}
+
+/* 3. APP SHELL LAYOUT */
 .app-shell {
   display: flex;
   width: 100%;
@@ -29,7 +110,7 @@ body {
   min-height: 100vh;
 }
 
-/* 3. MAIN CONTENT */
+/* 4. MAIN CONTENT */
 .main-content {
   flex: 1 1 auto;
   width: auto;
@@ -37,12 +118,12 @@ body {
   max-width: none;
 }
 
-/* 4. SIDEBAR */
+/* 5. SIDEBAR */
 .sidebar-container {
   flex: 0 0 auto;
 }
 
-/* 5. HEADER */
+/* 6. HEADER */
 .header-container {
   width: 100%;
   min-width: 0;
@@ -59,7 +140,7 @@ body {
   min-width: 0;
 }
 
-/* 6. DASHBOARD / PAGE CONTAINER */
+/* 7. PAGE CONTAINER */
 .page-container {
   width: 100%;
   max-width: 1600px;
@@ -67,7 +148,7 @@ body {
   min-width: 0;
 }
 
-/* 7. CARDS / GRID */
+/* 8. CARDS / GRID */
 .dashboard-grid {
   width: 100%;
   min-width: 0;
@@ -81,7 +162,7 @@ body {
   min-width: 0;
 }
 
-/* 8. TABLES */
+/* 9. TABLES */
 .table-container {
   width: 100%;
   min-width: 0;
@@ -89,7 +170,7 @@ body {
   -webkit-overflow-scrolling: touch;
 }
 
-/* 9. MOBILE */
+/* 10. MOBILE RESPONSIVENESS */
 @media (max-width: 767px) {
   html,
   body {

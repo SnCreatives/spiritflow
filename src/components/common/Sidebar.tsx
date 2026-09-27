@@ -15,10 +15,13 @@ import {
   BarChart3,
   Settings,
   LogOut,
+  Sun,
+  Moon,
 } from 'lucide-react';
 import { SupportedLanguage, AuthUser } from '../../types';
 import { translations } from '../../utils/i18n';
 import { LiquorFlowLogo } from './LiquorFlowLogo';
+import { useTheme } from '../../utils/ThemeContext';
 
 interface SidebarProps {
   currentRoute: string;
@@ -37,6 +40,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onLogout,
 }) => {
   const t = translations[language];
+  const { theme, toggleTheme } = useTheme();
 
   const navigationItems = [
     {
@@ -176,8 +180,26 @@ export const Sidebar: React.FC<SidebarProps> = ({
         ))}
       </nav>
 
-      {/* Footer / User Profile & Logout */}
-      <div className="p-3 border-t border-slate-800 bg-slate-900/60">
+      {/* Footer / User Profile & Theme Toggle & Logout */}
+      <div className="p-3 border-t border-slate-800 bg-slate-900/60 space-y-1.5">
+        <button
+          type="button"
+          onClick={toggleTheme}
+          className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium text-slate-300 hover:text-white hover:bg-slate-800/80 border border-slate-800 hover:border-slate-700 transition-colors cursor-pointer"
+        >
+          <div className="flex items-center gap-2.5">
+            {theme === 'dark' ? (
+              <Sun className="w-4 h-4 text-amber-400" />
+            ) : (
+              <Moon className="w-4 h-4 text-indigo-400" />
+            )}
+            <span>{theme === 'dark' ? 'Light Mode' : 'Dark Mode'}</span>
+          </div>
+          <span className="text-[10px] bg-slate-800/80 border border-slate-700/60 px-1.5 py-0.5 rounded text-amber-400 font-mono">
+            {theme === 'dark' ? 'DARK' : 'LIGHT'}
+          </span>
+        </button>
+
         <button
           type="button"
           onClick={onLogout}

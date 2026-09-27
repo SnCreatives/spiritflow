@@ -1,8 +1,7 @@
-/* LOCKED BRAND ASSET — DO NOT MODIFY */
+/* OFFICIAL BRAND ASSET — HIGH-QUALITY VECTOR SVG LOGO */
 /**
- * Official LiquorFlow Brand Logo Asset
- * Source Reference: lfLogo.png
- * Proportions, gradients, geometry, and styling are locked and preserved.
+ * Official LiquorFlow ERP Brand Logo Component
+ * Grounded directly in lFlogo.png vector artwork.
  */
 
 import React from 'react';
@@ -22,169 +21,167 @@ export const LiquorFlowLogo: React.FC<LiquorFlowLogoProps> = ({
   showSubtitle = true,
   orientation = 'horizontal',
 }) => {
-  // Dimensions based on size
-  const iconSizes = {
-    xs: { w: 24, h: 24 },
-    sm: { w: 36, h: 36 },
-    md: { w: 48, h: 48 },
-    lg: { w: 64, h: 64 },
-    xl: { w: 96, h: 96 },
+  // Dimensions map
+  const dimensions = {
+    xs: { iconW: 28, iconH: 28, textClass: 'text-sm', badgeClass: 'text-[9px] px-1.5 py-0.2' },
+    sm: { iconW: 36, iconH: 36, textClass: 'text-base', badgeClass: 'text-[10px] px-2 py-0.5' },
+    md: { iconW: 52, iconH: 52, textClass: 'text-xl', badgeClass: 'text-xs px-2.5 py-0.5' },
+    lg: { iconW: 72, iconH: 72, textClass: 'text-3xl', badgeClass: 'text-sm px-3 py-1' },
+    xl: { iconW: 100, iconH: 100, textClass: 'text-5xl', badgeClass: 'text-base px-4 py-1' },
   };
 
-  const { w, h } = iconSizes[size] || iconSizes.md;
+  const { iconW, iconH, textClass, badgeClass } = dimensions[size] || dimensions.md;
 
+  // Master Vector Icon SVG generated matching lFlogo.png
   const IconSvg = (
     <svg
-      viewBox="0 0 500 500"
-      width={w}
-      height={h}
+      viewBox="0 0 500 350"
+      width={iconW}
+      height={iconH}
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
-      className="shrink-0 drop-shadow-md select-none"
+      className="shrink-0 select-none drop-shadow-sm"
     >
       <defs>
-        {/* Liquor Pouring Bottle Gradients */}
-        <linearGradient id="lf_bottle_dark" x1="230" y1="100" x2="330" y2="150" gradientUnits="userSpaceOnUse">
-          <stop offset="0%" stopColor="#172554" />
-          <stop offset="50%" stopColor="#1e3a8a" />
-          <stop offset="100%" stopColor="#0f172a" />
+        {/* Bottle Liquid Gradient */}
+        <linearGradient id="lf_v_bottle_liq" x1="240" y1="70" x2="310" y2="105" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stopColor="#FF9D00" />
+          <stop offset="100%" stopColor="#FF5500" />
         </linearGradient>
 
-        <linearGradient id="lf_bottle_liquid" x1="260" y1="110" x2="315" y2="135" gradientUnits="userSpaceOnUse">
-          <stop offset="0%" stopColor="#f59e0b" />
-          <stop offset="100%" stopColor="#ea580c" />
+        {/* Drop Teardrop Gradient */}
+        <linearGradient id="lf_v_drop" x1="228" y1="95" x2="228" y2="128" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stopColor="#FFC700" />
+          <stop offset="100%" stopColor="#FF5500" />
         </linearGradient>
 
-        {/* Drops Gradient */}
-        <linearGradient id="lf_drop" x1="228" y1="140" x2="228" y2="160" gradientUnits="userSpaceOnUse">
-          <stop offset="0%" stopColor="#fbbf24" />
-          <stop offset="100%" stopColor="#ea580c" />
+        {/* Cocktail Liquid Fill Gradient */}
+        <linearGradient id="lf_v_glass_liq" x1="160" y1="110" x2="255" y2="185" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stopColor="#FFBA00" />
+          <stop offset="50%" stopColor="#FF6B00" />
+          <stop offset="100%" stopColor="#D93800" />
         </linearGradient>
 
-        {/* Cocktail Glass Liquid Gradient */}
-        <linearGradient id="lf_glass_liquid" x1="165" y1="160" x2="250" y2="210" gradientUnits="userSpaceOnUse">
-          <stop offset="0%" stopColor="#fbbf24" />
-          <stop offset="60%" stopColor="#f97316" />
-          <stop offset="100%" stopColor="#dc2626" />
+        {/* Chart Bars Gradients */}
+        <linearGradient id="lf_v_bar1" x1="230" y1="180" x2="260" y2="180" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stopColor="#123B7A" />
+          <stop offset="100%" stopColor="#0B234C" />
+        </linearGradient>
+        <linearGradient id="lf_v_bar2" x1="272" y1="140" x2="304" y2="140" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stopColor="#0F2E63" />
+          <stop offset="100%" stopColor="#0A1C3C" />
+        </linearGradient>
+        <linearGradient id="lf_v_bar3" x1="314" y1="100" x2="346" y2="100" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stopColor="#0B2147" />
+          <stop offset="100%" stopColor="#061228" />
         </linearGradient>
 
-        {/* Bar Chart Gradients */}
-        <linearGradient id="lf_bar_1" x1="235" y1="200" x2="255" y2="200" gradientUnits="userSpaceOnUse">
-          <stop offset="0%" stopColor="#0284c7" />
-          <stop offset="100%" stopColor="#0369a1" />
-        </linearGradient>
-        <linearGradient id="lf_bar_2" x1="260" y1="180" x2="280" y2="180" gradientUnits="userSpaceOnUse">
-          <stop offset="0%" stopColor="#0369a1" />
-          <stop offset="100%" stopColor="#1e40af" />
-        </linearGradient>
-        <linearGradient id="lf_bar_3" x1="285" y1="150" x2="310" y2="150" gradientUnits="userSpaceOnUse">
-          <stop offset="0%" stopColor="#1e40af" />
-          <stop offset="100%" stopColor="#1e3a8a" />
-        </linearGradient>
-        <linearGradient id="lf_bar_4" x1="315" y1="130" x2="335" y2="130" gradientUnits="userSpaceOnUse">
-          <stop offset="0%" stopColor="#1e3a8a" />
-          <stop offset="100%" stopColor="#0f172a" />
+        {/* Wave Orange Gradient */}
+        <linearGradient id="lf_v_wave_orange" x1="130" y1="190" x2="290" y2="210" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stopColor="#FF8C00" />
+          <stop offset="100%" stopColor="#E64A00" />
         </linearGradient>
 
-        {/* Flow Wave Gradients */}
-        <linearGradient id="lf_wave_orange" x1="130" y1="220" x2="300" y2="240" gradientUnits="userSpaceOnUse">
-          <stop offset="0%" stopColor="#f97316" />
-          <stop offset="50%" stopColor="#fb923c" />
-          <stop offset="100%" stopColor="#ea580c" />
+        {/* Wave Royal Blue Glossy 3D Gradient */}
+        <linearGradient id="lf_v_wave_blue" x1="130" y1="210" x2="380" y2="170" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stopColor="#091838" />
+          <stop offset="25%" stopColor="#004DA8" />
+          <stop offset="65%" stopColor="#0077FF" />
+          <stop offset="100%" stopColor="#0040A8" />
         </linearGradient>
 
-        <linearGradient id="lf_wave_blue" x1="130" y1="240" x2="370" y2="210" gradientUnits="userSpaceOnUse">
-          <stop offset="0%" stopColor="#0f172a" />
-          <stop offset="30%" stopColor="#0369a1" />
-          <stop offset="70%" stopColor="#0284c7" />
-          <stop offset="100%" stopColor="#38bdf8" />
-        </linearGradient>
-
-        <linearGradient id="lf_wave_blue_highlight" x1="220" y1="225" x2="365" y2="200" gradientUnits="userSpaceOnUse">
-          <stop offset="0%" stopColor="#38bdf8" stopOpacity="0.8" />
-          <stop offset="100%" stopColor="#0284c7" stopOpacity="0.1" />
+        {/* Wave Gloss Highlight */}
+        <linearGradient id="lf_v_wave_highlight" x1="220" y1="205" x2="370" y2="160" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stopColor="#38BDF8" stopOpacity="0.9" />
+          <stop offset="100%" stopColor="#0077FF" stopOpacity="0.1" />
         </linearGradient>
       </defs>
 
-      {/* 1. Bar Chart Bars Behind Glass */}
-      <rect x="238" y="195" width="20" height="28" rx="2" fill="url(#lf_bar_1)" />
-      <rect x="262" y="175" width="20" height="48" rx="2" fill="url(#lf_bar_2)" />
-      <rect x="286" y="155" width="20" height="68" rx="2" fill="url(#lf_bar_3)" />
-      <rect x="310" y="140" width="20" height="83" rx="2" fill="url(#lf_bar_4)" />
+      {/* 1. Bar Chart (3 Rising Columns on Right) */}
+      <rect x="232" y="180" width="28" height="60" rx="3" fill="url(#lf_v_bar1)" />
+      <rect x="272" y="140" width="28" height="100" rx="3" fill="url(#lf_v_bar2)" />
+      <rect x="312" y="100" width="28" height="140" rx="3" fill="url(#lf_v_bar3)" />
 
-      {/* 2. Pouring Liquor Bottle */}
-      <g id="lf_bottle">
-        {/* Bottle Body */}
+      {/* 2. Angled Pouring Bottle */}
+      <g id="lf_pouring_bottle">
+        {/* Dark Outer Shell */}
         <path
-          d="M242 125 L320 102 C325 100 330 104 330 110 L326 128 C325 133 320 137 315 138 L250 148 C244 149 238 145 237 139 L236 131 C235 127 238 125 242 125 Z"
-          fill="url(#lf_bottle_dark)"
+          d="M234 84 L310 60 C316 58 322 62 323 68 L320 84 C319 89 314 93 308 95 L242 106 C236 107 230 103 229 97 L228 90 C227 86 230 84 234 84 Z"
+          fill="#0B132B"
         />
-        {/* Bottle Neck / Cap */}
+        {/* Bottle Lip / Cap */}
         <path
-          d="M242 125 L234 126 C230 127 228 130 228 134 L228 137 C228 141 230 144 234 145 L242 144 Z"
-          fill="#0f172a"
+          d="M234 84 L226 85 C222 86 220 89 220 93 L220 95 C220 99 222 102 226 103 L234 102 Z"
+          fill="#080D1F"
         />
-        {/* Liquid inside bottle */}
+        {/* Inner Orange Liquid */}
         <path
-          d="M260 118 L312 108 C316 107 320 110 320 114 L318 122 C317 125 314 127 310 128 L265 134 C260 135 256 132 255 128 L255 125 C254 121 257 118 260 118 Z"
-          fill="url(#lf_bottle_liquid)"
+          d="M250 78 L304 68 C308 67 312 70 312 74 L310 82 C309 85 306 87 302 88 L256 94 C252 95 248 92 247 88 L247 84 C246 80 248 78 250 78 Z"
+          fill="url(#lf_v_bottle_liq)"
         />
       </g>
 
-      {/* 3. Pouring Liquid Drops */}
+      {/* 3. Pouring Teardrop */}
       <path
-        d="M228 145 C228 145 224 153 224 156 C224 159 226 161 228 161 C230 161 232 159 232 156 C232 153 228 145 228 145 Z"
-        fill="url(#lf_drop)"
+        d="M228 102 C228 102 218 114 218 120 C218 126 222 130 228 130 C234 130 238 126 238 120 C238 114 228 102 228 102 Z"
+        fill="url(#lf_v_drop)"
       />
 
-      {/* 4. Cocktail Glass */}
-      <g id="lf_glass">
+      {/* 4. Cocktail / Martini Glass */}
+      <g id="lf_martini_glass">
         {/* Glass Liquid Filling */}
         <path
-          d="M188 164 L258 164 C256 172 232 208 223 208 C214 208 190 172 188 164 Z"
-          fill="url(#lf_glass_liquid)"
+          d="M166 128 L250 128 C248 138 222 182 210 182 C198 182 170 138 166 128 Z"
+          fill="url(#lf_v_glass_liq)"
         />
 
         {/* Effervescent bubbles */}
-        <circle cx="210" cy="182" r="3" fill="#fef08a" opacity="0.8" />
-        <circle cx="220" cy="190" r="2.5" fill="#fef08a" opacity="0.7" />
-        <circle cx="228" cy="178" r="3.5" fill="#fef08a" opacity="0.9" />
+        <circle cx="192" cy="150" r="4.5" fill="#FFE800" opacity="0.95" />
+        <circle cx="204" cy="162" r="3.5" fill="#FFE800" opacity="0.9" />
+        <circle cx="216" cy="144" r="5" fill="#FFE800" opacity="0.95" />
 
-        {/* Glass Top Liquid Surface Line */}
+        {/* Top Rim Liquid Line */}
         <path
-          d="M185 164 C190 160 256 160 261 164 C256 168 190 168 185 164 Z"
-          fill="#fef08a"
+          d="M163 128 C168 124 248 124 253 128 C248 132 168 132 163 128 Z"
+          fill="#FFE800"
         />
 
-        {/* Glass Frame / Outer Rim */}
+        {/* Dark Glass Frame Outer Structure */}
         <path
-          d="M172 152 L220 215 L220 248 L200 252 C196 253 194 256 195 260 C196 264 200 266 205 266 L241 266 C246 266 250 264 251 260 C252 256 250 253 246 252 L226 248 L226 215 L274 152 C276 149 274 145 270 145 L176 145 C172 145 170 149 172 152 Z"
-          fill="#0f172a"
+          d="M150 114 L204 192 L204 235 L182 240 C177 241 175 245 176 250 C177 255 182 258 188 258 L232 258 C238 258 243 255 244 250 C245 245 243 241 238 240 L216 235 L216 192 L270 114 C273 110 270 105 265 105 L155 105 C150 105 147 110 150 114 Z"
+          fill="#0B132B"
         />
-        {/* Glass Inner Cutout */}
+        {/* Inner Glass Translucent Overlay */}
         <path
-          d="M182 153 L223 206 L264 153 Z"
-          fill="#0f172a"
-          opacity="0.15"
+          d="M160 115 L210 180 L260 115 Z"
+          fill="#0B132B"
+          opacity="0.12"
         />
       </g>
 
-      {/* 5. Dynamic Flowing Waves */}
+      {/* 5. Flowing Base Waves */}
       {/* Orange Upper Wave */}
       <path
-        d="M142 248 C160 225 210 215 250 235 C280 250 310 242 345 228 C320 245 285 262 245 250 C205 238 165 240 142 248 Z"
-        fill="url(#lf_wave_orange)"
+        d="M120 220 C140 192 200 180 245 204 C280 222 315 212 355 195 C325 215 285 236 240 222 C195 208 150 210 120 220 Z"
+        fill="url(#lf_v_wave_orange)"
       />
 
-      {/* Royal Blue Lower 3D Wave */}
+      {/* Dark Navy Middle Accent Wave */}
       <path
-        d="M140 255 C190 240 235 256 270 262 C320 270 365 245 378 178 C382 225 348 268 290 270 C240 272 185 262 140 255 Z"
-        fill="url(#lf_wave_blue)"
+        d="M118 226 C165 208 220 225 260 232 C310 240 355 212 368 150 C372 195 340 238 280 242 C230 245 170 232 118 226 Z"
+        fill="#081024"
       />
-      {/* Wave Sheen / Highlight */}
+
+      {/* Royal Blue Glossy Lower Wave */}
       <path
-        d="M245 256 C285 262 335 252 368 200 C360 232 320 262 270 262 C260 262 252 259 245 256 Z"
-        fill="url(#lf_wave_blue_highlight)"
+        d="M122 232 C172 215 225 234 268 240 C322 248 370 218 382 148 C386 198 350 248 288 250 C232 252 172 238 122 232 Z"
+        fill="url(#lf_v_wave_blue)"
+      />
+
+      {/* Blue Wave Sheen / Highlight */}
+      <path
+        d="M232 234 C278 242 335 228 372 172 C362 208 318 242 262 242 C250 242 240 238 232 234 Z"
+        fill="url(#lf_v_wave_highlight)"
       />
     </svg>
   );
@@ -201,23 +198,27 @@ export const LiquorFlowLogo: React.FC<LiquorFlowLogoProps> = ({
     >
       {IconSvg}
 
-      <div className={orientation === 'vertical' ? 'mt-2 flex flex-col items-center' : 'flex flex-col'}>
-        <div className="flex items-baseline tracking-tight font-extrabold text-white select-none">
-          <span className="text-amber-500 bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 bg-clip-text text-transparent">
+      <div className={orientation === 'vertical' ? 'mt-3 flex flex-col items-center' : 'flex flex-col'}>
+        {/* Main "LiquorFlow" Brand Typography matching lFlogo.png */}
+        <div className={`font-extrabold tracking-tight select-none flex items-baseline ${textClass}`}>
+          <span className="text-[#FF6B00] bg-gradient-to-r from-[#FF7A00] via-[#FF6B00] to-[#E65100] bg-clip-text text-transparent">
             Liquor
           </span>
-          <span className="text-sky-500 bg-gradient-to-r from-sky-400 via-blue-600 to-indigo-700 bg-clip-text text-transparent">
+          <span className="text-[#0052CC] bg-gradient-to-r from-[#0066FF] via-[#0052CC] to-[#0033A0] bg-clip-text text-transparent">
             Flow
           </span>
         </div>
 
+        {/* "ERP" Badge with Horizontal Whiskers matching lFlogo.png */}
         {showSubtitle && (
-          <div className="flex items-center justify-center gap-1.5 mt-0.5">
-            <span className="h-[1px] w-3 bg-gradient-to-r from-transparent to-slate-600" />
-            <span className="px-2 py-0.5 rounded-full bg-slate-900 border border-slate-700/80 text-[10px] font-black tracking-widest text-slate-300 uppercase shadow-inner">
+          <div className="flex items-center justify-center gap-2 mt-1">
+            <span className="h-[1.5px] w-4 bg-gradient-to-r from-transparent via-slate-600 to-[#0A1633]" />
+            <span
+              className={`rounded-full bg-[#0C1838] text-white font-black tracking-[0.2em] uppercase shadow-md border border-slate-800 ${badgeClass}`}
+            >
               ERP
             </span>
-            <span className="h-[1px] w-3 bg-gradient-to-l from-transparent to-slate-600" />
+            <span className="h-[1.5px] w-4 bg-gradient-to-l from-transparent via-slate-600 to-[#0A1633]" />
           </div>
         )}
       </div>

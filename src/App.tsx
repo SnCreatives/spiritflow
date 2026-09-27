@@ -171,16 +171,6 @@ export default function App() {
   if (!currentUser || currentRoute === '/login' || currentRoute === '/setup') {
     return (
       <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col selection:bg-amber-500 selection:text-slate-950">
-        <Header
-          language={language}
-          onLanguageChange={handleLanguageChange}
-          user={null}
-          onLogout={handleLogout}
-          onOpenSearch={() => {}}
-          currentRoute="/login"
-          onRouteChange={handleRouteChange}
-        />
-
         <main className="flex-1">
           {currentRoute === '/setup' ? (
             <SetupView

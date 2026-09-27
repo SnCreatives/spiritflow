@@ -1,8 +1,9 @@
 import React from 'react';
-import { Search, Globe, LogOut, Menu } from 'lucide-react';
+import { Search, Globe, LogOut, Menu, Sun, Moon } from 'lucide-react';
 import { SupportedLanguage, AuthUser } from '../../types';
 import { translations } from '../../utils/i18n';
 import { LiquorFlowLogo } from './LiquorFlowLogo';
+import { useTheme } from '../../utils/ThemeContext';
 
 interface HeaderProps {
   language: SupportedLanguage;
@@ -26,6 +27,7 @@ export const Header: React.FC<HeaderProps> = ({
   onToggleSidebar,
 }) => {
   const t = translations[language];
+  const { theme, toggleTheme } = useTheme();
 
   return (
     <header className="header-container sticky top-0 z-30 bg-slate-900/95 backdrop-blur border-b border-slate-800 text-white select-none">
@@ -82,8 +84,23 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
           )}
 
-          {/* 3. Language Selector & Logout */}
+          {/* 3. Theme Toggle, Language Selector & Logout */}
           <div className="flex items-center gap-2 shrink-0">
+            {/* Dark / Light Mode Toggle Button */}
+            <button
+              type="button"
+              onClick={toggleTheme}
+              className="p-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-amber-400 border border-slate-700/60 transition-all cursor-pointer flex items-center justify-center"
+              title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+              aria-label="Toggle Dark/Light Mode"
+            >
+              {theme === 'dark' ? (
+                <Sun className="w-4 h-4 text-amber-400 transition-transform hover:rotate-45" />
+              ) : (
+                <Moon className="w-4 h-4 text-indigo-500 transition-transform hover:-rotate-12" />
+              )}
+            </button>
+
             {/* Language Selector */}
             <div className="flex items-center bg-slate-800/80 border border-slate-700/60 rounded-xl p-0.5">
               <Globe className="w-3 h-3 text-slate-400 ml-1.5 hidden lg:inline" />

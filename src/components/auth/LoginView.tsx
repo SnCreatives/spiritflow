@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { Lock, AlertCircle, ArrowRight, ShieldCheck, User, Globe, Eye, EyeOff, Loader2 } from 'lucide-react';
+import { Lock, AlertCircle, ArrowRight, ShieldCheck, User, Eye, EyeOff, Loader2, Sun, Moon } from 'lucide-react';
 import { SupportedLanguage, AuthUser } from '../../types';
 import { apiPost } from '../../utils/api';
 import { translations } from '../../utils/i18n';
 import { LiquorFlowLogo } from '../common/LiquorFlowLogo';
+import { useTheme } from '../../utils/ThemeContext';
 
 interface LoginViewProps {
   language: SupportedLanguage;
@@ -21,14 +22,11 @@ export const LoginView: React.FC<LoginViewProps> = ({
   setupCompleted,
 }) => {
   const t = translations[language] || translations.en;
+  const { theme, toggleTheme } = useTheme();
 
-  // 1. Initial form state MUST be completely empty
   const [username, setUsername] = useState<string>('');
   const [password, setPassword] = useState<string>('');
-
-  // 2. Show / Hide password state (Default: hidden)
   const [showPassword, setShowPassword] = useState<boolean>(false);
-
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -46,7 +44,6 @@ export const LoginView: React.FC<LoginViewProps> = ({
     e.preventDefault();
     if (isSubmitting) return;
 
-    // Reset any prior error before attempting
     setErrorMessage(null);
 
     const trimmedUsername = username.trim();
@@ -61,7 +58,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
       const result = await apiPost('/api/login', {
         username: trimmedUsername,
         mobileNumber: trimmedUsername,
-        password: password, // Send exact password without trimming
+        password: password,
       });
 
       if (!result.success || !result.data) {
@@ -85,78 +82,102 @@ export const LoginView: React.FC<LoginViewProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-center py-10 px-4 sm:px-6 lg:px-8">
-      {/* Top Bar with Language Selector */}
-      <div className="sm:mx-auto sm:w-full sm:max-w-md flex justify-end mb-4">
-        {onLanguageChange && (
-          <div
-            id="login-language-switcher"
-            className="inline-flex items-center bg-slate-900/90 border border-slate-800 rounded-2xl p-1 shadow-lg"
+    <div className="min-h-screen bg-[#111113] text-[#f2efeb] flex flex-col justify-between font-sans selection:bg-amber-500 selection:text-[#111113]">
+      {/* Header */}
+      <header className="px-6 py-5 border-b border-[#f2efeb]/10 flex justify-between items-center bg-[#111113]/90 backdrop-blur z-10">
+        <div className="flex items-center gap-3">
+          <LiquorFlowLogo size="sm" showText={true} showSubtitle={false} />
+          <div className="hidden sm:block font-mono text-[0.65rem] uppercase tracking-[0.15em] opacity-60 font-semibold border-l border-[#f2efeb]/15 pl-3">
+            Inventory & Excise Management
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={toggleTheme}
+            className="p-1.5 rounded-xs border border-[#f2efeb]/15 bg-transparent hover:bg-[#f2efeb]/10 text-[#f2efeb] transition-colors cursor-pointer flex items-center justify-center"
+            title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
           >
-            <Globe className="w-3.5 h-3.5 text-slate-400 ml-2 mr-1" />
+            {theme === 'dark' ? (
+              <Sun className="w-4 h-4 text-amber-400" />
+            ) : (
+              <Moon className="w-4 h-4 text-indigo-400" />
+            )}
+          </button>
+
+          {onLanguageChange && (
+          <div className="flex border border-[#f2efeb]/15 rounded overflow-hidden">
             <button
               type="button"
               id="lang-btn-en"
               onClick={() => onLanguageChange('en')}
-              className={`px-3 py-1 text-xs font-semibold rounded-xl transition-all cursor-pointer ${
+              className={`px-3 py-1 text-[0.7rem] font-semibold transition-all cursor-pointer ${
                 language === 'en'
-                  ? 'bg-amber-500 text-slate-950 font-bold shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200'
+                  ? 'bg-amber-500 text-[#111113] opacity-100 font-bold'
+                  : 'bg-transparent text-[#f2efeb] opacity-50 hover:opacity-80'
               }`}
             >
-              English
+              EN
             </button>
             <button
               type="button"
               id="lang-btn-hi"
               onClick={() => onLanguageChange('hi')}
-              className={`px-3 py-1 text-xs font-semibold rounded-xl transition-all cursor-pointer ${
+              className={`px-3 py-1 text-[0.7rem] font-semibold transition-all cursor-pointer ${
                 language === 'hi'
-                  ? 'bg-amber-500 text-slate-950 font-bold shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200'
+                  ? 'bg-amber-500 text-[#111113] opacity-100 font-bold'
+                  : 'bg-transparent text-[#f2efeb] opacity-50 hover:opacity-80'
               }`}
             >
-              हिन्दी
+              HI
             </button>
             <button
               type="button"
               id="lang-btn-mr"
               onClick={() => onLanguageChange('mr')}
-              className={`px-3 py-1 text-xs font-semibold rounded-xl transition-all cursor-pointer ${
+              className={`px-3 py-1 text-[0.7rem] font-semibold transition-all cursor-pointer ${
                 language === 'mr'
-                  ? 'bg-amber-500 text-slate-950 font-bold shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200'
+                  ? 'bg-amber-500 text-[#111113] opacity-100 font-bold'
+                  : 'bg-transparent text-[#f2efeb] opacity-50 hover:opacity-80'
               }`}
             >
-              मराठी
+              MR
             </button>
           </div>
         )}
-      </div>
-
-      {/* Brand Header */}
-      <div className="sm:mx-auto sm:w-full sm:max-w-md text-center mb-6">
-        <div className="flex justify-center mb-3">
-          <LiquorFlowLogo size="xl" showSubtitle={true} orientation="vertical" />
         </div>
-        <p className="mt-2 text-xs sm:text-sm text-slate-400 font-medium">
-          {language === 'mr'
-            ? 'दारू साठा व राज्य उत्पादन शुल्क व्यवस्थापन प्रणाली'
-            : language === 'hi'
-            ? 'शराब स्टॉक एवं आबकारी (Excise) प्रबंधन प्रणाली'
-            : 'Liquor Shop & Bar Inventory & Excise Compliance ERP'}
-        </p>
-      </div>
+      </header>
 
-      {/* Login Card */}
-      <div className="sm:mx-auto sm:w-full sm:max-w-md">
-        <div className="bg-slate-900/90 backdrop-blur border border-slate-800 shadow-2xl rounded-3xl p-6 sm:p-8 relative overflow-hidden">
-          {/* Subtle lighting accents */}
-          <div className="absolute top-0 right-0 w-48 h-48 bg-amber-500/5 rounded-full blur-3xl pointer-events-none" />
-          <div className="absolute bottom-0 left-0 w-48 h-48 bg-blue-500/5 rounded-full blur-3xl pointer-events-none" />
+      {/* Main Grid */}
+      <main className="flex-1 grid grid-cols-1 lg:grid-cols-[1fr_450px] items-stretch min-h-[calc(100vh-120px)]">
+        {/* Left Hero Section */}
+        <section className="p-8 sm:p-12 lg:p-16 flex flex-col justify-center items-start bg-[radial-gradient(circle_at_10%_10%,#1a1a1d_0%,#111113_100%)] border-b lg:border-b-0 lg:border-r border-[#f2efeb]/10">
+          <div className="font-mono text-[0.65rem] uppercase tracking-[0.15em] opacity-60 mb-6">
+            [ Platform Access ]
+          </div>
 
+          <div className="my-4 p-6 rounded-2xl bg-gradient-to-br from-slate-900/80 via-[#151518] to-slate-950/90 border border-slate-800/80 shadow-2xl shadow-amber-500/5 max-w-lg w-full flex flex-col items-center sm:items-start text-center sm:text-left">
+            <LiquorFlowLogo size="xl" orientation="vertical" showText={true} showSubtitle={true} className="mb-4" />
+          </div>
+
+          <p className="text-sm sm:text-base opacity-70 leading-relaxed max-w-lg font-light mt-4">
+            {language === 'mr'
+              ? 'दारू साठा व राज्य उत्पादन शुल्क व्यवस्थापन प्रणाली'
+              : language === 'hi'
+              ? 'शराब स्टॉक एवं आबकारी (Excise) प्रबंधन प्रणाली'
+              : 'Production-ready inventory & ERP for Indian liquor operations.'}
+          </p>
+        </section>
+
+        {/* Right Login Section */}
+        <section className="p-8 sm:p-12 flex flex-col justify-center bg-[#151518]">
+          {/* Mobile Brand Badge */}
+          <div className="lg:hidden mb-8 flex justify-center">
+            <LiquorFlowLogo size="md" orientation="horizontal" showText={true} showSubtitle={true} />
+          </div>
           {!setupCompleted && onGoToSetup && (
-            <div className="mb-6 p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-200 text-xs flex items-center justify-between">
+            <div className="mb-6 p-3.5 border border-amber-500/40 bg-amber-500/10 rounded text-amber-300 text-xs flex items-center justify-between font-mono">
               <span>{t.setupRequiredNotice}</span>
               <button
                 type="button"
@@ -171,26 +192,21 @@ export const LoginView: React.FC<LoginViewProps> = ({
           {errorMessage && (
             <div
               id="login-error-alert"
-              className="mb-6 p-3.5 rounded-2xl bg-rose-950/60 border border-rose-800 text-rose-300 text-xs sm:text-sm flex items-start gap-2.5 animate-fadeIn"
+              className="mb-6 p-3.5 border border-rose-800 bg-rose-950/60 rounded text-rose-300 text-xs flex items-start gap-2.5 font-mono"
             >
               <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
-              <div className="font-medium">{errorMessage}</div>
+              <div>{errorMessage}</div>
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-5" autoComplete="off">
-            {/* Username / Mobile Number */}
-            <div>
-              <label
-                htmlFor="username-input"
-                className="block text-xs font-semibold text-slate-300 mb-1.5"
-              >
+          <form onSubmit={handleSubmit} className="space-y-6" autoComplete="off">
+            <div className="space-y-2">
+              <label htmlFor="username-input" className="block font-mono text-[0.65rem] uppercase tracking-[0.15em] opacity-80">
                 {language === 'mr'
-                  ? 'वापरकर्ता नाव / मोबाईल क्रमांक'
+                  ? 'वापरकर्ता नाव / मोबाईल नंबर *'
                   : language === 'hi'
-                  ? 'उपयोगकर्ता नाम / मोबाइल नंबर'
-                  : 'Username / Mobile Number'}{' '}
-                <span className="text-amber-400">*</span>
+                  ? 'उपयोगकर्ता नाम / मोबाइल नंबर *'
+                  : 'User / Mobile Number *'}
               </label>
               <div className="relative">
                 <input
@@ -209,19 +225,18 @@ export const LoginView: React.FC<LoginViewProps> = ({
                       ? 'उपयोगकर्ता नाम या मोबाइल नंबर दर्ज करें'
                       : 'Enter username or mobile number'
                   }
-                  className="w-full px-3.5 py-2.5 pl-10 bg-slate-950 border border-slate-700/80 rounded-xl text-white placeholder-slate-500 text-sm focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400 transition-colors font-mono"
+                  className="w-full bg-transparent border border-[#f2efeb]/15 text-[#f2efeb] p-3.5 font-mono text-sm rounded-xs outline-none focus:border-amber-500 transition-colors placeholder:opacity-30"
                 />
-                <User className="w-4 h-4 text-slate-500 absolute left-3 top-3 pointer-events-none" />
               </div>
             </div>
 
-            {/* Password with Eye Show/Hide Toggle */}
-            <div>
-              <label
-                htmlFor="password-input"
-                className="block text-xs font-semibold text-slate-300 mb-1.5"
-              >
-                {t.passwordLabel || 'Password'} <span className="text-amber-400">*</span>
+            <div className="space-y-2">
+              <label htmlFor="password-input" className="block font-mono text-[0.65rem] uppercase tracking-[0.15em] opacity-80">
+                {language === 'mr'
+                  ? 'पासवर्ड *'
+                  : language === 'hi'
+                  ? 'पासवर्ड *'
+                  : 'Password *'}
               </label>
               <div className="relative">
                 <input
@@ -239,68 +254,61 @@ export const LoginView: React.FC<LoginViewProps> = ({
                       ? 'पासवर्ड दर्ज करें'
                       : 'Enter password'
                   }
-                  className="w-full px-3.5 py-2.5 pl-10 pr-11 bg-slate-950 border border-slate-700/80 rounded-xl text-white placeholder-slate-500 text-sm focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400 transition-colors"
+                  className="w-full bg-transparent border border-[#f2efeb]/15 text-[#f2efeb] p-3.5 pr-16 font-mono text-sm rounded-xs outline-none focus:border-amber-500 transition-colors placeholder:opacity-30"
                 />
-                <Lock className="w-4 h-4 text-slate-500 absolute left-3 top-3 pointer-events-none" />
                 <button
                   type="button"
                   id="toggle-password-visibility"
                   onClick={() => setShowPassword(prev => !prev)}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-amber-400 focus:outline-none p-1 rounded-lg transition-colors cursor-pointer"
-                  aria-label={showPassword ? 'Hide password' : 'Show password'}
-                  title={showPassword ? 'Hide password' : 'Show password'}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-mono tracking-wider opacity-60 hover:opacity-100 text-[#f2efeb] transition-opacity cursor-pointer p-1"
                 >
-                  {showPassword ? (
-                    <EyeOff className="w-4 h-4 text-amber-400" />
-                  ) : (
-                    <Eye className="w-4 h-4 text-slate-400 hover:text-slate-200" />
-                  )}
+                  {showPassword ? 'HIDE' : 'VIEW'}
                 </button>
               </div>
             </div>
 
-            {/* Submit Button */}
-            <div className="pt-2">
-              <button
-                type="submit"
-                id="login-submit-btn"
-                disabled={isSubmitting}
-                className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-2xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-sm tracking-wide transition-all shadow-lg shadow-amber-500/15 disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed"
-              >
-                {isSubmitting ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>
-                      {language === 'mr'
-                        ? 'लॉगिन होत आहे...'
-                        : language === 'hi'
-                        ? 'लॉगिन हो रहा है...'
-                        : 'Logging in...'}
-                    </span>
-                  </>
-                ) : (
-                  <>
-                    <span>
-                      {language === 'mr'
-                        ? 'लॉगिन करा →'
-                        : language === 'hi'
-                        ? 'लॉगिन करें →'
-                        : 'Login →'}
-                    </span>
-                    <ArrowRight className="w-4 h-4" />
-                  </>
-                )}
-              </button>
-            </div>
+            <button
+              type="submit"
+              id="login-submit-btn"
+              disabled={isSubmitting}
+              className="w-full py-3.5 px-4 bg-[#f2efeb] hover:bg-amber-500 text-[#111113] font-mono font-bold uppercase tracking-[0.1em] text-xs transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            >
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>
+                    {language === 'mr'
+                      ? 'लॉगिन होत आहे...'
+                      : language === 'hi'
+                      ? 'लॉगिन हो रहा है...'
+                      : 'Logging in...'}
+                  </span>
+                </>
+              ) : (
+                <span>Login Access &rarr;</span>
+              )}
+            </button>
           </form>
 
-          {/* Single User Encrypted Session Indicator */}
-          <div className="mt-6 pt-4 border-t border-slate-800/80 text-center text-xs text-slate-400 flex items-center justify-center gap-2">
-            <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
-            <span>Encrypted HTTP-Only Database Session</span>
+          <div className="font-mono text-[0.55rem] uppercase tracking-[0.15em] opacity-40 text-center mt-12">
+            Authorized personnel only. Sessions are logged.
           </div>
+        </section>
+      </main>
+
+      {/* Footer */}
+      <footer className="px-6 py-3.5 border-t border-[#f2efeb]/10 flex flex-col sm:flex-row justify-between items-center gap-2 bg-[#111113]">
+        <div className="font-mono text-[0.65rem] uppercase tracking-[0.15em] opacity-60">
+          v4.3.3 Build 2024
         </div>
-      </div>
+        <div className="flex items-center gap-2 font-mono text-[0.65rem] opacity-70">
+          <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
+          <span>Encrypted HTTP-Only Database Session</span>
+        </div>
+        <div className="font-mono text-[0.65rem] uppercase tracking-[0.15em] opacity-60">
+          &copy; LiquorFlow ERP
+        </div>
+      </footer>
     </div>
   );
 };

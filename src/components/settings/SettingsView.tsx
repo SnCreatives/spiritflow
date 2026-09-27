@@ -12,10 +12,14 @@ import {
   Globe,
   Sliders,
   Zap,
+  Sun,
+  Moon,
+  Palette,
 } from 'lucide-react';
 import { SupportedLanguage } from '../../types';
 import { apiGet, apiPut } from '../../utils/api';
 import { translations } from '../../utils/i18n';
+import { useTheme } from '../../utils/ThemeContext';
 
 interface SettingsViewProps {
   language: SupportedLanguage;
@@ -29,6 +33,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   onRestartTutorial,
 }) => {
   const t = translations[language];
+  const { theme, setTheme } = useTheme();
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -364,6 +369,67 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             </div>
           </div>
 
+          {/* Section 4: Visual Theme & Appearance */}
+          <div className="border-t border-slate-800 pt-6">
+            <h3 className="text-sm font-bold text-white mb-3 flex items-center gap-2">
+              <Palette className="w-4 h-4 text-amber-400" />
+              <span>Appearance & Color Theme</span>
+            </h3>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* Dark Theme Card */}
+              <button
+                type="button"
+                onClick={() => setTheme('dark')}
+                className={`p-4 rounded-xl border flex items-center justify-between text-left transition-all cursor-pointer ${
+                  theme === 'dark'
+                    ? 'bg-amber-500/10 border-amber-500 text-white shadow-md shadow-amber-500/5'
+                    : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-200'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800 text-amber-400">
+                    <Moon className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <div className="text-sm font-bold">Dark Mode</div>
+                    <div className="text-xs opacity-70">Deep slate background, high contrast for low-light environments</div>
+                  </div>
+                </div>
+                {theme === 'dark' && (
+                  <span className="text-xs font-bold text-amber-400 px-2 py-0.5 rounded bg-amber-500/20 border border-amber-500/40">
+                    Active
+                  </span>
+                )}
+              </button>
+
+              {/* Light Theme Card */}
+              <button
+                type="button"
+                onClick={() => setTheme('light')}
+                className={`p-4 rounded-xl border flex items-center justify-between text-left transition-all cursor-pointer ${
+                  theme === 'light'
+                    ? 'bg-amber-500/10 border-amber-500 text-slate-900 shadow-md shadow-amber-500/5'
+                    : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-200'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 rounded-lg bg-slate-100 border border-slate-200 text-indigo-600">
+                    <Sun className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <div className="text-sm font-bold">Light Mode</div>
+                    <div className="text-xs opacity-70">Clean bright background, high contrast for bright environments</div>
+                  </div>
+                </div>
+                {theme === 'light' && (
+                  <span className="text-xs font-bold text-amber-500 px-2 py-0.5 rounded bg-amber-500/20 border border-amber-500/40">
+                    Active
+                  </span>
+                )}
+              </button>
+            </div>
+          </div>
           <div className="flex justify-end pt-4 border-t border-slate-800">
             <button
               type="submit"
