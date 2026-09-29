@@ -119,7 +119,7 @@ export class ImportService {
     return { batch, logs };
   }
 
-  static async executeBatch(batchId: string, module: string, items: any[]) {
+  static async executeBatch(batchId: string, module: string, items: any[], barId?: string) {
     const ProductService = (await import('./productService.ts')).ProductService;
     const MasterService = (await import('./masterService.ts')).MasterService;
     const InventoryService = (await import('./inventoryService.ts')).InventoryService;
@@ -164,7 +164,7 @@ export class ImportService {
             result = cat;
             break;
           case 'opening-stock':
-            result = await InventoryService.recordOpeningStock(item);
+            result = await InventoryService.recordOpeningStock({ ...item, barId });
             break;
           case 'purchases':
             // Purchases usually come as bulk items
@@ -185,11 +185,12 @@ export class ImportService {
                 batchNumber: item.batchNumber || item.batch_number,
                 mrpReference: Number(item.mrpReference || item.mrp_reference || 0)
               }],
+              barId,
               import_batch_id: batchId
             } as any);
             break;
           case 'adjustments':
-            result = await InventoryService.processAdjustment(item);
+            result = await InventoryService.processAdjustment({ ...item, barId });
             break;
           default:
             throw new Error(`Unsupported module: ${module}`);
@@ -254,7 +255,8 @@ export class ImportService {
               .from('inventory')
               .select('*')
               .eq('product_id', entry.product_id)
-              .single();
+              .eq('bar_id', entry.bar_id)
+              .maybeSingle();
 
             if (inventory) {
               const newCurrent = Number(inventory.current_quantity) - entry.stock_in + entry.stock_out;
@@ -273,11 +275,12 @@ export class ImportService {
                 updateObj.adjustment_quantity = Number(inventory.adjustment_quantity) - (entry.stock_in - entry.stock_out);
               }
 
-              await supabase.from('inventory').update(updateObj).eq('product_id', entry.product_id);
+              await supabase.from('inventory').update(updateObj).eq('product_id', entry.product_id).eq('bar_id', entry.bar_id);
 
               // Record reversal in ledger
               await supabase.from('stock_ledger').insert({
                 product_id: entry.product_id,
+                bar_id: entry.bar_id,
                 transaction_date: new Date().toISOString(),
                 transaction_type: 'CORRECTION',
                 reference_number: `ROLLBACK-${batchId.substring(0, 8)}`,

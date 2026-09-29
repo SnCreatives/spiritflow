@@ -15,6 +15,8 @@ import { SupportedLanguage, Category, Brand, Product, PackSize } from '../../typ
 import { apiGet } from '../../utils/api';
 import { translations } from '../../utils/i18n';
 import { UnifiedBrandSelector } from '../common/UnifiedBrandSelector';
+import { useBar } from '../../lib/contexts/BarContext';
+import { ReportScopeSelector, ReportScope } from '../common/ReportScopeSelector';
 
 interface MlStockReportViewProps {
   language: SupportedLanguage;
@@ -22,6 +24,10 @@ interface MlStockReportViewProps {
 
 export const MlStockReportView: React.FC<MlStockReportViewProps> = ({ language }) => {
   const t = translations[language];
+  const { selectedBar, availableBars } = useBar();
+
+  // Report Scope
+  const [scope, setScope] = useState<ReportScope>('CURRENT_BAR');
 
   // Filters
   const [fromDate, setFromDate] = useState('2026-01-01');
@@ -78,6 +84,9 @@ export const MlStockReportView: React.FC<MlStockReportViewProps> = ({ language }
       if (brandId) params.append('brandId', brandId);
       if (productId) params.append('productId', productId);
       if (packSizeId) params.append('packSizeId', packSizeId);
+      if (scope === 'ALL_BARS') {
+        params.append('barScope', 'ALL_BARS');
+      }
 
       const res = await apiGet(`/api/reports/ml-stock?${params.toString()}`);
       if (!res.success) {
@@ -89,7 +98,7 @@ export const MlStockReportView: React.FC<MlStockReportViewProps> = ({ language }
     } finally {
       setLoading(false);
     }
-  }, [fromDate, toDate, categoryId, brandId, productId, packSizeId]);
+  }, [fromDate, toDate, categoryId, brandId, productId, packSizeId, selectedBar?.id, scope]);
 
   useEffect(() => {
     fetchReport();
@@ -97,7 +106,9 @@ export const MlStockReportView: React.FC<MlStockReportViewProps> = ({ language }
 
   const exportCSV = () => {
     if (items.length === 0) return;
+    const isAllBars = scope === 'ALL_BARS';
     const headers = [
+      ...(isAllBars ? ['Bar / Outlet'] : []),
       'Category',
       'Product',
       'Brand',
@@ -115,6 +126,7 @@ export const MlStockReportView: React.FC<MlStockReportViewProps> = ({ language }
       'Reference Numbers',
     ];
     const rows = items.map(i => [
+      ...(isAllBars ? [i.barName || 'All Outlets'] : []),
       i.categoryName,
       i.productName,
       i.brandName,
@@ -137,7 +149,7 @@ export const MlStockReportView: React.FC<MlStockReportViewProps> = ({ language }
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `ML_Wise_Stock_Report_${fromDate}_to_${toDate}.csv`;
+    a.download = `ML_Wise_Stock_Report_${scope}_${fromDate}_to_${toDate}.csv`;
     a.click();
   };
 
@@ -146,7 +158,7 @@ export const MlStockReportView: React.FC<MlStockReportViewProps> = ({ language }
     const text = items
       .map(
         i =>
-          `${i.categoryName}\t${i.productName}\t${i.brandName}\t${i.packSizeName}\t${i.openingStock}\t${i.stockIn}\t${i.stockOut}\t${i.closingStock}`
+          `${scope === 'ALL_BARS' ? `${i.barName}\t` : ''}${i.categoryName}\t${i.productName}\t${i.brandName}\t${i.packSizeName}\t${i.openingStock}\t${i.stockIn}\t${i.stockOut}\t${i.closingStock}`
       )
       .join('\n');
     navigator.clipboard.writeText(text);
@@ -203,6 +215,13 @@ export const MlStockReportView: React.FC<MlStockReportViewProps> = ({ language }
           </button>
         </div>
       </div>
+
+      {/* Reporting Scope Selector */}
+      <ReportScopeSelector
+        title="ML-wise Report Scope"
+        scope={scope}
+        onChange={setScope}
+      />
 
       {feedback && (
         <div className="p-3 bg-emerald-950/60 border border-emerald-800 rounded-xl text-emerald-200 text-xs flex items-center gap-2">
@@ -314,6 +333,7 @@ export const MlStockReportView: React.FC<MlStockReportViewProps> = ({ language }
           <table className="w-full text-left border-collapse text-xs">
             <thead>
               <tr className="border-b border-slate-800 bg-slate-950/80 text-slate-400 uppercase tracking-wider font-semibold">
+                {scope === 'ALL_BARS' && <th className="py-3 px-3">Outlet / Bar</th>}
                 <th className="py-3 px-3">Category</th>
                 <th className="py-3 px-3">Product / Brand</th>
                 <th className="py-3 px-2">Pack Size</th>
@@ -333,14 +353,14 @@ export const MlStockReportView: React.FC<MlStockReportViewProps> = ({ language }
             <tbody className="divide-y divide-slate-800 text-slate-300 font-mono">
               {loading ? (
                 <tr>
-                  <td colSpan={14} className="py-12 text-center text-slate-400 font-sans">
+                  <td colSpan={scope === 'ALL_BARS' ? 15 : 14} className="py-12 text-center text-slate-400 font-sans">
                     <RefreshCw className="w-6 h-6 animate-spin text-amber-500 mx-auto mb-2" />
                     <span>Calculating ML-wise stock reconciliation...</span>
                   </td>
                 </tr>
               ) : items.length === 0 ? (
                 <tr>
-                  <td colSpan={14} className="py-12 text-center text-slate-400 font-sans">
+                  <td colSpan={scope === 'ALL_BARS' ? 15 : 14} className="py-12 text-center text-slate-400 font-sans">
                     <Package className="w-8 h-8 mx-auto mb-2 text-slate-600" />
                     <p className="font-medium text-slate-300">No stock records found for the selected period.</p>
                   </td>
@@ -348,6 +368,11 @@ export const MlStockReportView: React.FC<MlStockReportViewProps> = ({ language }
               ) : (
                 items.map((item, idx) => (
                   <tr key={idx} className="hover:bg-slate-800/40 transition-colors">
+                    {scope === 'ALL_BARS' && (
+                      <td className="py-3 px-3 font-sans font-semibold text-slate-200">
+                        {item.barName || 'All Outlets'}
+                      </td>
+                    )}
                     <td className="py-3 px-3 font-sans font-medium text-amber-400">{item.categoryName}</td>
                     <td className="py-3 px-3 font-sans">
                       <div className="font-semibold text-white">{item.productName}</div>

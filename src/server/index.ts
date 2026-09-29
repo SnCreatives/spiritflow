@@ -107,6 +107,18 @@ async function requireAuth(req: Request, res: Response, next: NextFunction) {
     console.log(`[AUTH TRACE RESULT] ✅ Session verified successfully! User: ${user.mobile_number} (${user.business_name})`);
     console.log(`=========================================================================\n`);
     (req as any).user = user;
+
+    // Validate Bar Access if x-bar-id is provided
+    const barId = req.headers['x-bar-id'] as string;
+    if (barId && typeof barId === 'string' && barId.trim().length > 0) {
+      if (Array.isArray(user.bars) && user.bars.length > 0) {
+        const hasAccess = user.bars.some((b: any) => b.id === barId);
+        if (hasAccess) {
+          (req as any).barId = barId;
+        }
+      }
+    }
+
     next();
   } catch (err: any) {
     console.error(`[AUTH TRACE ERROR] Exception during session validation:`, err?.message);
@@ -280,9 +292,19 @@ apiApp.get('/api/auth/me', requireAuth, async (req: Request, res: Response) => {
 /**
  * 7. Live Dashboard KPIs (Protected)
  */
-apiApp.get('/api/dashboard/stats', requireAuth, async (_req: Request, res: Response) => {
+apiApp.get('/api/dashboard/stats', requireAuth, async (req: Request, res: Response) => {
   try {
-    const stats = await InventoryService.getDashboardStats();
+    const user = (req as any).user;
+    const barScope = req.query.barScope as string;
+    const barId = (req as any).barId || (req.query.barId as string);
+
+    if (barScope === 'ALL_BARS' || barId === 'ALL_BARS') {
+      const authorizedBarIds = (user?.bars || []).map((b: any) => b.id);
+      const stats = await InventoryService.getDashboardStats({ authorizedBarIds });
+      return sendSuccess(res, stats);
+    }
+
+    const stats = await InventoryService.getDashboardStats({ barId });
     return sendSuccess(res, stats);
   } catch (err: any) {
     return sendError(res, 'DASHBOARD_ERROR', err?.message || 'Failed to fetch dashboard metrics', 500);
@@ -311,7 +333,9 @@ apiApp.post('/api/validate/category-brand', requireAuth, async (req: Request, re
 apiApp.get('/api/inventory', requireAuth, async (req: Request, res: Response) => {
   try {
     const { search, categoryId, lowStockOnly } = req.query;
+    const barId = (req as any).barId || (req.query.barId as string);
     const items = await InventoryService.getInventoryList({
+      barId,
       search: search as string,
       categoryId: categoryId as string,
       lowStockOnly: lowStockOnly === 'true',
@@ -324,7 +348,8 @@ apiApp.get('/api/inventory', requireAuth, async (req: Request, res: Response) =>
 
 apiApp.post('/api/inventory/opening-stock', requireAuth, async (req: Request, res: Response) => {
   try {
-    const result = await InventoryService.recordOpeningStock(req.body);
+    const barId = (req as any).barId || req.body.barId;
+    const result = await InventoryService.recordOpeningStock({ ...req.body, barId });
     return sendSuccess(res, result, 201);
   } catch (err: any) {
     return sendError(res, 'OPENING_STOCK_FAILED', err?.message || 'Failed to record opening stock', 400);
@@ -333,7 +358,8 @@ apiApp.post('/api/inventory/opening-stock', requireAuth, async (req: Request, re
 
 apiApp.post('/api/inventory/purchases', requireAuth, async (req: Request, res: Response) => {
   try {
-    const result = await InventoryService.processPurchase(req.body);
+    const barId = (req as any).barId || req.body.barId;
+    const result = await InventoryService.processPurchase({ ...req.body, barId });
     return sendSuccess(res, result, 201);
   } catch (err: any) {
     return sendError(res, 'PURCHASE_FAILED', err?.message || 'Inward purchase transaction failed', 400);
@@ -342,16 +368,28 @@ apiApp.post('/api/inventory/purchases', requireAuth, async (req: Request, res: R
 
 apiApp.post('/api/inventory/adjustments', requireAuth, async (req: Request, res: Response) => {
   try {
-    const result = await InventoryService.processAdjustment(req.body);
+    const barId = (req as any).barId || req.body.barId;
+    const result = await InventoryService.processAdjustment({ ...req.body, barId });
     return sendSuccess(res, result, 201);
   } catch (err: any) {
     return sendError(res, 'ADJUSTMENT_FAILED', err?.message || 'Stock adjustment failed', 400);
   }
 });
 
+apiApp.post('/api/inventory/transfers', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const result = await InventoryService.processTransfer(req.body);
+    return sendSuccess(res, result, 201);
+  } catch (err: any) {
+    return sendError(res, 'TRANSFER_FAILED', err?.message || 'Stock transfer failed', 400);
+  }
+});
+
 apiApp.get('/api/inventory/opening-stock', requireAuth, async (req: Request, res: Response) => {
   try {
+    const barId = (req as any).barId || (req.query.barId as string);
     const records = await InventoryService.getOpeningStockRecords({
+      barId,
       productId: req.query.productId as string,
       limit: req.query.limit ? parseInt(req.query.limit as string, 10) : 50,
     });
@@ -363,7 +401,9 @@ apiApp.get('/api/inventory/opening-stock', requireAuth, async (req: Request, res
 
 apiApp.get('/api/inventory/purchases', requireAuth, async (req: Request, res: Response) => {
   try {
+    const barId = (req as any).barId || (req.query.barId as string);
     const purchases = await InventoryService.getPurchases({
+      barId,
       search: req.query.search as string,
       limit: req.query.limit ? parseInt(req.query.limit as string, 10) : 100,
     });
@@ -375,7 +415,9 @@ apiApp.get('/api/inventory/purchases', requireAuth, async (req: Request, res: Re
 
 apiApp.get('/api/inventory/adjustments', requireAuth, async (req: Request, res: Response) => {
   try {
+    const barId = (req as any).barId || (req.query.barId as string);
     const adjustments = await InventoryService.getAdjustments({
+      barId,
       search: req.query.search as string,
       adjustmentType: req.query.adjustmentType as string,
       productId: req.query.productId as string,
@@ -389,7 +431,9 @@ apiApp.get('/api/inventory/adjustments', requireAuth, async (req: Request, res: 
 
 apiApp.get('/api/batches', requireAuth, async (req: Request, res: Response) => {
   try {
+    const barId = (req as any).barId || (req.query.barId as string);
     const batches = await InventoryService.getBatches({
+      barId,
       search: req.query.search as string,
       productId: req.query.productId as string,
     });
@@ -401,7 +445,8 @@ apiApp.get('/api/batches', requireAuth, async (req: Request, res: Response) => {
 
 apiApp.post('/api/batches', requireAuth, async (req: Request, res: Response) => {
   try {
-    const batch = await InventoryService.createBatch(req.body);
+    const barId = (req as any).barId || req.body.barId;
+    const batch = await InventoryService.createBatch({ ...req.body, barId });
     return sendSuccess(res, batch, 201);
   } catch (err: any) {
     return sendError(res, 'BATCH_CREATE_FAILED', err?.message || 'Failed to create batch', 400);
@@ -428,8 +473,22 @@ apiApp.put('/api/settings', requireAuth, async (req: Request, res: Response) => 
 
 apiApp.get('/api/inventory/ledger', requireAuth, async (req: Request, res: Response) => {
   try {
-    const { productId, limit } = req.query;
+    const user = (req as any).user;
+    const { productId, limit, barScope } = req.query;
+    const barId = (req as any).barId || (req.query.barId as string);
+
+    if (barScope === 'ALL_BARS' || barId === 'ALL_BARS' || !barId) {
+      const authorizedBarIds = (user?.bars || []).map((b: any) => b.id);
+      const ledger = await InventoryService.getStockLedger(
+        authorizedBarIds.length > 0 ? authorizedBarIds : 'ALL_BARS',
+        productId as string,
+        limit ? parseInt(limit as string, 10) : 100
+      );
+      return sendSuccess(res, { ledger });
+    }
+
     const ledger = await InventoryService.getStockLedger(
+      barId,
       productId as string,
       limit ? parseInt(limit as string, 10) : 50
     );
@@ -444,8 +503,16 @@ apiApp.get('/api/inventory/ledger', requireAuth, async (req: Request, res: Respo
  */
 apiApp.get('/api/reports/ml-stock', requireAuth, async (req: Request, res: Response) => {
   try {
-    const { fromDate, toDate, categoryId, brandId, productId, packSizeId } = req.query;
+    const user = (req as any).user;
+    const { fromDate, toDate, categoryId, brandId, productId, packSizeId, barScope } = req.query;
+    const barId = (req as any).barId || (req.query.barId as string);
+
+    const isAllBars = barScope === 'ALL_BARS' || barId === 'ALL_BARS';
+    const barIds = isAllBars ? (user?.bars || []).map((b: any) => b.id) : undefined;
+
     const report = await reportService.getMlStockReport({
+      barId: isAllBars ? undefined : barId,
+      barIds,
       fromDate: fromDate as string,
       toDate: toDate as string,
       categoryId: categoryId as string,
@@ -461,8 +528,16 @@ apiApp.get('/api/reports/ml-stock', requireAuth, async (req: Request, res: Respo
 
 apiApp.get('/api/reports/sales-tax', requireAuth, async (req: Request, res: Response) => {
   try {
-    const { fromDate, toDate } = req.query;
+    const user = (req as any).user;
+    const { fromDate, toDate, barScope } = req.query;
+    const barId = (req as any).barId || (req.query.barId as string);
+
+    const isAllBars = barScope === 'ALL_BARS' || barId === 'ALL_BARS';
+    const barIds = isAllBars ? (user?.bars || []).map((b: any) => b.id) : undefined;
+
     const report = await reportService.getSalesTaxSummary({
+      barId: isAllBars ? undefined : barId,
+      barIds,
       fromDate: fromDate as string,
       toDate: toDate as string,
     });
@@ -570,7 +645,8 @@ apiApp.get('/api/database/verify', async (_req: Request, res: Response) => {
 apiApp.get('/api/search', requireAuth, async (req: Request, res: Response) => {
   try {
     const q = (req.query.q as string) || '';
-    const results = await InventoryService.searchGlobal(q);
+    const barId = (req as any).barId || (req.query.barId as string);
+    const results = await InventoryService.searchGlobal(q, barId);
     return sendSuccess(res, { results });
   } catch (err: any) {
     return sendError(res, 'SEARCH_FAILED', err?.message || 'Search failed', 500);
@@ -801,6 +877,72 @@ apiApp.patch('/api/pack-sizes/:id/status', requireAuth, async (req: Request, res
     return sendSuccess(res, packSize);
   } catch (err: any) {
     return sendError(res, 'STATUS_UPDATE_FAILED', err?.message || 'Failed to update pack size status', 400);
+  }
+});
+
+/**
+ * 16. Bar Outlets CRUD Endpoints (Protected)
+ */
+apiApp.get('/api/bars', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const user = (req as any).user;
+    const bars = await MasterService.getBars(user?.id);
+    return sendSuccess(res, { bars });
+  } catch (err: any) {
+    return sendError(res, 'BARS_FETCH_FAILED', err?.message || 'Failed to fetch bars', 500);
+  }
+});
+
+apiApp.get('/api/bars/:id', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const bar = await MasterService.getBarById(req.params.id);
+    if (!bar) {
+      return sendError(res, 'BAR_NOT_FOUND', 'Bar outlet not found', 404);
+    }
+    return sendSuccess(res, bar);
+  } catch (err: any) {
+    return sendError(res, 'BAR_FETCH_FAILED', err?.message || 'Failed to fetch bar', 500);
+  }
+});
+
+apiApp.post('/api/bars', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const user = (req as any).user;
+    const bar = await MasterService.createBar(req.body, user?.id);
+    return sendSuccess(res, bar, 201);
+  } catch (err: any) {
+    return sendError(res, 'BAR_CREATE_FAILED', err?.message || 'Failed to create bar outlet', 400);
+  }
+});
+
+apiApp.put('/api/bars/:id', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const bar = await MasterService.updateBar(req.params.id, req.body);
+    return sendSuccess(res, bar);
+  } catch (err: any) {
+    return sendError(res, 'BAR_UPDATE_FAILED', err?.message || 'Failed to update bar outlet', 400);
+  }
+});
+
+apiApp.patch('/api/bars/:id/status', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const { status } = req.body;
+    if (status !== 'Active' && status !== 'Inactive') {
+      return sendError(res, 'INVALID_STATUS', 'Status must be Active or Inactive', 400);
+    }
+    const bar = await MasterService.toggleBarStatus(req.params.id, status);
+    return sendSuccess(res, bar);
+  } catch (err: any) {
+    return sendError(res, 'STATUS_UPDATE_FAILED', err?.message || 'Failed to update bar status', 400);
+  }
+});
+
+apiApp.delete('/api/bars/:id', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const result = await MasterService.deleteBar(req.params.id);
+    return sendSuccess(res, result);
+  } catch (err: any) {
+    return sendError(res, 'BAR_DELETE_FAILED', err?.message || 'Failed to delete bar outlet', 400);
   }
 });
 

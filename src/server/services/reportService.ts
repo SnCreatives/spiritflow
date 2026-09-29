@@ -1,4 +1,5 @@
 import { getSupabaseServiceClient } from '../../lib/supabase/client.js';
+import { BarStoreService } from './barStoreService.js';
 
 export class ReportService {
   /**
@@ -6,16 +7,20 @@ export class ReportService {
    * Calculates opening stock, stock in, stock out, and closing stock for the given date range and filters.
    */
   async getMlStockReport(filters: {
+    barId?: string;
+    barIds?: string[];
     fromDate?: string;
     toDate?: string;
     categoryId?: string;
     brandId?: string;
     productId?: string;
     packSizeId?: string;
-  }) {
+  } = {}) {
     const supabase = getSupabaseServiceClient();
     const fromDate = filters.fromDate ? `${filters.fromDate} 00:00:00` : '2020-01-01 00:00:00';
     const toDate = filters.toDate ? `${filters.toDate} 23:59:59` : `${new Date().toISOString().split('T')[0]} 23:59:59`;
+    const barId = filters.barId;
+    const barIds = filters.barIds;
 
     // Fetch products with relations
     let prodQuery = supabase
@@ -24,9 +29,8 @@ export class ReportService {
         id,
         name,
         sku,
-        purchase_price,
-        selling_price,
-        mrp,
+        purchase_tp_price,
+        mrp_reference,
         category_id,
         brand_id,
         pack_size_id,
@@ -43,43 +47,48 @@ export class ReportService {
     const { data: products, error: prodErr } = await prodQuery;
     if (prodErr) throw new Error(prodErr.message);
 
+    // Fetch bar details map
+    const allBars = await BarStoreService.getBars();
+    const barMap = new Map(allBars.map(b => [b.id, `${b.name} (${b.code})`]));
+
+    // Batch fetch all ledger movements before fromDate
+    const { data: priorLedger } = await supabase
+      .from('stock_ledger')
+      .select('product_id, stock_in, stock_out')
+      .lt('transaction_date', fromDate);
+
+    // Map prior stock by product_id
+    const openingStockMap = new Map<string, number>();
+    if (priorLedger) {
+      for (const mov of priorLedger) {
+        const prev = openingStockMap.get(mov.product_id) || 0;
+        openingStockMap.set(mov.product_id, prev + Number(mov.stock_in || 0) - Number(mov.stock_out || 0));
+      }
+    }
+
+    // Batch fetch all ledger movements within range
+    const { data: rangeLedger } = await supabase
+      .from('stock_ledger')
+      .select('product_id, transaction_type, stock_in, stock_out, reference_number, transaction_date')
+      .gte('transaction_date', fromDate)
+      .lte('transaction_date', toDate);
+
+    // Group range ledger by product_id
+    const rangeLedgerMap = new Map<string, any[]>();
+    if (rangeLedger) {
+      for (const mov of rangeLedger) {
+        if (!rangeLedgerMap.has(mov.product_id)) {
+          rangeLedgerMap.set(mov.product_id, []);
+        }
+        rangeLedgerMap.get(mov.product_id)!.push(mov);
+      }
+    }
+
     const reportRows = [];
 
     for (const prod of (products || [])) {
-      // 1. Opening stock: sum of ledger movements BEFORE fromDate
-      const { data: priorLedger } = await supabase
-        .from('stock_ledger')
-        .select('stock_in, stock_out')
-        .eq('product_id', prod.id)
-        .lt('transaction_date', fromDate);
-
-      let openingStock = 0;
-      if (priorLedger) {
-        for (const mov of priorLedger) {
-          openingStock += Number(mov.stock_in || 0) - Number(mov.stock_out || 0);
-        }
-      }
-
-      // If no prior ledger records, check inventory opening quantity
-      if (openingStock === 0) {
-        const { data: inv } = await supabase
-          .from('inventory')
-          .select('opening_stock, current_stock')
-          .eq('product_id', prod.id)
-          .single();
-        if (inv && Number(inv.opening_stock) > 0 && fromDate.startsWith('2026')) {
-          // If date range starts early, use opening_stock
-          // But to be precise, let's look at ledger transactions in range
-        }
-      }
-
-      // 2. Movements WITHIN range [fromDate, toDate]
-      const { data: rangeLedger } = await supabase
-        .from('stock_ledger')
-        .select('transaction_type, stock_in, stock_out, reference_number, transaction_date')
-        .eq('product_id', prod.id)
-        .gte('transaction_date', fromDate)
-        .lte('transaction_date', toDate);
+      const openingStock = openingStockMap.get(prod.id) || 0;
+      const productMovements = rangeLedgerMap.get(prod.id) || [];
 
       let inwardQty = 0;
       let adjInQty = 0;
@@ -89,27 +98,24 @@ export class ReportService {
       let correctionOutQty = 0;
       const references = new Set<string>();
 
-      if (rangeLedger) {
-        for (const mov of rangeLedger) {
-          if (mov.reference_number) references.add(mov.reference_number);
-          const t = mov.transaction_type;
-          const sIn = Number(mov.stock_in || 0);
-          const sOut = Number(mov.stock_out || 0);
+      for (const mov of productMovements) {
+        if (mov.reference_number) references.add(mov.reference_number);
+        const t = mov.transaction_type;
+        const sIn = Number(mov.stock_in || 0);
+        const sOut = Number(mov.stock_out || 0);
 
-          if (t === 'INWARD' || t === 'OPENING' || t === 'PURCHASE') {
-            inwardQty += sIn;
-          } else if (t === 'ADJUSTMENT_IN' || t === 'RETURN_IN') {
-            if (t === 'RETURN_IN') returnInQty += sIn;
-            else adjInQty += sIn;
-          } else if (t === 'ADJUSTMENT_OUT' || t === 'RETURN_OUT' || t === 'CORRECTION') {
-            if (t === 'RETURN_OUT') returnOutQty += sOut;
-            else if (t === 'CORRECTION') correctionOutQty += sOut;
-            else adjOutQty += sOut;
-          } else {
-            // General fallback
-            inwardQty += sIn;
-            adjOutQty += sOut;
-          }
+        if (t === 'INWARD' || t === 'OPENING' || t === 'PURCHASE') {
+          inwardQty += sIn;
+        } else if (t === 'ADJUSTMENT_IN' || t === 'RETURN_IN') {
+          if (t === 'RETURN_IN') returnInQty += sIn;
+          else adjInQty += sIn;
+        } else if (t === 'ADJUSTMENT_OUT' || t === 'RETURN_OUT' || t === 'CORRECTION') {
+          if (t === 'RETURN_OUT') returnOutQty += sOut;
+          else if (t === 'CORRECTION') correctionOutQty += sOut;
+          else adjOutQty += sOut;
+        } else {
+          inwardQty += sIn;
+          adjOutQty += sOut;
         }
       }
 
@@ -121,10 +127,15 @@ export class ReportService {
       const categoryObj = prod.category as any;
       const brandObj = prod.brand as any;
 
+      const barDisplay = barIds && barIds.length > 0
+        ? 'All Authorized Outlets'
+        : (barId && barMap.has(barId) ? barMap.get(barId) : 'Current Bar');
+
       reportRows.push({
         productId: prod.id,
         productName: prod.name,
         sku: prod.sku,
+        barName: barDisplay,
         categoryName: categoryObj?.name || 'Uncategorized',
         categoryCode: categoryObj?.code || '',
         brandName: brandObj?.name || 'Unbranded',
@@ -147,7 +158,7 @@ export class ReportService {
 
     return {
       success: true,
-      filters: { fromDate, toDate },
+      filters: { fromDate, toDate, barScope: barIds ? 'ALL_BARS' : 'CURRENT_BAR' },
       totalProducts: reportRows.length,
       items: reportRows,
     };
@@ -157,15 +168,19 @@ export class ReportService {
    * 2. SALES TAX SUMMARY REPORT
    * Queries genuine sales and tax transactions. Returns empty with flag if none exist (no fake data).
    */
-  async getSalesTaxSummary(filters: { fromDate?: string; toDate?: string }) {
+  async getSalesTaxSummary(filters: { barId?: string; barIds?: string[]; fromDate?: string; toDate?: string }) {
     const supabase = getSupabaseServiceClient();
     const fromDate = filters.fromDate ? `${filters.fromDate} 00:00:00` : '2020-01-01 00:00:00';
     const toDate = filters.toDate ? `${filters.toDate} 23:59:59` : `${new Date().toISOString().split('T')[0]} 23:59:59`;
 
-    const { data: sales, error } = await supabase
+    const barMap = await BarStoreService.getBarMap();
+    const defaultBar = Object.values(barMap)[0] || null;
+
+    let salesQuery = supabase
       .from('sales_transactions')
       .select(`
         id,
+        bar_id,
         invoice_number,
         invoice_date,
         customer_name,
@@ -192,21 +207,17 @@ export class ReportService {
         )
       `)
       .gte('invoice_date', fromDate)
-      .lte('invoice_date', toDate)
-      .order('invoice_date', { ascending: false });
-
-    if (error) {
-      // Table might not exist or other error
-      return {
-        success: true,
-        hasTransactions: false,
-        message: 'No sales tax transactions recorded for this period.',
-        summary: { totalTaxable: 0, totalVat: 0, totalValue: 0 },
-        transactions: [],
-      };
+      .lte('invoice_date', toDate);
+    
+    if (filters.barIds && filters.barIds.length > 0) {
+      salesQuery = salesQuery.in('bar_id', filters.barIds);
+    } else if (filters.barId && filters.barId !== 'ALL_BARS') {
+      salesQuery = salesQuery.eq('bar_id', filters.barId);
     }
 
-    if (!sales || sales.length === 0) {
+    const { data: sales, error } = await salesQuery.order('invoice_date', { ascending: false });
+
+    if (error || !sales || sales.length === 0) {
       return {
         success: true,
         hasTransactions: false,
@@ -229,8 +240,19 @@ export class ReportService {
     return {
       success: true,
       hasTransactions: true,
-      summary: { totalTaxable, totalVat, totalValue },
-      transactions: sales,
+      summary: {
+        totalTaxable: Math.round(totalTaxable * 100) / 100,
+        totalVat: Math.round(totalVat * 100) / 100,
+        totalValue: Math.round(totalValue * 100) / 100,
+      },
+      transactions: sales.map(s => {
+        const bar = (s.bar_id ? barMap[s.bar_id] : null) || defaultBar;
+        return {
+          ...s,
+          bar,
+          barName: `${bar.name} (${bar.code})`,
+        };
+      }),
     };
   }
 
@@ -239,32 +261,40 @@ export class ReportService {
    * Title: Monthly Return of Transactions of Foreign Liquor effected by holder of Vendor's / Hotel / Club Licence
    * Generated for a specific Month + Year. Uses actual qualifying inward/outward records.
    */
-  async getMonthlyForeignLiquorReturn(month: number, year: number) {
+  async getMonthlyForeignLiquorReturn(month: number, year: number, barId?: string) {
     const supabase = getSupabaseServiceClient();
     const startDate = `${year}-${String(month).padStart(2, '0')}-01 00:00:00`;
     // Last day of month calculation
     const lastDay = new Date(year, month, 0).getDate();
     const endDate = `${year}-${String(month).padStart(2, '0')}-${lastDay} 23:59:59`;
 
+    // Fetch bar info if barId provided
+    let barInfo = null;
+    if (barId) {
+      barInfo = await BarStoreService.getBarById(barId);
+    }
+
     // Fetch licence info
-    const { data: licence } = await supabase
-      .from('excise_licences')
-      .select('*')
-      .limit(1)
-      .single();
+    let licenceQuery = supabase.from('excise_licences').select('*').limit(1);
+    if (barId) {
+      // Assuming licence might be bar-specific in future, but for now we take the first active one
+      // If we had bar_id in excise_licences we would filter here.
+    }
+    const { data: licence } = await licenceQuery.maybeSingle();
 
     // Fetch settings for business info
     const { data: settings } = await supabase
       .from('settings')
       .select('*')
       .limit(1)
-      .single();
+      .maybeSingle();
 
     // Fetch stock ledger / inward purchases / adjustments within this month
-    const { data: ledger } = await supabase
+    let ledgerQuery = supabase
       .from('stock_ledger')
       .select(`
         id,
+        bar_id,
         transaction_date,
         transaction_type,
         reference_number,
@@ -282,8 +312,13 @@ export class ReportService {
         )
       `)
       .gte('transaction_date', startDate)
-      .lte('transaction_date', endDate)
-      .order('transaction_date', { ascending: true });
+      .lte('transaction_date', endDate);
+    
+    if (barId) {
+      ledgerQuery = ledgerQuery.eq('bar_id', barId);
+    }
+
+    const { data: ledger } = await ledgerQuery.order('transaction_date', { ascending: true });
 
     const transactions = (ledger || []).map(l => {
       const prod = l.product as any;
@@ -316,10 +351,10 @@ export class ReportService {
       reportTitle: "Monthly Return of Transactions of Foreign Liquor effected by holder of Vendor's / Hotel / Club Licence",
       reportingPeriod: { month, year, startDate, endDate },
       licenceHolder: {
-        businessName: settings?.business_name || 'LiquorFlow ERP Bar & Restaurant',
-        licenceNumber: licence?.licence_number || settings?.licence_reference || 'FL-II / CL-III Maharashtra',
+        businessName: barInfo?.name || settings?.business_name || 'LiquorFlow ERP Bar & Restaurant',
+        licenceNumber: barInfo?.license_number || licence?.licence_number || settings?.licence_reference || 'FL-II / CL-III Maharashtra',
         licenceType: licence?.licence_type || 'Vendor / FL-II',
-        address: settings?.address || 'Maharashtra, India',
+        address: barInfo?.address || settings?.address || 'Maharashtra, India',
         vatNumber: settings?.vat_number || '27AAAAA0000A1Z5',
       },
       totals: { totalIn, totalOut },

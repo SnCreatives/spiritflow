@@ -1,5 +1,6 @@
 import { getSupabaseServiceClient } from '../../lib/supabase/client.js';
 import { StockTransactionType, DashboardStats, InventoryRecord, StockLedgerRecord } from '../../types/index.js';
+import { BarStoreService } from './barStoreService.js';
 
 export class InventoryService {
   /**
@@ -31,6 +32,7 @@ export class InventoryService {
    * Creates or updates the inventory record and records an OPENING stock ledger transaction.
    */
   static async recordOpeningStock(data: {
+    barId: string;
     productId: string;
     quantity: number;
     purchaseTpPrice?: number;
@@ -39,6 +41,10 @@ export class InventoryService {
   }): Promise<{ productId: string; openingQuantity: number; currentStock: number }> {
     if (data.quantity < 0) {
       throw new Error('Opening stock quantity cannot be negative');
+    }
+
+    if (!data.barId) {
+      throw new Error('Bar ID is required');
     }
 
     const supabase = getSupabaseServiceClient();
@@ -62,6 +68,7 @@ export class InventoryService {
       const { data: batch } = await supabase
         .from('batches')
         .insert({
+          bar_id: data.barId,
           product_id: data.productId,
           batch_number: data.batchNumber,
           quantity: data.quantity,
@@ -78,6 +85,7 @@ export class InventoryService {
       .from('inventory')
       .select('*')
       .eq('product_id', data.productId)
+      .eq('bar_id', data.barId)
       .maybeSingle();
 
     let newCurrent = 0;
@@ -96,10 +104,12 @@ export class InventoryService {
           stock_value: newCurrent * tpPrice,
           updated_at: new Date().toISOString(),
         })
-        .eq('product_id', data.productId);
+        .eq('product_id', data.productId)
+        .eq('bar_id', data.barId);
     } else {
       newCurrent = data.quantity;
       await supabase.from('inventory').insert({
+        bar_id: data.barId,
         product_id: data.productId,
         opening_quantity: data.quantity,
         purchased_quantity: 0,
@@ -112,6 +122,7 @@ export class InventoryService {
 
     // Record in Stock Ledger
     await supabase.from('stock_ledger').insert({
+      bar_id: data.barId,
       product_id: data.productId,
       transaction_date: new Date().toISOString(),
       transaction_type: 'OPENING',
@@ -135,6 +146,7 @@ export class InventoryService {
    * Atomically records Purchase, Purchase Items, increases Inventory, and writes Stock Ledger.
    */
   static async processPurchase(purchaseData: {
+    barId: string;
     purchaseNumber: string;
     purchaseDate?: string;
     tpPermitReference?: string;
@@ -151,6 +163,10 @@ export class InventoryService {
   }): Promise<{ purchaseId: string; purchaseNumber: string; totalValue: number; itemsCount: number }> {
     if (!purchaseData.items || purchaseData.items.length === 0) {
       throw new Error('Purchase must contain at least one item');
+    }
+
+    if (!purchaseData.barId) {
+      throw new Error('Bar ID is required');
     }
 
     const supabase = getSupabaseServiceClient();
@@ -174,6 +190,7 @@ export class InventoryService {
     const { data: purchase, error: pError } = await supabase
       .from('purchases')
       .insert({
+        bar_id: purchaseData.barId,
         purchase_number: purchaseData.purchaseNumber,
         purchase_date: purchaseData.purchaseDate || new Date().toISOString().split('T')[0],
         tp_permit_reference: purchaseData.tpPermitReference || null,
@@ -203,6 +220,7 @@ export class InventoryService {
         const { data: batch } = await supabase
           .from('batches')
           .insert({
+            bar_id: purchaseData.barId,
             product_id: item.productId,
             batch_number: item.batchNumber,
             quantity: item.quantity,
@@ -231,6 +249,7 @@ export class InventoryService {
         .from('inventory')
         .select('*')
         .eq('product_id', item.productId)
+        .eq('bar_id', purchaseData.barId)
         .maybeSingle();
 
       let newCurrentStock = item.quantity;
@@ -249,9 +268,11 @@ export class InventoryService {
             stock_value: newCurrentStock * item.purchaseTpPrice,
             updated_at: new Date().toISOString(),
           })
-          .eq('product_id', item.productId);
+          .eq('product_id', item.productId)
+          .eq('bar_id', purchaseData.barId);
       } else {
         await supabase.from('inventory').insert({
+          bar_id: purchaseData.barId,
           product_id: item.productId,
           opening_quantity: 0,
           purchased_quantity: item.quantity,
@@ -264,6 +285,7 @@ export class InventoryService {
 
       // Record in Stock Ledger
       await supabase.from('stock_ledger').insert({
+        bar_id: purchaseData.barId,
         product_id: item.productId,
         transaction_date: new Date().toISOString(),
         transaction_type: 'PURCHASE',
@@ -303,6 +325,7 @@ export class InventoryService {
    * Validates non-negative stock and writes atomically to inventory and stock ledger.
    */
   static async processAdjustment(data: {
+    barId: string;
     adjustmentNumber: string;
     adjustmentDate?: string;
     productId: string;
@@ -317,6 +340,10 @@ export class InventoryService {
       throw new Error('Adjustment quantity must be greater than zero');
     }
 
+    if (!data.barId) {
+      throw new Error('Bar ID is required');
+    }
+
     const supabase = getSupabaseServiceClient();
 
     // Fetch current inventory
@@ -324,6 +351,7 @@ export class InventoryService {
       .from('inventory')
       .select('*')
       .eq('product_id', data.productId)
+      .eq('bar_id', data.barId)
       .maybeSingle();
 
     if (invError || !inv) {
@@ -352,6 +380,7 @@ export class InventoryService {
     const { data: adj, error: adjError } = await supabase
       .from('stock_adjustments')
       .insert({
+        bar_id: data.barId,
         adjustment_number: data.adjustmentNumber,
         adjustment_date: data.adjustmentDate || new Date().toISOString().split('T')[0],
         product_id: data.productId,
@@ -390,10 +419,12 @@ export class InventoryService {
         current_quantity: newStock,
         updated_at: new Date().toISOString(),
       })
-      .eq('product_id', data.productId);
+      .eq('product_id', data.productId)
+      .eq('bar_id', data.barId);
 
     // 3. Record in Stock Ledger
     await supabase.from('stock_ledger').insert({
+      bar_id: data.barId,
       product_id: data.productId,
       transaction_date: new Date().toISOString(),
       transaction_type: data.adjustmentType,
@@ -414,10 +445,167 @@ export class InventoryService {
   }
 
   /**
+   * Process Stock Transfer between bars.
+   * Decreases stock at source bar and increases stock at destination bar.
+   */
+  static async processTransfer(data: {
+    transferNumber: string;
+    transferDate?: string;
+    sourceBarId: string;
+    destinationBarId: string;
+    items: {
+      productId: string;
+      batchId?: string;
+      quantity: number;
+    }[];
+    remarks?: string;
+  }): Promise<{ transferId: string; transferNumber: string }> {
+    if (data.sourceBarId === data.destinationBarId) {
+      throw new Error('Source and destination bars must be different');
+    }
+
+    if (!data.items || data.items.length === 0) {
+      throw new Error('Transfer must contain at least one item');
+    }
+
+    const supabase = getSupabaseServiceClient();
+
+    // 1. Create Transfer Record
+    const { data: transfer, error: tError } = await supabase
+      .from('stock_transfers')
+      .insert({
+        transfer_number: data.transferNumber,
+        transfer_date: data.transferDate || new Date().toISOString().split('T')[0],
+        source_bar_id: data.sourceBarId,
+        destination_bar_id: data.destinationBarId,
+        remarks: data.remarks || null,
+        status: 'Completed',
+      })
+      .select('id, transfer_number')
+      .single();
+
+    if (tError || !transfer) {
+      if (tError?.code === '23505') {
+        throw new Error(`A transfer with reference "${data.transferNumber}" already exists.`);
+      }
+      throw new Error(`Failed to create stock transfer: ${tError?.message || 'Database error'}`);
+    }
+
+    // 2. Process Items
+    for (const item of data.items) {
+      // 2.1 Insert Transfer Item
+      await supabase.from('stock_transfer_items').insert({
+        transfer_id: transfer.id,
+        product_id: item.productId,
+        batch_id: item.batchId || null,
+        quantity: item.quantity,
+      });
+
+      // 2.2 Update Source Bar Inventory (Stock OUT)
+      const { data: sourceInv } = await supabase
+        .from('inventory')
+        .select('*')
+        .eq('product_id', item.productId)
+        .eq('bar_id', data.sourceBarId)
+        .maybeSingle();
+
+      if (!sourceInv || Number(sourceInv.current_quantity) < item.quantity) {
+        throw new Error(`Insufficient stock in source bar for product ${item.productId}`);
+      }
+
+      const newSourceStock = Number(sourceInv.current_quantity) - item.quantity;
+      await supabase
+        .from('inventory')
+        .update({
+          adjustment_quantity: Number(sourceInv.adjustment_quantity || 0) - item.quantity,
+          current_quantity: newSourceStock,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('product_id', item.productId)
+        .eq('bar_id', data.sourceBarId);
+
+      // 2.3 Record Source Ledger (TRANSFER_OUT)
+      await supabase.from('stock_ledger').insert({
+        bar_id: data.sourceBarId,
+        product_id: item.productId,
+        transaction_date: new Date().toISOString(),
+        transaction_type: 'ADJUSTMENT_OUT',
+        reference_id: transfer.id,
+        reference_number: transfer.transfer_number,
+        stock_in: 0,
+        stock_out: item.quantity,
+        balance: newSourceStock,
+        remarks: `Transfer to ${data.destinationBarId}`,
+      });
+
+      // 2.4 Update Destination Bar Inventory (Stock IN)
+      const { data: destInv } = await supabase
+        .from('inventory')
+        .select('*')
+        .eq('product_id', item.productId)
+        .eq('bar_id', data.destinationBarId)
+        .maybeSingle();
+
+      let newDestStock = item.quantity;
+      if (destInv) {
+        newDestStock = Number(destInv.current_quantity) + item.quantity;
+        await supabase
+          .from('inventory')
+          .update({
+            adjustment_quantity: Number(destInv.adjustment_quantity || 0) + item.quantity,
+            current_quantity: newDestStock,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('product_id', item.productId)
+          .eq('bar_id', data.destinationBarId);
+      } else {
+        await supabase.from('inventory').insert({
+          bar_id: data.destinationBarId,
+          product_id: item.productId,
+          opening_quantity: 0,
+          purchased_quantity: 0,
+          adjustment_quantity: item.quantity,
+          returned_quantity: 0,
+          current_quantity: item.quantity,
+        });
+      }
+
+      // 2.5 Record Destination Ledger (TRANSFER_IN)
+      await supabase.from('stock_ledger').insert({
+        bar_id: data.destinationBarId,
+        product_id: item.productId,
+        transaction_date: new Date().toISOString(),
+        transaction_type: 'ADJUSTMENT_IN',
+        reference_id: transfer.id,
+        reference_number: transfer.transfer_number,
+        stock_in: item.quantity,
+        stock_out: 0,
+        balance: newDestStock,
+        remarks: `Transfer from ${data.sourceBarId}`,
+      });
+    }
+
+    return {
+      transferId: transfer.id,
+      transferNumber: transfer.transfer_number,
+    };
+  }
+
+  /**
    * Fetch Inventory list with product & category relationships
    */
-  static async getInventoryList(params?: { search?: string; categoryId?: string; lowStockOnly?: boolean }) {
+  static async getInventoryList(params?: {
+    barId?: string;
+    barIds?: string[];
+    search?: string;
+    categoryId?: string;
+    lowStockOnly?: boolean;
+  }) {
     const supabase = getSupabaseServiceClient();
+
+    const barMap = await BarStoreService.getBarMap();
+    const defaultBar = Object.values(barMap)[0] || null;
+    const selectedBar = params?.barId && params.barId !== 'ALL_BARS' ? (barMap[params.barId] || defaultBar) : defaultBar;
 
     let query = supabase.from('inventory').select(`
       id,
@@ -449,6 +637,13 @@ export class InventoryService {
 
     let items = (data as unknown as InventoryRecord[]) || [];
 
+    // Attach bar details context
+    items = items.map(item => ({
+      ...item,
+      bar_id: (item as any).bar_id || selectedBar?.id || '',
+      bar: ((item as any).bar_id ? barMap[(item as any).bar_id] : null) || selectedBar || null,
+    }));
+
     if (params?.search) {
       const q = params.search.toLowerCase();
       items = items.filter(
@@ -473,8 +668,12 @@ export class InventoryService {
   /**
    * Fetch Stock Ledger entries
    */
-  static async getStockLedger(productId?: string, limit = 50) {
+  static async getStockLedger(barIdOrIds: string | string[], productId?: string, limit = 50) {
     const supabase = getSupabaseServiceClient();
+    const barMap = await BarStoreService.getBarMap();
+    const defaultBar = Object.values(barMap)[0] || null;
+    const singleBarId = typeof barIdOrIds === 'string' && barIdOrIds !== 'ALL_BARS' ? barIdOrIds : undefined;
+    const selectedBar = singleBarId ? (barMap[singleBarId] || defaultBar) : defaultBar;
 
     let query = supabase
       .from('stock_ledger')
@@ -491,9 +690,9 @@ export class InventoryService {
         remarks,
         created_at,
         product:products(id, name, product_name, sku)
-      `)
-      .order('created_at', { ascending: false })
-      .limit(limit);
+      `);
+
+    query = query.order('created_at', { ascending: false }).limit(limit);
 
     if (productId) {
       query = query.eq('product_id', productId);
@@ -504,14 +703,20 @@ export class InventoryService {
       throw new Error(`Failed to fetch stock ledger: ${error.message}`);
     }
 
-    return (data as unknown as StockLedgerRecord[]) || [];
+    const records = ((data as unknown as StockLedgerRecord[]) || []).map(r => ({
+      ...r,
+      bar_id: (r as any).bar_id || selectedBar.id,
+      bar: ((r as any).bar_id ? barMap[(r as any).bar_id] : null) || selectedBar,
+    }));
+
+    return records;
   }
 
   /**
    * Calculate live Dashboard KPIs from real database records.
    * Focuses purely on Inventory, Inwards, and Excise.
    */
-  static async getDashboardStats(): Promise<DashboardStats> {
+  static async getDashboardStats(params?: { barId?: string; authorizedBarIds?: string[] } | string): Promise<DashboardStats> {
     const supabase = getSupabaseServiceClient();
     const today = new Date().toISOString().split('T')[0];
 
@@ -615,7 +820,7 @@ export class InventoryService {
    * Search across Product Master (first priority), categories, purchases, suppliers, batches and excise licences.
    * Ensures products with stock = 0, no inventory row, or inactive status are fully searchable.
    */
-  static async searchGlobal(query: string) {
+  static async searchGlobal(query: string, barId?: string) {
     if (!query || query.trim().length === 0) return [];
     const supabase = getSupabaseServiceClient();
     const cleanQ = query.trim();
@@ -624,7 +829,10 @@ export class InventoryService {
 
     // 1. Primary: Stored Procedure / RPC for Product Master First Search with aggregated inventory stock
     try {
-      const { data: rpcData, error: rpcError } = await supabase.rpc('search_product_master', { p_query: cleanQ });
+      const { data: rpcData, error: rpcError } = await supabase.rpc('search_product_master', { 
+        p_query: cleanQ,
+        p_bar_id: barId || null
+      });
       if (!rpcError && Array.isArray(rpcData)) {
         productResults = rpcData.map(p => ({
           type: 'product',
@@ -646,7 +854,7 @@ export class InventoryService {
 
     // Fallback if RPC failed or returned no results for specific match
     if (productResults.length === 0) {
-      const { data: products } = await supabase
+      let prodQuery = supabase
         .from('products')
         .select(`
           id,
@@ -657,14 +865,16 @@ export class InventoryService {
           category:categories(name),
           brand:brands(name, brand_name),
           pack_size:pack_sizes(name),
-          inventory(current_quantity)
+          inventory(current_quantity, bar_id)
         `)
         .or(`name.ilike.%${cleanQ}%,product_name.ilike.%${cleanQ}%,sku.ilike.%${cleanQ}%`)
         .limit(15);
+      
+      const { data: products } = await prodQuery;
 
       if (products) {
         productResults = products.map((p: any) => {
-          const invList = p.inventory || [];
+          const invList = (p.inventory || []).filter((inv: any) => !barId || inv.bar_id === barId);
           const totalStock = invList.reduce((acc: number, item: any) => acc + Number(item.current_quantity || 0), 0);
           const nameStr = p.product_name || p.name;
           const brandStr = p.brand?.brand_name || p.brand?.name || '';
@@ -695,23 +905,34 @@ export class InventoryService {
       .limit(4);
 
     // 3. Search purchases by purchase number or permit ref
-    const { data: purchases } = await supabase
+    let purSearchQuery = supabase
       .from('purchases')
-      .select('id, purchase_number, purchase_date, tp_permit_reference, excise_reference, total_value')
+      .select('id, bar_id, purchase_number, purchase_date, tp_permit_reference, excise_reference, total_value')
       .or(`purchase_number.ilike.%${cleanQ}%,tp_permit_reference.ilike.%${cleanQ}%,excise_reference.ilike.%${cleanQ}%`)
       .limit(6);
+    
+    if (barId) {
+      purSearchQuery = purSearchQuery.eq('bar_id', barId);
+    }
+    const { data: purchases } = await purSearchQuery;
 
     // 5. Search batches
-    const { data: batches } = await supabase
+    let batchSearchQuery = supabase
       .from('batches')
       .select(`
         id, 
+        bar_id,
         batch_number, 
         created_at, 
         product:products(product_name)
       `)
       .ilike('batch_number', `%${cleanQ}%`)
       .limit(4);
+    
+    if (barId) {
+      batchSearchQuery = batchSearchQuery.eq('bar_id', barId);
+    }
+    const { data: batches } = await batchSearchQuery;
 
     // 6. Search excise licences
     const { data: licences } = await supabase
@@ -752,12 +973,13 @@ export class InventoryService {
   /**
    * Fetch Purchases list with item details
    */
-  static async getPurchases(params?: { search?: string; limit?: number }) {
+  static async getPurchases(params?: { barId?: string; search?: string; limit?: number }) {
     const supabase = getSupabaseServiceClient();
     let query = supabase
       .from('purchases')
       .select(`
         id,
+        bar_id,
         purchase_number,
         purchase_date,
         tp_permit_reference,
@@ -779,6 +1001,10 @@ export class InventoryService {
       .order('purchase_date', { ascending: false })
       .limit(params?.limit || 100);
 
+    if (params?.barId) {
+      query = query.eq('bar_id', params.barId);
+    }
+
     const { data, error } = await query;
     if (error) {
       throw new Error(`Failed to fetch purchases: ${error.message}`);
@@ -799,12 +1025,13 @@ export class InventoryService {
   /**
    * Fetch Stock Adjustments list
    */
-  static async getAdjustments(params?: { search?: string; adjustmentType?: string; productId?: string; limit?: number }) {
+  static async getAdjustments(params?: { barId?: string; search?: string; adjustmentType?: string; productId?: string; limit?: number }) {
     const supabase = getSupabaseServiceClient();
     let query = supabase
       .from('stock_adjustments')
       .select(`
         id,
+        bar_id,
         adjustment_number,
         adjustment_date,
         product_id,
@@ -819,6 +1046,10 @@ export class InventoryService {
       `)
       .order('adjustment_date', { ascending: false })
       .limit(params?.limit || 100);
+
+    if (params?.barId) {
+      query = query.eq('bar_id', params.barId);
+    }
 
     if (params?.adjustmentType && params.adjustmentType !== 'All') {
       query = query.eq('adjustment_type', params.adjustmentType);
@@ -849,12 +1080,13 @@ export class InventoryService {
   /**
    * Fetch Opening Stock entries from stock ledger
    */
-  static async getOpeningStockRecords(params?: { productId?: string; limit?: number }) {
+  static async getOpeningStockRecords(params?: { barId?: string; productId?: string; limit?: number }) {
     const supabase = getSupabaseServiceClient();
     let query = supabase
       .from('stock_ledger')
       .select(`
         id,
+        bar_id,
         product_id,
         transaction_date,
         transaction_type,
@@ -879,6 +1111,10 @@ export class InventoryService {
       .order('transaction_date', { ascending: false })
       .limit(params?.limit || 50);
 
+    if (params?.barId) {
+      query = query.eq('bar_id', params.barId);
+    }
+
     if (params?.productId) {
       query = query.eq('product_id', params.productId);
     }
@@ -893,12 +1129,13 @@ export class InventoryService {
   /**
    * Batches management
    */
-  static async getBatches(params?: { search?: string; productId?: string }) {
+  static async getBatches(params?: { barId?: string; search?: string; productId?: string }) {
     const supabase = getSupabaseServiceClient();
     let query = supabase
       .from('batches')
       .select(`
         id,
+        bar_id,
         product_id,
         batch_number,
         batch_date,
@@ -912,6 +1149,10 @@ export class InventoryService {
         product:products(id, name, sku, category:categories(name), brand:brands(name))
       `)
       .order('batch_date', { ascending: false });
+
+    if (params?.barId) {
+      query = query.eq('bar_id', params.barId);
+    }
 
     if (params?.productId) {
       query = query.eq('product_id', params.productId);
@@ -936,6 +1177,7 @@ export class InventoryService {
   }
 
   static async createBatch(data: {
+    barId: string;
     productId: string;
     batchNumber: string;
     batchDate?: string;
@@ -946,13 +1188,14 @@ export class InventoryService {
     documentReference?: string;
     remarks?: string;
   }) {
-    if (!data.productId || !data.batchNumber) {
-      throw new Error('Product and Batch Number are required');
+    if (!data.productId || !data.batchNumber || !data.barId) {
+      throw new Error('Bar ID, Product and Batch Number are required');
     }
     const supabase = getSupabaseServiceClient();
     const { data: batch, error } = await supabase
       .from('batches')
       .insert({
+        bar_id: data.barId,
         product_id: data.productId,
         batch_number: data.batchNumber.trim(),
         batch_date: data.batchDate || new Date().toISOString().split('T')[0],
@@ -1011,8 +1254,8 @@ export class InventoryService {
         currency: 'INR',
         timezone: 'Asia/Kolkata',
         date_format: 'DD/MM/YYYY',
-        selected_language: 'mr',
-        language: 'mr',
+        selected_language: 'en',
+        language: 'en',
         low_stock_threshold: 10,
       };
     }
@@ -1020,22 +1263,30 @@ export class InventoryService {
       ...data,
       address: data.address || data.business_address || 'Maharashtra, India',
       business_address: data.business_address || data.address || 'Maharashtra, India',
-      selected_language: data.selected_language || data.language || 'mr',
-      language: data.language || data.selected_language || 'mr',
+      selected_language: data.selected_language || data.language || 'en',
+      language: data.language || data.selected_language || 'en',
     };
+  }
+
+  static async getDefaultBarId(): Promise<string> {
+    const bars = await BarStoreService.getBars();
+    return bars[0]?.id || '';
   }
 
   static async bulkRecordOpeningStock(
     items: Array<{
+      barId?: string;
       productId: string;
       quantity: number;
       batchNumber?: string;
       purchaseTpPrice?: number;
       remarks?: string;
-    }>
+    }>,
+    defaultBarId?: string
   ) {
     const errors: Array<{ index: number; row: any; error: string }> = [];
     const recorded: any[] = [];
+    const fallbackBarId = defaultBarId || (await this.getDefaultBarId());
 
     for (let i = 0; i < items.length; i++) {
       const row = items[i];
@@ -1044,6 +1295,7 @@ export class InventoryService {
           throw new Error('Missing Product ID or Quantity');
         }
         const result = await this.recordOpeningStock({
+          barId: row.barId || fallbackBarId,
           productId: row.productId,
           quantity: Number(row.quantity),
           batchNumber: row.batchNumber,
@@ -1066,6 +1318,7 @@ export class InventoryService {
 
   static async bulkProcessPurchases(
     purchasesList: Array<{
+      barId?: string;
       purchaseNumber: string;
       purchaseDate?: string;
       tpPermitReference?: string;
@@ -1079,15 +1332,20 @@ export class InventoryService {
         batchNumber?: string;
         mrpReference?: number;
       }>;
-    }>
+    }>,
+    defaultBarId?: string
   ) {
     const errors: Array<{ index: number; row: any; error: string }> = [];
     const processed: any[] = [];
+    const fallbackBarId = defaultBarId || (await this.getDefaultBarId());
 
     for (let i = 0; i < purchasesList.length; i++) {
       const p = purchasesList[i];
       try {
-        const result = await this.processPurchase(p);
+        const result = await this.processPurchase({
+          ...p,
+          barId: p.barId || fallbackBarId,
+        });
         processed.push(result);
       } catch (err: any) {
         errors.push({ index: i, row: p, error: err.message || 'Failed to process purchase' });
@@ -1104,6 +1362,7 @@ export class InventoryService {
 
   static async bulkProcessAdjustments(
     items: Array<{
+      barId?: string;
       adjustmentNumber: string;
       adjustmentDate?: string;
       productId: string;
@@ -1113,15 +1372,20 @@ export class InventoryService {
       reference?: string;
       reason?: string;
       remarks?: string;
-    }>
+    }>,
+    defaultBarId?: string
   ) {
     const errors: Array<{ index: number; row: any; error: string }> = [];
     const processed: any[] = [];
+    const fallbackBarId = defaultBarId || (await this.getDefaultBarId());
 
     for (let i = 0; i < items.length; i++) {
       const adj = items[i];
       try {
-        const result = await this.processAdjustment(adj);
+        const result = await this.processAdjustment({
+          ...adj,
+          barId: adj.barId || fallbackBarId,
+        });
         processed.push(result);
       } catch (err: any) {
         errors.push({ index: i, row: adj, error: err.message || 'Failed to process adjustment' });
@@ -1141,7 +1405,7 @@ export class InventoryService {
     const { data: existing } = await supabase.from('settings').select('id').limit(1).maybeSingle();
 
     const addr = data.address || data.business_address || data.businessAddress || '';
-    const lang = data.selectedLanguage || data.selected_language || data.language || 'mr';
+    const lang = data.selectedLanguage || data.selected_language || data.language || 'en';
 
     const fullPayload: Record<string, any> = {
       business_name: data.businessName || data.business_name || 'LiquorFlow ERP',

@@ -21,13 +21,16 @@ import { apiGet, apiPost } from '../../utils/api';
 import { translations } from '../../utils/i18n';
 import { BulkImportDialog } from '../common/BulkImportDialog';
 import { ProductPackSizeSelector } from '../common/ProductPackSizeSelector';
+import { useBar } from '../../lib/contexts/BarContext';
 
 interface PurchasesViewProps {
   language: SupportedLanguage;
+  selectedBarId?: string | null;
 }
 
-export const PurchasesView: React.FC<PurchasesViewProps> = ({ language }) => {
+export const PurchasesView: React.FC<PurchasesViewProps> = ({ language, selectedBarId }) => {
   const t = translations[language];
+  const { selectedBar } = useBar();
 
   const [purchases, setPurchases] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
@@ -86,8 +89,12 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({ language }) => {
   };
 
   useEffect(() => {
+    if (selectedBarId) {
+
     fetchData();
-  }, []);
+  
+    }
+  }, [selectedBarId]);
 
   const handleProductChange = (productId: string) => {
     const selected = products.find(p => p.id === productId);
@@ -111,6 +118,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({ language }) => {
 
     try {
       const result = await apiPost('/api/inventory/purchases', {
+        barId: selectedBarId,
         purchaseNumber: formData.purchaseNumber,
         purchaseDate: formData.purchaseDate,
         tpPermitReference: formData.tpPermitReference || undefined,
@@ -192,6 +200,11 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({ language }) => {
             </div>
             <h1 className="text-xl sm:text-2xl font-bold text-white tracking-tight">
               Purchase / Inward
+              {selectedBar && (
+                <span className="ml-2 px-3 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-sm font-medium inline-block align-middle">
+                  {selectedBar.name}
+                </span>
+              )}
             </h1>
           </div>
           <p className="text-xs sm:text-sm text-slate-400 mt-1">

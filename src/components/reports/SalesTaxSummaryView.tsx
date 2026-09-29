@@ -13,6 +13,7 @@ import {
 import { SupportedLanguage } from '../../types';
 import { apiGet } from '../../utils/api';
 import { translations } from '../../utils/i18n';
+import { useBar } from '../../lib/contexts/BarContext';
 
 interface SalesTaxSummaryViewProps {
   language: SupportedLanguage;
@@ -20,6 +21,7 @@ interface SalesTaxSummaryViewProps {
 
 export const SalesTaxSummaryView: React.FC<SalesTaxSummaryViewProps> = ({ language }) => {
   const t = translations[language];
+  const { selectedBar } = useBar();
 
   const [fromDate, setFromDate] = useState('2026-01-01');
   const [toDate, setToDate] = useState(new Date().toISOString().split('T')[0]);
@@ -53,7 +55,7 @@ export const SalesTaxSummaryView: React.FC<SalesTaxSummaryViewProps> = ({ langua
     } finally {
       setLoading(false);
     }
-  }, [fromDate, toDate]);
+  }, [fromDate, toDate, selectedBar?.id]);
 
   useEffect(() => {
     fetchSalesTax();

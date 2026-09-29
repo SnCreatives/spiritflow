@@ -104,6 +104,34 @@ export interface Product {
   };
 }
 
+export interface BarOutlet {
+  id: string;
+  name: string;
+  code: string;
+  address?: string | null;
+  city?: string | null;
+  state?: string | null;
+  pincode?: string | null;
+  contact_person?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  license_number?: string | null;
+  status: 'Active' | 'Inactive';
+  created_at: string;
+  updated_at: string;
+}
+
+export interface UserBarAccess {
+  id: string;
+  user_id: string;
+  bar_id: string;
+  role: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+  bar?: BarOutlet;
+}
+
 export interface Customer {
   id: string;
   name: string;
@@ -113,6 +141,7 @@ export interface Customer {
 
 export interface Purchase {
   id: string;
+  bar_id: string;
   inward_number: string;
   purchase_date: string;
   tp_permit_ref: string | null;
@@ -136,6 +165,7 @@ export interface PurchaseItem {
 
 export interface Batch {
   id: string;
+  bar_id: string;
   product_id: string;
   batch_number: string;
   batch_date: string;
@@ -152,6 +182,7 @@ export interface Batch {
 
 export interface StockAdjustment {
   id: string;
+  bar_id: string;
   adjustment_number: string;
   adjustment_date: string;
   product_id: string;
@@ -211,6 +242,7 @@ export interface ComplianceReference {
 
 export interface InventoryRecord {
   id: string;
+  bar_id: string;
   product_id: string;
   opening_quantity: number;
   purchased_quantity: number;
@@ -242,6 +274,7 @@ export type StockTransactionType =
 
 export interface StockLedgerRecord {
   id: string;
+  bar_id: string;
   product_id: string;
   transaction_date?: string;
   date?: string;
@@ -298,6 +331,7 @@ export interface AuthUser {
   mobile_number: string;
   business_name: string;
   selected_language: SupportedLanguage;
+  bars?: BarOutlet[];
 }
 
 // Pagination Interface

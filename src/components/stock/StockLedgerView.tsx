@@ -14,14 +14,19 @@ import {
 import { SupportedLanguage, StockLedgerRecord } from '../../types';
 import { apiGet } from '../../utils/api';
 import { translations } from '../../utils/i18n';
+import { useBar } from '../../lib/contexts/BarContext';
+import { ReportScopeSelector, ReportScope } from '../common/ReportScopeSelector';
 
 interface StockLedgerViewProps {
   language: SupportedLanguage;
+  selectedBarId?: string | null;
 }
 
-export const StockLedgerView: React.FC<StockLedgerViewProps> = ({ language }) => {
+export const StockLedgerView: React.FC<StockLedgerViewProps> = ({ language, selectedBarId }) => {
   const t = translations[language];
+  const { selectedBar, availableBars } = useBar();
 
+  const [scope, setScope] = useState<ReportScope>('CURRENT_BAR');
   const [ledger, setLedger] = useState<StockLedgerRecord[]>([]);
   const [products, setProducts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -34,8 +39,9 @@ export const StockLedgerView: React.FC<StockLedgerViewProps> = ({ language }) =>
   const fetchData = async () => {
     setLoading(true);
     try {
+      const scopeParam = scope === 'ALL_BARS' ? '&barScope=ALL_BARS' : `&barId=${selectedBar?.id || ''}`;
       const [ledData, prodData] = await Promise.all([
-        apiGet(`/api/inventory/ledger?limit=300${selectedProductId ? `&productId=${selectedProductId}` : ''}`),
+        apiGet(`/api/inventory/ledger?limit=300${selectedProductId ? `&productId=${selectedProductId}` : ''}${scopeParam}`),
         apiGet('/api/products/selection'),
       ]);
 
@@ -54,15 +60,28 @@ export const StockLedgerView: React.FC<StockLedgerViewProps> = ({ language }) =>
 
   useEffect(() => {
     fetchData();
-  }, [selectedProductId]);
+  }, [selectedProductId, selectedBar?.id, scope]);
 
   const exportCSV = () => {
     if (filteredLedger.length === 0) return;
-    const headers = ['Date', 'Product', 'Transaction Type', 'Reference #', 'Stock In', 'Stock Out', 'Balance', 'Remarks'];
+    const isAllBars = scope === 'ALL_BARS';
+    const headers = [
+      ...(isAllBars ? ['Bar / Outlet'] : []),
+      'Date',
+      'Product',
+      'Transaction Type',
+      'Reference #',
+      'Stock In',
+      'Stock Out',
+      'Balance',
+      'Remarks',
+    ];
     const rows = filteredLedger.map(entry => {
       const p = entry.product as any;
+      const b = (entry as any).bar as any;
       const productName = p?.product_name || p?.name || 'Product';
       return [
+        ...(isAllBars ? [b?.name ? `${b.name} (${b.code})` : 'All Outlets'] : []),
         entry.transaction_date?.split('T')[0] || '',
         productName,
         entry.transaction_type || '',
@@ -79,7 +98,7 @@ export const StockLedgerView: React.FC<StockLedgerViewProps> = ({ language }) =>
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `Stock_Ledger_Audited_${new Date().toISOString().split('T')[0]}.csv`;
+    a.download = `Stock_Ledger_Audited_${scope}_${new Date().toISOString().split('T')[0]}.csv`;
     a.click();
   };
 
@@ -101,7 +120,7 @@ export const StockLedgerView: React.FC<StockLedgerViewProps> = ({ language }) =>
   const paginatedLedger = filteredLedger.slice((page - 1) * itemsPerPage, page * itemsPerPage);
 
   return (
-    <div className="page-container px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+    <div className="page-container px-4 sm:px-6 lg:px-8 py-8 space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-slate-900 border border-slate-800 p-6 rounded-2xl">
         <div>
@@ -110,7 +129,7 @@ export const StockLedgerView: React.FC<StockLedgerViewProps> = ({ language }) =>
               <FileSpreadsheet className="w-4 h-4" />
             </div>
             <h1 className="text-xl sm:text-2xl font-bold text-white tracking-tight">
-              Stock Ledger
+              Stock Ledger & Audit
             </h1>
           </div>
           <p className="text-xs sm:text-sm text-slate-400 mt-1">
@@ -129,6 +148,13 @@ export const StockLedgerView: React.FC<StockLedgerViewProps> = ({ language }) =>
           </button>
         </div>
       </div>
+
+      {/* Scope Selector */}
+      <ReportScopeSelector
+        title="Stock Ledger Audit Scope"
+        scope={scope}
+        onChange={setScope}
+      />
 
       {/* Filter Bar */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shadow-sm">
@@ -201,6 +227,7 @@ export const StockLedgerView: React.FC<StockLedgerViewProps> = ({ language }) =>
           <table className="w-full text-left text-xs text-slate-300">
             <thead className="bg-slate-950/60 text-slate-400 uppercase font-mono text-[10px] border-b border-slate-800">
               <tr>
+                {scope === 'ALL_BARS' && <th className="px-4 py-3">Outlet / Bar</th>}
                 <th className="px-4 py-3">Date</th>
                 <th className="px-4 py-3">Product Name</th>
                 <th className="px-4 py-3">Transaction Type</th>
@@ -214,52 +241,57 @@ export const StockLedgerView: React.FC<StockLedgerViewProps> = ({ language }) =>
             <tbody className="divide-y divide-slate-800/60 font-sans">
               {paginatedLedger.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-4 py-12 text-center text-slate-500 text-xs">
+                  <td colSpan={scope === 'ALL_BARS' ? 9 : 8} className="px-4 py-12 text-center text-slate-500 text-xs">
                     No stock ledger transactions found for the selected filters.
                   </td>
                 </tr>
               ) : (
                 paginatedLedger.map((item: any) => {
                   const p = item.product as any;
+                  const b = (item as any).bar as any;
                   const isStockIn = Number(item.stock_in || 0) > 0;
                   const isStockOut = Number(item.stock_out || 0) > 0;
 
                   return (
                     <tr key={item.id} className="hover:bg-slate-800/30 transition-colors">
+                      {scope === 'ALL_BARS' && (
+                        <td className="px-4 py-3 font-semibold text-slate-200">
+                          {b?.name ? `${b.name} (${b.code})` : 'All Outlets'}
+                        </td>
+                      )}
                       <td className="px-4 py-3 font-mono text-slate-400">
                         {item.transaction_date?.split('T')[0] || '-'}
                       </td>
                       <td className="px-4 py-3 font-medium text-white">
-                        {p?.product_name || p?.name || 'Product'}
+                        <div>{p?.product_name || p?.name}</div>
+                        {p?.sku && <div className="text-[10px] text-slate-500">SKU: {p.sku}</div>}
                       </td>
                       <td className="px-4 py-3">
                         <span
-                          className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold ${
-                            item.transaction_type === 'PURCHASE'
-                              ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                              : item.transaction_type === 'OPENING'
-                              ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
-                              : item.transaction_type?.includes('OUT')
-                              ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
-                              : 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/20'
+                          className={`inline-block px-2 py-0.5 rounded text-[10px] font-mono font-bold ${
+                            item.transaction_type === 'OPENING'
+                              ? 'bg-blue-500/15 text-blue-400 border border-blue-500/30'
+                              : item.transaction_type === 'PURCHASE'
+                              ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+                              : item.transaction_type?.includes('IN')
+                              ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
+                              : 'bg-rose-500/15 text-rose-400 border border-rose-500/30'
                           }`}
                         >
                           {item.transaction_type}
                         </span>
                       </td>
-                      <td className="px-4 py-3 font-mono text-slate-300">
-                        {item.reference_number || '-'}
-                      </td>
-                      <td className="px-4 py-3 text-right font-bold font-mono text-emerald-400">
+                      <td className="px-4 py-3 font-mono text-slate-300">{item.reference_number || '-'}</td>
+                      <td className="px-4 py-3 text-right font-mono font-semibold text-emerald-400">
                         {isStockIn ? `+${item.stock_in}` : '-'}
                       </td>
-                      <td className="px-4 py-3 text-right font-bold font-mono text-rose-400">
+                      <td className="px-4 py-3 text-right font-mono font-semibold text-rose-400">
                         {isStockOut ? `-${item.stock_out}` : '-'}
                       </td>
-                      <td className="px-4 py-3 text-right font-bold font-mono text-white text-sm">
-                        {item.balance || 0}
+                      <td className="px-4 py-3 text-right font-mono font-bold text-white text-sm">
+                        {item.balance}
                       </td>
-                      <td className="px-4 py-3 text-slate-400 truncate max-w-xs">
+                      <td className="px-4 py-3 text-slate-400 text-[11px] max-w-xs truncate">
                         {item.remarks || '-'}
                       </td>
                     </tr>
@@ -270,35 +302,33 @@ export const StockLedgerView: React.FC<StockLedgerViewProps> = ({ language }) =>
           </table>
         </div>
 
-        {/* Pagination Footer */}
-        <div className="p-4 border-t border-slate-800 flex items-center justify-between text-xs text-slate-400">
-          <div>
-            Showing {(page - 1) * itemsPerPage + 1} to {Math.min(page * itemsPerPage, filteredLedger.length)} of{' '}
-            {filteredLedger.length} ledger records
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div className="p-4 border-t border-slate-800 flex items-center justify-between text-xs text-slate-400">
+            <div>
+              Showing page <span className="text-white font-bold">{page}</span> of{' '}
+              <span className="text-white font-bold">{totalPages}</span> ({filteredLedger.length} total entries)
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                disabled={page === 1}
+                onClick={() => setPage(prev => Math.max(1, prev - 1))}
+                className="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-white rounded-lg disabled:opacity-40"
+              >
+                Previous
+              </button>
+              <button
+                type="button"
+                disabled={page === totalPages}
+                onClick={() => setPage(prev => Math.min(totalPages, prev + 1))}
+                className="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-white rounded-lg disabled:opacity-40"
+              >
+                Next
+              </button>
+            </div>
           </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              disabled={page <= 1}
-              onClick={() => setPage(p => Math.max(1, p - 1))}
-              className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 disabled:opacity-40"
-            >
-              Previous
-            </button>
-            <span className="font-mono text-slate-300 px-1">
-              {page} / {totalPages}
-            </span>
-            <button
-              type="button"
-              disabled={page >= totalPages}
-              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-              className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 disabled:opacity-40"
-            >
-              Next
-            </button>
-          </div>
-        </div>
+        )}
       </div>
     </div>
   );

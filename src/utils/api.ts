@@ -18,6 +18,11 @@ export async function apiFetch<T = any>(
     headers['x-session-token'] = storedToken;
   }
 
+  const storedBarId = localStorage.getItem('liquorflow_selected_bar_id');
+  if (storedBarId) {
+    headers['x-bar-id'] = storedBarId;
+  }
+
   const fetchOptions: RequestInit = {
     ...options,
     headers,
@@ -90,6 +95,16 @@ export async function apiPost<T = any>(url: string, body: any) {
 export async function apiPut<T = any>(url: string, body: any) {
   return apiFetch<T>(url, {
     method: 'PUT',
+    body: JSON.stringify(body),
+  });
+}
+
+/**
+ * Specialized helper for PATCH requests
+ */
+export async function apiPatch<T = any>(url: string, body: any) {
+  return apiFetch<T>(url, {
+    method: 'PATCH',
     body: JSON.stringify(body),
   });
 }

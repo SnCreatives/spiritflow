@@ -18,6 +18,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { SupportedLanguage, InventoryRecord, StockLedgerRecord } from '../../types';
 import { apiGet, apiPost } from '../../utils/api';
 import { translations } from '../../utils/i18n';
+import { useBar } from '../../lib/contexts/BarContext';
 import { BulkImportDialog } from '../common/BulkImportDialog';
 import { ProductPackSizeSelector } from '../common/ProductPackSizeSelector';
 
@@ -27,6 +28,7 @@ interface InventoryViewProps {
 
 export const InventoryView: React.FC<InventoryViewProps> = ({ language }) => {
   const t = translations[language];
+  const { selectedBar } = useBar();
   const [activeTab, setActiveTab] = useState<'inventory' | 'ledger' | 'schema'>('inventory');
   const [items, setItems] = useState<InventoryRecord[]>([]);
   const [ledger, setLedger] = useState<StockLedgerRecord[]>([]);
@@ -136,7 +138,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ language }) => {
     fetchLedger();
     fetchDropdownData();
     fetchSchemaReport();
-  }, []);
+  }, [selectedBar?.id]);
 
   const handleInwardSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -233,6 +235,11 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ language }) => {
           <h1 className="text-xl sm:text-2xl font-bold text-white tracking-tight flex items-center gap-2.5">
             <Package className="w-6 h-6 text-amber-400" />
             <span>{t.navInventory} & Stock Control</span>
+            {selectedBar && (
+              <span className="ml-2 px-3 py-1 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-500 text-sm font-medium">
+                {selectedBar.name}
+              </span>
+            )}
           </h1>
           <p className="text-xs sm:text-sm text-slate-400 mt-1">
             Current Stock = Opening + Inward/Purchases + Adjustments (In) + Returns (In) - Adjustments (Out) - Returns (Out)

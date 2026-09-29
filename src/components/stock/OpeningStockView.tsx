@@ -18,13 +18,16 @@ import { translations } from '../../utils/i18n';
 import { BulkImportDialog } from '../common/BulkImportDialog';
 import { ProductPackSizeSelector } from '../common/ProductPackSizeSelector';
 import { apiGet, apiPost } from '../../utils/api';
+import { useBar } from '../../lib/contexts/BarContext';
 
 interface OpeningStockViewProps {
   language: SupportedLanguage;
+  selectedBarId?: string | null;
 }
 
-export const OpeningStockView: React.FC<OpeningStockViewProps> = ({ language }) => {
+export const OpeningStockView: React.FC<OpeningStockViewProps> = ({ language, selectedBarId }) => {
   const t = translations[language];
+  const { selectedBar } = useBar();
 
   const [records, setRecords] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
@@ -79,8 +82,12 @@ export const OpeningStockView: React.FC<OpeningStockViewProps> = ({ language }) 
   };
 
   useEffect(() => {
+    if (selectedBarId) {
+
     fetchData();
-  }, []);
+  
+    }
+  }, [selectedBarId]);
 
   const handleProductChange = (productId: string) => {
     const selected = products.find(p => p.id === productId);
@@ -172,6 +179,11 @@ export const OpeningStockView: React.FC<OpeningStockViewProps> = ({ language }) 
             </div>
             <h1 className="text-xl sm:text-2xl font-bold text-white tracking-tight">
               Opening / TP Stock
+              {selectedBar && (
+                <span className="ml-2 px-3 py-1 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-500 text-sm font-medium inline-block align-middle">
+                  {selectedBar.name}
+                </span>
+              )}
             </h1>
           </div>
           <p className="text-xs sm:text-sm text-slate-400 mt-1">

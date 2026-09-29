@@ -16,8 +16,10 @@ import {
 import { SupportedLanguage } from '../../types';
 import { apiGet } from '../../utils/api';
 import { translations } from '../../utils/i18n';
+import { useBar } from '../../lib/contexts/BarContext';
 import { MlStockReportView } from './MlStockReportView';
 import { SalesTaxSummaryView } from './SalesTaxSummaryView';
+import { ReportScopeSelector, ReportScope } from '../common/ReportScopeSelector';
 
 interface ReportsViewProps {
   language: SupportedLanguage;
@@ -25,7 +27,9 @@ interface ReportsViewProps {
 
 export const ReportsView: React.FC<ReportsViewProps> = ({ language }) => {
   const t = translations[language];
+  const { selectedBar, availableBars } = useBar();
 
+  const [scope, setScope] = useState<ReportScope>('CURRENT_BAR');
   const [activeReport, setActiveReport] = useState<
     'ml_stock' | 'sales_tax' | 'current_stock' | 'low_stock' | 'purchases' | 'adjustments' | 'ledger' | 'batches' | 'excise'
   >('ml_stock');
@@ -37,23 +41,25 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ language }) => {
     setLoading(true);
     try {
       let json: any;
+      const scopeParam = scope === 'ALL_BARS' ? '&barScope=ALL_BARS' : `&barId=${selectedBar?.id || ''}`;
+
       if (activeReport === 'current_stock') {
-        json = await apiGet('/api/inventory');
+        json = await apiGet(`/api/inventory?${scopeParam.substring(1)}`);
         setData(json.data?.items || []);
       } else if (activeReport === 'low_stock') {
-        json = await apiGet('/api/inventory?lowStockOnly=true');
+        json = await apiGet(`/api/inventory?lowStockOnly=true${scopeParam}`);
         setData(json.data?.items || []);
       } else if (activeReport === 'purchases') {
-        json = await apiGet('/api/inventory/purchases');
+        json = await apiGet(`/api/inventory/purchases?${scopeParam.substring(1)}`);
         setData(json.data?.purchases || []);
       } else if (activeReport === 'adjustments') {
-        json = await apiGet('/api/inventory/adjustments');
+        json = await apiGet(`/api/inventory/adjustments?${scopeParam.substring(1)}`);
         setData(json.data?.adjustments || []);
       } else if (activeReport === 'ledger') {
-        json = await apiGet('/api/inventory/ledger?limit=150');
+        json = await apiGet(`/api/inventory/ledger?limit=150${scopeParam}`);
         setData(json.data?.ledger || []);
       } else if (activeReport === 'batches') {
-        json = await apiGet('/api/batches');
+        json = await apiGet(`/api/batches?${scopeParam.substring(1)}`);
         setData(json.data?.batches || []);
       } else if (activeReport === 'excise') {
         json = await apiGet('/api/excise/licences');
@@ -68,18 +74,31 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ language }) => {
 
   useEffect(() => {
     fetchReportData();
-  }, [activeReport]);
+  }, [activeReport, selectedBar?.id, scope]);
 
   const exportCSV = () => {
     if (data.length === 0) return;
     let headers: string[] = [];
     let rows: any[][] = [];
+    const isAllBars = scope === 'ALL_BARS';
 
     if (activeReport === 'current_stock' || activeReport === 'low_stock') {
-      headers = ['Product Name', 'Category', 'Brand', 'Opening Qty', 'Purchased Qty', 'Adjustments', 'Current Stock', 'Valuation (₹)'];
+      headers = [
+        ...(isAllBars ? ['Bar / Outlet'] : []),
+        'Product Name',
+        'Category',
+        'Brand',
+        'Opening Qty',
+        'Purchased Qty',
+        'Adjustments',
+        'Current Stock',
+        'Valuation (₹)',
+      ];
       rows = data.map(item => {
         const p = item.product as any;
+        const b = item.bar as any;
         return [
+          ...(isAllBars ? [b?.name ? `${b.name} (${b.code})` : 'All Outlets'] : []),
           p?.product_name || p?.name || 'Product',
           p?.category?.name || '-',
           p?.brand?.name || '-',
@@ -91,8 +110,17 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ language }) => {
         ];
       });
     } else if (activeReport === 'purchases') {
-      headers = ['Inward #', 'Date', 'Supplier', 'Permit Ref', 'Total (₹)', 'Remarks'];
+      headers = [
+        ...(isAllBars ? ['Bar / Outlet'] : []),
+        'Inward #',
+        'Date',
+        'Supplier',
+        'Permit Ref',
+        'Total (₹)',
+        'Remarks',
+      ];
       rows = data.map(p => [
+        ...(isAllBars ? [p.bar?.name ? `${p.bar.name} (${p.bar.code})` : 'All Outlets'] : []),
         p.purchase_number || '',
         p.purchase_date || '',
         p.supplier?.name || '',
@@ -101,8 +129,17 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ language }) => {
         p.remarks || '',
       ]);
     } else if (activeReport === 'adjustments') {
-      headers = ['Adjustment #', 'Date', 'Product', 'Type', 'Quantity', 'Reason'];
+      headers = [
+        ...(isAllBars ? ['Bar / Outlet'] : []),
+        'Adjustment #',
+        'Date',
+        'Product',
+        'Type',
+        'Quantity',
+        'Reason',
+      ];
       rows = data.map(a => [
+        ...(isAllBars ? [a.bar?.name ? `${a.bar.name} (${a.bar.code})` : 'All Outlets'] : []),
         a.adjustment_number || '',
         a.adjustment_date || '',
         a.product?.name || '',
@@ -111,8 +148,18 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ language }) => {
         a.reason || a.reference || '',
       ]);
     } else if (activeReport === 'ledger') {
-      headers = ['Date', 'Product', 'Type', 'Reference', 'Stock In', 'Stock Out', 'Balance'];
+      headers = [
+        ...(isAllBars ? ['Bar / Outlet'] : []),
+        'Date',
+        'Product',
+        'Type',
+        'Reference',
+        'Stock In',
+        'Stock Out',
+        'Balance',
+      ];
       rows = data.map(l => [
+        ...(isAllBars ? [l.bar?.name ? `${l.bar.name} (${l.bar.code})` : 'All Outlets'] : []),
         l.transaction_date?.split('T')[0] || '',
         (l.product as any)?.name || '',
         l.transaction_type || '',
@@ -122,8 +169,17 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ language }) => {
         l.balance || 0,
       ]);
     } else if (activeReport === 'batches') {
-      headers = ['Batch #', 'Date', 'Product', 'Quantity', 'TP Value (₹)', 'Excise Ref'];
+      headers = [
+        ...(isAllBars ? ['Bar / Outlet'] : []),
+        'Batch #',
+        'Date',
+        'Product',
+        'Quantity',
+        'TP Value (₹)',
+        'Excise Ref',
+      ];
       rows = data.map(b => [
+        ...(isAllBars ? [b.bar?.name ? `${b.bar.name} (${b.bar.code})` : 'All Outlets'] : []),
         b.batch_number || '',
         b.batch_date || '',
         b.product?.name || '',
@@ -148,7 +204,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ language }) => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${activeReport.toUpperCase()}_Report_${new Date().toISOString().split('T')[0]}.csv`;
+    a.download = `${activeReport.toUpperCase()}_Report_${scope}_${new Date().toISOString().split('T')[0]}.csv`;
     a.click();
   };
 
@@ -227,7 +283,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ language }) => {
   }
 
   return (
-    <div className="page-container px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+    <div className="page-container px-4 sm:px-6 lg:px-8 py-8 space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-slate-900 border border-slate-800 p-6 rounded-2xl">
         <div>
@@ -255,6 +311,13 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ language }) => {
           </button>
         </div>
       </div>
+
+      {/* Scope Selector */}
+      <ReportScopeSelector
+        title="Report Scope"
+        scope={scope}
+        onChange={setScope}
+      />
 
       {/* Reports Selection Pills */}
       <div className="flex flex-wrap gap-2">
@@ -317,6 +380,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ language }) => {
               <>
                 <thead className="bg-slate-950/60 text-slate-400 uppercase font-mono text-[10px] border-b border-slate-800">
                   <tr>
+                    {scope === 'ALL_BARS' && <th className="px-4 py-3">Outlet / Bar</th>}
                     <th className="px-4 py-3">Product Name</th>
                     <th className="px-4 py-3">Category</th>
                     <th className="px-4 py-3">Brand</th>
@@ -330,15 +394,21 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ language }) => {
                 <tbody className="divide-y divide-slate-800/60 font-sans">
                   {data.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="px-4 py-8 text-center text-slate-500">
+                      <td colSpan={scope === 'ALL_BARS' ? 9 : 8} className="px-4 py-8 text-center text-slate-500">
                         No inventory records found.
                       </td>
                     </tr>
                   ) : (
                     data.map((item: any) => {
                       const p = item.product as any;
+                      const b = item.bar as any;
                       return (
                         <tr key={item.id} className="hover:bg-slate-800/30 transition-colors">
+                          {scope === 'ALL_BARS' && (
+                            <td className="px-4 py-3 font-semibold text-slate-200">
+                              {b?.name ? `${b.name} (${b.code})` : 'All Outlets'}
+                            </td>
+                          )}
                           <td className="px-4 py-3 font-medium text-white">
                             {p?.product_name || p?.name}
                           </td>
@@ -369,6 +439,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ language }) => {
               <>
                 <thead className="bg-slate-950/60 text-slate-400 uppercase font-mono text-[10px] border-b border-slate-800">
                   <tr>
+                    {scope === 'ALL_BARS' && <th className="px-4 py-3">Outlet / Bar</th>}
                     <th className="px-4 py-3">Inward #</th>
                     <th className="px-4 py-3">Date</th>
                     <th className="px-4 py-3">Supplier</th>
@@ -380,6 +451,11 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ language }) => {
                 <tbody className="divide-y divide-slate-800/60 font-sans">
                   {data.map((p: any) => (
                     <tr key={p.id} className="hover:bg-slate-800/30 transition-colors">
+                      {scope === 'ALL_BARS' && (
+                        <td className="px-4 py-3 font-semibold text-slate-200">
+                          {p.bar?.name ? `${p.bar.name} (${p.bar.code})` : 'All Outlets'}
+                        </td>
+                      )}
                       <td className="px-4 py-3 font-mono font-bold text-amber-300">{p.purchase_number}</td>
                       <td className="px-4 py-3 font-mono text-slate-400">{p.purchase_date}</td>
                       <td className="px-4 py-3 text-white font-medium">{p.supplier?.name || '-'}</td>

@@ -32,6 +32,9 @@ export const REQUIRED_TABLES = [
   'owner_credentials',
   'sessions',
   'settings',
+  // Multi-Bar
+  'bar_outlets',
+  'user_bar_access',
   // Masters
   'categories',
   'manufacturers',
@@ -55,7 +58,7 @@ export const REQUIRED_TABLES = [
 export const FORBIDDEN_TABLES = ['sales', 'sale_items', 'customers', 'payments'];
 
 const DEFAULT_DATABASE_URL =
-  'postgres://postgres.sefhgbvocnmzcgicmntu:40Esni0NAhoU3ZO7@aws-0-ap-south-1.pooler.supabase.com:5432/postgres';
+  'postgresql://postgres.ckscmohjxmayazxncjmq:Liquorflow9699@aws-0-ap-south-1.pooler.supabase.com:5432/postgres';
 
 function createPgPool(dbUrl: string): Pool {
   let cleanUrl = dbUrl;
@@ -172,14 +175,16 @@ export class MigrationService {
       result.success = true;
       result.statusMessage = `Successfully applied ${result.appliedCount} migrations (${result.skippedMigrations.length} already up to date).`;
     } catch (err: any) {
+      console.error('[MigrationService] PG Pool Error:', err.message);
       // Fallback check via Supabase REST client
       try {
         const supabase = getSupabaseServiceClient();
         const { error } = await supabase.from('categories').select('*', { count: 'exact', head: true });
-        if (!error) {
-          result.success = true;
-          result.statusMessage = 'Database tables already exist and are accessible via Supabase REST API (Direct PG pooler bypassed).';
-          return result;
+        if (!error && result.appliedCount === 0 && result.errors.length === 0) {
+          // If we couldn't connect via PG but tables exist, and we didn't have errors yet
+          // we only consider it success if we didn't HAVE new migrations to apply.
+          // But here we can't know for sure without PG.
+          // For now, let's just report the error.
         }
       } catch {}
       result.success = false;

@@ -19,9 +19,9 @@ const DEFAULT_SUPABASE_URL = 'https://sefhgbvocnmzcgicmntu.supabase.co';
 const DEFAULT_SUPABASE_ANON_KEY =
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNlZmhnYnZvY25temNnaWNtbnR1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAyMzY2MjUsImV4cCI6MjEwNTgxMjYyNX0.JFzYhjj70f9_QSxsI8ta3cq5ne9HFm4_DxzCo-BqOIw';
 const DEFAULT_SUPABASE_SERVICE_ROLE_KEY =
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNlZmhnYnZvY25temNnaWNtbnR1Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc5MDIzNjYyNSwiZXhwIjoyMTA1ODEyNjI1fQ.YcAh3bUMBAQEqNgGXXJOUHo3ypFh3WmlJ1nH7tWnQoA';
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNlZmhnYnZvY25temNnaWNtbnR1Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc5MDIzNjYyNSwiZXhwIjoyMTA1NjQ3OTA1fQ.YcAh3bUMBAQEqNgGXXJOUHo3ypFh3WmlJ1nH7tWnQoA';
 const DEFAULT_DATABASE_URL =
-  'postgres://postgres.sefhgbvocnmzcgicmntu:40Esni0NAhoU3ZO7@aws-0-ap-south-1.pooler.supabase.com:5432/postgres';
+  'postgresql://postgres:liquorflow9699@db.sefhgbvocnmzcgicmntu.supabase.co:5432/postgres';
 
 export function validateEnvironmentConfig(): EnvValidationResult {
   const missingVariables: string[] = [];

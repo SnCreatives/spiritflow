@@ -12,14 +12,17 @@ import { ExciseView } from './components/excise/ExciseView';
 import { ProductListView } from './components/products/ProductListView';
 import { BrandMasterView } from './components/masters/BrandMasterView';
 import { PackSizeMasterView } from './components/masters/PackSizeMasterView';
+import { BarMasterView } from './components/masters/BarMasterView';
 import { OpeningStockView } from './components/stock/OpeningStockView';
 import { PurchasesView } from './components/purchases/PurchasesView';
 import { StockAdjustmentsView } from './components/stock/StockAdjustmentsView';
 import { StockLedgerView } from './components/stock/StockLedgerView';
+import { StockTransfersView } from './components/stock/StockTransfersView';
 import { BatchesView } from './components/batches/BatchesView';
 import { ReportsView } from './components/reports/ReportsView';
 import { SettingsView } from './components/settings/SettingsView';
 import { apiGet, apiPost } from './utils/api';
+import { BarProvider } from './lib/contexts/BarContext';
 
 export default function App() {
   // Default language is English ('en') for all first-time visitors
@@ -90,9 +93,6 @@ export default function App() {
       if (authData.success && authData.data?.user) {
         const user = authData.data.user;
         setCurrentUser(user);
-        if (user.selected_language) {
-          handleLanguageChange(user.selected_language);
-        }
         checkAndTriggerTutorial(user.id);
         setCurrentRoute(prev => (prev === '/login' || prev === '/setup' ? '/dashboard' : prev));
       } else {
@@ -136,9 +136,6 @@ export default function App() {
 
   const handleLoginSuccess = (user: AuthUser) => {
     setCurrentUser(user);
-    if (user.selected_language) {
-      handleLanguageChange(user.selected_language);
-    }
     checkAndTriggerTutorial(user.id);
     setCurrentRoute('/dashboard');
   };
@@ -194,129 +191,141 @@ export default function App() {
 
   // Authenticated Application Layout with persistent Sidebar & Header
   return (
-    <div className="app-shell bg-slate-950 text-slate-100 selection:bg-amber-500 selection:text-slate-950">
-      {/* Desktop Sidebar */}
-      <div className="sidebar-container hidden md:block">
-        <Sidebar
-          currentRoute={currentRoute}
-          onRouteChange={handleRouteChange}
-          language={language}
-          user={currentUser}
-          onLogout={handleLogout}
-        />
-      </div>
-
-      {/* Mobile Drawer Sidebar */}
-      {mobileSidebarOpen && (
-        <div className="fixed inset-0 z-50 md:hidden flex">
-          <div
-            className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm"
-            onClick={() => setMobileSidebarOpen(false)}
+    <BarProvider userBars={currentUser.bars}>
+      <div className="app-shell bg-slate-950 text-slate-100 selection:bg-amber-500 selection:text-slate-950">
+        {/* Desktop Sidebar */}
+        <div className="sidebar-container hidden md:block">
+          <Sidebar
+            currentRoute={currentRoute}
+            onRouteChange={handleRouteChange}
+            language={language}
+            user={currentUser}
+            onLogout={handleLogout}
           />
-          <div className="relative z-10">
-            <Sidebar
-              currentRoute={currentRoute}
-              onRouteChange={handleRouteChange}
-              language={language}
-              user={currentUser}
-              onLogout={handleLogout}
-            />
-          </div>
         </div>
-      )}
 
-      {/* Main Content Area */}
-      <div className="main-content flex flex-col">
-        <Header
+        {/* Mobile Drawer Sidebar */}
+        {mobileSidebarOpen && (
+          <div className="fixed inset-0 z-50 md:hidden flex">
+            <div
+              className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm"
+              onClick={() => setMobileSidebarOpen(false)}
+            />
+            <div className="relative z-10">
+              <Sidebar
+                currentRoute={currentRoute}
+                onRouteChange={handleRouteChange}
+                language={language}
+                user={currentUser}
+                onLogout={handleLogout}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Main Content Area */}
+        <div className="main-content flex flex-col">
+          <Header
+            language={language}
+            onLanguageChange={handleLanguageChange}
+            user={currentUser}
+            onLogout={handleLogout}
+            onOpenSearch={() => setIsSearchOpen(true)}
+            currentRoute={currentRoute}
+            onRouteChange={handleRouteChange}
+            onToggleSidebar={() => setMobileSidebarOpen(prev => !prev)}
+          />
+
+          <main className="flex-1 pb-16">
+            {currentRoute === '/dashboard' && (
+              <DashboardView language={language} user={currentUser} onRouteChange={handleRouteChange} />
+            )}
+
+            {currentRoute === '/inventory' && (
+              <InventoryView language={language} />
+            )}
+
+            {currentRoute === '/stock/opening' && (
+              <OpeningStockView language={language} />
+            )}
+
+            {currentRoute === '/purchases' && (
+              <PurchasesView language={language} />
+            )}
+
+            {currentRoute === '/stock/adjustments' && (
+              <StockAdjustmentsView language={language} />
+            )}
+
+            {currentRoute === '/stock-ledger' && (
+              <StockLedgerView language={language} />
+            )}
+
+            {currentRoute === '/stock/transfers' && (
+              <StockTransfersView />
+            )}
+
+            {currentRoute === '/batches' && (
+              <BatchesView language={language} />
+            )}
+
+            {currentRoute === '/products' && (
+              <div className="page-container px-4 sm:px-6 lg:px-8 py-8">
+                <ProductListView language={language} />
+              </div>
+            )}
+
+            {currentRoute === '/brands' && (
+              <div className="page-container px-4 sm:px-6 lg:px-8 py-8">
+                <BrandMasterView language={language} />
+              </div>
+            )}
+
+            {currentRoute === '/pack-sizes' && (
+              <div className="page-container px-4 sm:px-6 lg:px-8 py-8">
+                <PackSizeMasterView language={language} />
+              </div>
+            )}
+
+            {currentRoute === '/bars' && (
+              <div className="page-container px-4 sm:px-6 lg:px-8 py-8">
+                <BarMasterView language={language} />
+              </div>
+            )}
+
+            {currentRoute === '/excise' && (
+              <ExciseView language={language} />
+            )}
+
+            {currentRoute === '/reports' && (
+              <ReportsView language={language} />
+            )}
+
+            {currentRoute === '/settings' && (
+              <SettingsView
+                language={language}
+                onLanguageChange={handleLanguageChange}
+                onRestartTutorial={() => setShowTutorial(true)}
+              />
+            )}
+          </main>
+        </div>
+
+        <GlobalSearchModal
+          isOpen={isSearchOpen}
+          onClose={() => setIsSearchOpen(false)}
           language={language}
-          onLanguageChange={handleLanguageChange}
-          user={currentUser}
-          onLogout={handleLogout}
-          onOpenSearch={() => setIsSearchOpen(true)}
-          currentRoute={currentRoute}
           onRouteChange={handleRouteChange}
-          onToggleSidebar={() => setMobileSidebarOpen(prev => !prev)}
         />
 
-        <main className="flex-1 pb-16">
-          {currentRoute === '/dashboard' && (
-            <DashboardView language={language} user={currentUser} onRouteChange={handleRouteChange} />
-          )}
-
-          {currentRoute === '/inventory' && (
-            <InventoryView language={language} />
-          )}
-
-          {currentRoute === '/stock/opening' && (
-            <OpeningStockView language={language} />
-          )}
-
-          {currentRoute === '/purchases' && (
-            <PurchasesView language={language} />
-          )}
-
-          {currentRoute === '/stock/adjustments' && (
-            <StockAdjustmentsView language={language} />
-          )}
-
-          {currentRoute === '/stock-ledger' && (
-            <StockLedgerView language={language} />
-          )}
-
-          {currentRoute === '/batches' && (
-            <BatchesView language={language} />
-          )}
-
-          {currentRoute === '/products' && (
-            <div className="page-container px-4 sm:px-6 lg:px-8 py-8">
-              <ProductListView language={language} />
-            </div>
-          )}
-
-          {currentRoute === '/brands' && (
-            <div className="page-container px-4 sm:px-6 lg:px-8 py-8">
-              <BrandMasterView language={language} />
-            </div>
-          )}
-
-          {currentRoute === '/pack-sizes' && (
-            <div className="page-container px-4 sm:px-6 lg:px-8 py-8">
-              <PackSizeMasterView language={language} />
-            </div>
-          )}
-
-          {currentRoute === '/excise' && (
-            <ExciseView language={language} />
-          )}
-
-          {currentRoute === '/reports' && (
-            <ReportsView language={language} />
-          )}
-
-          {currentRoute === '/settings' && (
-            <SettingsView
-              language={language}
-              onLanguageChange={handleLanguageChange}
-              onRestartTutorial={() => setShowTutorial(true)}
-            />
-          )}
-        </main>
+        <TutorialModal
+          isOpen={showTutorial}
+          onClose={() => setShowTutorial(false)}
+          onComplete={handleCompleteTutorial}
+          language={language}
+          onNavigateTo={handleRouteChange}
+        />
       </div>
-
-      <GlobalSearchModal
-        isOpen={isSearchOpen}
-        onClose={() => setIsSearchOpen(false)}
-        language={language}
-        onRouteChange={handleRouteChange}
-      />
-
-      <TutorialModal
-        isOpen={showTutorial}
-        onClose={() => setShowTutorial(false)}
-        onComplete={handleCompleteTutorial}
-        language={language}
-        onNavigateTo={handleRouteChange}
-      />
-    </div>
+    </BarProvider>
   );
 }

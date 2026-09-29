@@ -8,6 +8,8 @@ import {
   Box,
   FileInput,
   ArrowDownToLine,
+  ArrowUpRight,
+  Store,
   SlidersHorizontal,
   FileSpreadsheet,
   QrCode,
@@ -22,6 +24,8 @@ import { SupportedLanguage, AuthUser } from '../../types';
 import { translations } from '../../utils/i18n';
 import { LiquorFlowLogo } from './LiquorFlowLogo';
 import { useTheme } from '../../utils/ThemeContext';
+import { BarSwitcher } from './BarSwitcher';
+import { useBar } from '../../lib/contexts/BarContext';
 
 interface SidebarProps {
   currentRoute: string;
@@ -41,6 +45,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   const t = translations[language];
   const { theme, toggleTheme } = useTheme();
+  const { selectedBar } = useBar();
 
   const navigationItems = [
     {
@@ -82,6 +87,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
           icon: FileSpreadsheet,
         },
         {
+          id: '/stock/transfers',
+          label: 'Stock Transfers',
+          icon: ArrowUpRight,
+        },
+        {
           id: '/batches',
           label: 'Batches',
           icon: QrCode,
@@ -91,6 +101,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
     {
       group: 'MASTERS',
       items: [
+        {
+          id: '/bars',
+          label: 'Bar / Outlet Management',
+          icon: Store,
+        },
         {
           id: '/products',
           label: t.navProducts || 'Products',
@@ -146,7 +161,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
       </div>
 
+      {/* Mobile Drawer Bar Switcher */}
+      <div className="p-3 border-b border-slate-800 md:hidden">
+        <BarSwitcher variant="drawer" onNavigateToBarsMaster={() => onRouteChange('/bars')} />
+      </div>
+
       {/* Navigation List */}
+
       <nav className="flex-1 px-3 py-4 space-y-6">
         {navigationItems.map((group, groupIdx) => (
           <div key={groupIdx} className="space-y-1">

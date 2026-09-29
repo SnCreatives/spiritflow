@@ -1,3 +1,4 @@
+import { BarStoreService } from './barStoreService.js';
 import { getSupabaseServiceClient } from '../../lib/supabase/client.js';
 import {
   Category,
@@ -803,5 +804,62 @@ export class MasterService {
       totalCanonical: validBrandIds.size,
       seededProducts,
     };
+  }
+
+  // ==========================================
+  // BAR OUTLETS MASTER
+  // ==========================================
+  static async getBars(userId?: string) {
+    return BarStoreService.getBars(userId);
+  }
+
+  static async getBarById(id: string) {
+    return BarStoreService.getBarById(id);
+  }
+
+  static async createBar(
+    data: {
+      name: string;
+      code: string;
+      address?: string | null;
+      city?: string | null;
+      state?: string | null;
+      pincode?: string | null;
+      contact_person?: string | null;
+      phone?: string | null;
+      email?: string | null;
+      license_number?: string | null;
+      status?: 'Active' | 'Inactive';
+    },
+    ownerId?: string
+  ) {
+    return BarStoreService.createBar(data, ownerId);
+  }
+
+  static async updateBar(
+    id: string,
+    data: Partial<{
+      name: string;
+      code: string;
+      address: string | null;
+      city: string | null;
+      state: string | null;
+      pincode: string | null;
+      contact_person: string | null;
+      phone: string | null;
+      email: string | null;
+      license_number: string | null;
+      status: 'Active' | 'Inactive';
+    }>
+  ) {
+    return BarStoreService.updateBar(id, data);
+  }
+
+  static async toggleBarStatus(id: string, status: 'Active' | 'Inactive') {
+    return BarStoreService.toggleBarStatus(id, status);
+  }
+
+  static async deleteBar(id: string) {
+    return BarStoreService.deleteBar(id);
   }
 }

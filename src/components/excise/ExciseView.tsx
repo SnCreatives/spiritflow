@@ -18,9 +18,10 @@ import { MonthlyReturnView } from './MonthlyReturnView';
 
 interface ExciseViewProps {
   language: SupportedLanguage;
+  selectedBarId?: string | null;
 }
 
-export const ExciseView: React.FC<ExciseViewProps> = ({ language }) => {
+export const ExciseView: React.FC<ExciseViewProps> = ({ language, selectedBarId }) => {
   const t = translations[language];
   const [activeTab, setActiveTab] = useState<'licences' | 'documents' | 'monthly_return'>('licences');
   const [licences, setLicences] = useState<ExciseLicence[]>([]);
@@ -73,8 +74,12 @@ export const ExciseView: React.FC<ExciseViewProps> = ({ language }) => {
   };
 
   useEffect(() => {
+    if (selectedBarId) {
+
     fetchExciseData();
-  }, []);
+  
+    }
+  }, [selectedBarId]);
 
   const handleCreateLicence = async (e: React.FormEvent) => {
     e.preventDefault();

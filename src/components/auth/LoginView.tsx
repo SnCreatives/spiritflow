@@ -134,7 +134,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
               isLight ? 'border-slate-300 text-amber-700' : 'border-[#f2efeb]/15 text-amber-400/90'
             }`}
           >
-            Enterprise Liquor ERP & Excise Compliance
+            LiquorFlow ERP Systems
           </div>
         </div>
 
@@ -236,7 +236,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
               <span>Enterprise Grade Platform</span>
             </div>
 
-            {/* Gorgeous Framed Logo Card */}
+            {/* Gorgeous Framed Feature Showcase Card */}
             <div
               className={`my-6 p-8 rounded-3xl border shadow-2xl flex flex-col items-center sm:items-start text-center sm:text-left relative backdrop-blur-md transition-colors ${
                 isLight
@@ -245,7 +245,10 @@ export const LoginView: React.FC<LoginViewProps> = ({
               }`}
             >
               <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/5 rounded-bl-full pointer-events-none" />
-              <LiquorFlowLogo size="xl" orientation="vertical" showText={true} showSubtitle={true} className="mb-2" />
+              <div className="flex items-center gap-3 text-amber-500 font-mono text-xs font-bold uppercase tracking-widest">
+                <ShieldCheck className="w-8 h-8 text-amber-500" />
+                <span>Enterprise LiquorFlow ERP</span>
+              </div>
             </div>
 
             <h1
@@ -253,7 +256,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
                 isLight ? 'text-slate-900' : 'text-white'
               }`}
             >
-              Secure Operations & Excise Control
+              Inventory & Excise Management
             </h1>
 
             <p
@@ -261,11 +264,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
                 isLight ? 'text-slate-600' : 'text-slate-300/80'
               }`}
             >
-              {language === 'mr'
-                ? 'दारू साठा व राज्य उत्पादन शुल्क व्यवस्थापन प्रणाली - उच्च सुरक्षा आणि अचूक नियंत्रण.'
-                : language === 'hi'
-                ? 'शराब स्टॉक एवं आबकारी प्रबंधन प्रणाली - पूर्ण अनुपालन और पारदर्शी नियंत्रण।'
-                : 'Advanced multi-location inventory, automated excise return filings, and tamper-proof financial ledger for Indian liquor enterprises.'}
+              Automated liquor stock accounting, excise register compliance, batch management, multi-bar outlet switching, and real-time inventory control.
             </p>
 
             <div
@@ -278,24 +277,24 @@ export const LoginView: React.FC<LoginViewProps> = ({
                   isLight ? 'bg-white border-slate-200' : 'bg-slate-900/60 border-slate-800/60'
                 }`}
               >
-                <div className={`font-bold text-sm ${isLight ? 'text-amber-700' : 'text-amber-400'}`}>256-bit</div>
-                <div className={`text-[0.65rem] mt-0.5 ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>Encrypted Session</div>
+                <div className={`font-bold text-sm ${isLight ? 'text-amber-700' : 'text-amber-400'}`}>Excise</div>
+                <div className={`text-[0.65rem] mt-0.5 ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>Register Compliance</div>
               </div>
               <div
                 className={`p-3 rounded-xl border shadow-sm ${
                   isLight ? 'bg-white border-slate-200' : 'bg-slate-900/60 border-slate-800/60'
                 }`}
               >
-                <div className="font-bold text-sm text-emerald-600 dark:text-emerald-400">100%</div>
-                <div className={`text-[0.65rem] mt-0.5 ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>Excise Compliant</div>
+                <div className="font-bold text-sm text-emerald-600 dark:text-emerald-400">Stock</div>
+                <div className={`text-[0.65rem] mt-0.5 ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>Control Accounting</div>
               </div>
               <div
                 className={`p-3 rounded-xl border shadow-sm ${
                   isLight ? 'bg-white border-slate-200' : 'bg-slate-900/60 border-slate-800/60'
                 }`}
               >
-                <div className="font-bold text-sm text-blue-600 dark:text-blue-400">Real-Time</div>
-                <div className={`text-[0.65rem] mt-0.5 ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>Ledger Sync</div>
+                <div className="font-bold text-sm text-blue-600 dark:text-blue-400">Multi-Bar</div>
+                <div className={`text-[0.65rem] mt-0.5 ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>ERP Switching</div>
               </div>
             </div>
           </div>
@@ -309,13 +308,14 @@ export const LoginView: React.FC<LoginViewProps> = ({
         >
           <div className="max-w-md w-full mx-auto">
             {/* Mobile Brand Badge */}
-            <div className="lg:hidden mb-8 flex justify-center">
+            <div className="lg:hidden mb-6 flex justify-center">
               <div
-                className={`p-4 rounded-2xl border shadow-xl ${
-                  isLight ? 'bg-slate-50 border-slate-200' : 'bg-slate-900 border-slate-800'
+                className={`px-4 py-2 rounded-xl border shadow-sm flex items-center gap-2 ${
+                  isLight ? 'bg-slate-50 border-slate-200 text-amber-800' : 'bg-slate-900 border-slate-800 text-amber-400'
                 }`}
               >
-                <LiquorFlowLogo size="md" orientation="horizontal" showText={true} showSubtitle={true} />
+                <ShieldCheck className="w-4 h-4 text-amber-500" />
+                <span className="font-mono text-xs font-bold uppercase tracking-wider">LiquorFlow ERP</span>
               </div>
             </div>
 
@@ -509,7 +509,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
           <span>Encrypted HTTP-Only Database Session Active</span>
         </div>
         <div className="font-mono text-[0.65rem] uppercase tracking-[0.15em] opacity-80">
-          &copy; LiquorFlow ERP System
+          &copy; LiquorFlow ERP Systems
         </div>
       </footer>
     </div>

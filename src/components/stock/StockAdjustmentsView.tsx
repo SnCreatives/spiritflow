@@ -20,13 +20,16 @@ import { apiGet, apiPost } from '../../utils/api';
 import { translations } from '../../utils/i18n';
 import { BulkImportDialog } from '../common/BulkImportDialog';
 import { ProductPackSizeSelector } from '../common/ProductPackSizeSelector';
+import { useBar } from '../../lib/contexts/BarContext';
 
 interface StockAdjustmentsViewProps {
   language: SupportedLanguage;
+  selectedBarId?: string | null;
 }
 
-export const StockAdjustmentsView: React.FC<StockAdjustmentsViewProps> = ({ language }) => {
+export const StockAdjustmentsView: React.FC<StockAdjustmentsViewProps> = ({ language, selectedBarId }) => {
   const t = translations[language];
+  const { selectedBar } = useBar();
 
   const [adjustments, setAdjustments] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
@@ -76,8 +79,12 @@ export const StockAdjustmentsView: React.FC<StockAdjustmentsViewProps> = ({ lang
   };
 
   useEffect(() => {
+    if (selectedBarId) {
+
     fetchData();
-  }, []);
+  
+    }
+  }, [selectedBarId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -173,6 +180,11 @@ export const StockAdjustmentsView: React.FC<StockAdjustmentsViewProps> = ({ lang
             </div>
             <h1 className="text-xl sm:text-2xl font-bold text-white tracking-tight">
               Stock Adjustments
+              {selectedBar && (
+                <span className="ml-2 px-3 py-1 rounded-lg bg-indigo-500/10 border border-indigo-500/30 text-indigo-400 text-sm font-medium inline-block align-middle">
+                  {selectedBar.name}
+                </span>
+              )}
             </h1>
           </div>
           <p className="text-xs sm:text-sm text-slate-400 mt-1">

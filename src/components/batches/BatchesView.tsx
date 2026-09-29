@@ -16,6 +16,7 @@ import { SupportedLanguage } from '../../types';
 import { apiGet, apiPost } from '../../utils/api';
 import { translations } from '../../utils/i18n';
 import { ProductPackSizeSelector } from '../common/ProductPackSizeSelector';
+import { useBar } from '../../lib/contexts/BarContext';
 
 interface BatchesViewProps {
   language: SupportedLanguage;
@@ -23,6 +24,7 @@ interface BatchesViewProps {
 
 export const BatchesView: React.FC<BatchesViewProps> = ({ language }) => {
   const t = translations[language];
+  const { selectedBar } = useBar();
 
   const [batches, setBatches] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
@@ -75,7 +77,7 @@ export const BatchesView: React.FC<BatchesViewProps> = ({ language }) => {
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [selectedBar?.id]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -164,6 +166,11 @@ export const BatchesView: React.FC<BatchesViewProps> = ({ language }) => {
             </div>
             <h1 className="text-xl sm:text-2xl font-bold text-white tracking-tight">
               Batches & Consignment Lots
+              {selectedBar && (
+                <span className="ml-2 px-3 py-1 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-500 text-sm font-medium inline-block align-middle">
+                  {selectedBar.name}
+                </span>
+              )}
             </h1>
           </div>
           <p className="text-xs sm:text-sm text-slate-400 mt-1">

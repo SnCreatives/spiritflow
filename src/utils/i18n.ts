@@ -164,11 +164,11 @@ export const translations: Record<SupportedLanguage, TranslationDictionary> = {
     globalSearchHint: 'शोधण्यासाठी Ctrl + K किंवा / दाबा',
 
     // Setup
-    setupHeading: 'Welcome to LiquorFlow',
+    setupHeading: 'Welcome to Elite24',
     setupSubheading: "Let's set up your business before you start.",
     businessInfoSection: 'व्यवसाय माहिती (Business Details)',
     businessNameLabel: 'व्यवसाय / दुकानाचे नाव',
-    businessNamePlaceholder: 'उदा. रॉयल वाईन शॉप',
+    businessNamePlaceholder: 'उदा. Elite24 Property Consulting',
     addressLabel: 'दुकानाचा पत्ता',
     addressPlaceholder: 'संपूर्ण दुकान पत्ता, शहर, जिल्हा',
     ownerMobileLabel: 'मालकाचा मोबाईल नंबर',
@@ -189,7 +189,7 @@ export const translations: Record<SupportedLanguage, TranslationDictionary> = {
     settingUp: 'सेटअप होत आहे...',
 
     // Login
-    loginHeading: 'LiquorFlow मध्ये लॉगिन करा',
+    loginHeading: 'Elite24 मध्ये लॉगिन करा',
     loginSubheading: 'तुमच्या दुकानाचा डॅशबोर्ड व्यवस्थापित करा',
     loginButton: 'Login',
     loggingIn: 'लॉगिन होत आहे...',
@@ -285,8 +285,8 @@ export const translations: Record<SupportedLanguage, TranslationDictionary> = {
   },
 
   hi: {
-    appName: 'लिकरफ्लो',
-    appTagline: 'शराब दुकान एवं बार इन्वेंट्री एवं ईआरपी प्रणाली',
+    appName: 'Elite24',
+    appTagline: 'Property Consulting Company',
 
     // Navigation
     navDashboard: 'डैशबोर्ड',
@@ -303,19 +303,19 @@ export const translations: Record<SupportedLanguage, TranslationDictionary> = {
     globalSearchHint: 'खोजने के लिए Ctrl + K दबाएं',
 
     // Setup
-    setupHeading: 'Welcome to LiquorFlow',
+    setupHeading: 'Welcome to Elite24',
     setupSubheading: "Let's set up your business before you start.",
     businessInfoSection: 'व्यापार जानकारी (Business Details)',
     businessNameLabel: 'दुकान / व्यवसाय का नाम',
-    businessNamePlaceholder: 'उदा. रॉयल वाइन शॉप',
+    businessNamePlaceholder: 'उदा. Elite24 Property Consulting',
     addressLabel: 'दुकान का पता',
     addressPlaceholder: 'पूरा दुकान पता, शहर, जिला',
     ownerMobileLabel: 'मालिक का मोबाइल नंबर',
     ownerMobilePlaceholder: '10 अंकों का मोबाइल नंबर',
     vatLabel: 'वैट (State VAT / TIN) नंबर (वैकल्पिक)',
     vatPlaceholder: '27001234567V',
-    licenceLabel: 'लाइसेंस / पंजीकरण संदर्भ (FL-II / CL-III)',
-    licencePlaceholder: 'उदा. FL-II/PUN/2026/045',
+    licenceLabel: 'लाइसेंस / पंजीकरण संदर्भ',
+    licencePlaceholder: 'उदा. REG-2026-089',
     credentialsSection: 'लॉगिन क्रेडेंशियल (Login Credentials)',
     loginMobileLabel: 'लॉगिन मोबाइल नंबर',
     loginMobilePlaceholder: '10 अंकों का मोबाइल नंबर',
@@ -328,7 +328,7 @@ export const translations: Record<SupportedLanguage, TranslationDictionary> = {
     settingUp: 'सेटअप हो रहा है...',
 
     // Login
-    loginHeading: 'LiquorFlow में लॉगिन करें',
+    loginHeading: 'Elite24 में लॉगिन करें',
     loginSubheading: 'अपनी दुकान का प्रबंधन करें',
     loginButton: 'Login',
     loggingIn: 'लॉगिन हो रहा है...',
@@ -424,8 +424,8 @@ export const translations: Record<SupportedLanguage, TranslationDictionary> = {
   },
 
   en: {
-    appName: 'LiquorFlow',
-    appTagline: 'Liquor Shop & Bar Inventory & ERP System',
+    appName: 'Elite24',
+    appTagline: 'Property Consulting Company',
 
     // Navigation
     navDashboard: 'Dashboard',
@@ -438,23 +438,23 @@ export const translations: Record<SupportedLanguage, TranslationDictionary> = {
     navReports: 'Reports',
     navSettings: 'Settings',
     navLogout: 'Logout',
-    searchPlaceholder: 'Search products, brands, SKU, invoices... (Ctrl+K)',
+    searchPlaceholder: 'Search properties, locations... (Ctrl+K)',
     globalSearchHint: 'Press Ctrl + K or / to search',
 
     // Setup
-    setupHeading: 'Welcome to LiquorFlow',
+    setupHeading: 'Welcome to Elite24',
     setupSubheading: "Let's set up your business before you start.",
     businessInfoSection: 'Business Information',
-    businessNameLabel: 'Business / Shop Name',
-    businessNamePlaceholder: 'e.g., Royal Wine & Spirits',
+    businessNameLabel: 'Business Name',
+    businessNamePlaceholder: 'e.g., Elite24 Property Consulting',
     addressLabel: 'Business Address',
-    addressPlaceholder: 'Complete shop address, city, district',
+    addressPlaceholder: 'Complete office address, city, district',
     ownerMobileLabel: 'Owner Mobile Number',
     ownerMobilePlaceholder: '10-digit mobile number',
     vatLabel: 'State VAT / TIN Number (Optional)',
     vatPlaceholder: '27001234567V',
-    licenceLabel: 'Licence / Registration Reference (FL-II / CL-III)',
-    licencePlaceholder: 'e.g. FL-II/2026/089',
+    licenceLabel: 'Licence / Registration Reference',
+    licencePlaceholder: 'e.g. REG-2026-089',
     credentialsSection: 'Login Credentials',
     loginMobileLabel: 'Mobile Number',
     loginMobilePlaceholder: '10-digit mobile number',
@@ -467,8 +467,8 @@ export const translations: Record<SupportedLanguage, TranslationDictionary> = {
     settingUp: 'Configuring your business...',
 
     // Login
-    loginHeading: 'Login to LiquorFlow',
-    loginSubheading: 'Manage daily shop inventory, POS & excise records',
+    loginHeading: 'Login to Elite24',
+    loginSubheading: 'Manage daily property consulting operations',
     loginButton: 'Login',
     loggingIn: 'Authenticating...',
     invalidCredentialsAlert: 'Invalid username or password',

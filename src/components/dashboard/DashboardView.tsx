@@ -23,6 +23,8 @@ import {
 import { SupportedLanguage, DashboardStats, AuthUser } from '../../types';
 import { translations } from '../../utils/i18n';
 import { apiGet, apiFetch } from '../../utils/api';
+import { useBar } from '../../lib/contexts/BarContext';
+import { ReportScopeSelector, ReportScope } from '../common/ReportScopeSelector';
 
 interface DashboardViewProps {
   language: SupportedLanguage;
@@ -32,9 +34,11 @@ interface DashboardViewProps {
 
 export const DashboardView: React.FC<DashboardViewProps> = ({ language, user, onRouteChange }) => {
   const t = translations[language];
+  const { selectedBar, availableBars } = useBar();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [scope, setScope] = useState<ReportScope>('CURRENT_BAR');
 
   // Embedded Product Master Search states
   const [searchQuery, setSearchQuery] = useState('');
@@ -121,7 +125,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ language, user, on
       clearTimeout(timer);
       controller.abort();
     };
-  }, [searchQuery]);
+  }, [searchQuery, selectedBar?.id]);
 
   const handleResultSelect = (item?: any) => {
     if (!onRouteChange) return;
@@ -178,7 +182,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ language, user, on
     setLoading(true);
     setError(null);
     try {
-      const data = await apiGet('/api/dashboard/stats');
+      const url = scope === 'ALL_BARS'
+        ? '/api/dashboard/stats?barScope=ALL_BARS'
+        : `/api/dashboard/stats?barId=${selectedBar?.id || ''}`;
+      const data = await apiGet(url);
       if (!data.success) {
         throw new Error(data.error?.message || 'Failed to load dashboard statistics');
       }
@@ -209,10 +216,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ language, user, on
 
   useEffect(() => {
     fetchDashboardStats();
-  }, []);
+  }, [selectedBar?.id, scope]);
 
   return (
-    <div className="page-container px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+    <div className="page-container px-4 sm:px-6 lg:px-8 py-8 space-y-6">
       {/* Top Banner */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 bg-slate-900 border border-slate-800 p-6 rounded-2xl">
         <div>
@@ -249,6 +256,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ language, user, on
           </button>
         </div>
       </div>
+
+      {/* Analytics Scope Selector */}
+      <ReportScopeSelector
+        title="Dashboard Analytics Scope"
+        scope={scope}
+        onChange={setScope}
+      />
 
       {/* Main Dashboard Product Master Search Box */}
       <div className="bg-slate-900 border border-amber-500/30 p-4 sm:p-5 rounded-2xl shadow-lg relative">

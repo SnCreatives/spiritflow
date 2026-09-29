@@ -1,13 +1,17 @@
 import { getSupabaseServiceClient } from '../../lib/supabase/client.js';
-import { ExciseLicence, ExciseDocumentReference, ComplianceReference } from '../../types/index.js';
+import { ExciseLicence, ExciseDocumentReference } from '../../types/index.js';
 
 export class ExciseService {
   /**
    * Fetch all Excise Licences
    */
-  static async getLicences(status?: string): Promise<ExciseLicence[]> {
+  static async getLicences(status?: string, barId?: string): Promise<ExciseLicence[]> {
     const supabase = getSupabaseServiceClient();
     let query = supabase.from('excise_licences').select('*').order('valid_to', { ascending: true });
+
+    if (barId) {
+      query = query.eq('bar_id', barId);
+    }
 
     if (status && status !== 'All') {
       query = query.eq('status', status);
@@ -35,7 +39,9 @@ export class ExciseService {
     documentReference?: string;
     status?: 'Active' | 'Expired' | 'Suspended';
     remarks?: string;
+    barId: string;
   }): Promise<ExciseLicence> {
+    if (!input.barId) throw new Error('Bar ID is required');
     if (!input.licenceType || !input.licenceNumber || !input.validFrom || !input.validTo || !input.issuingAuthority) {
       throw new Error('Licence Type, Licence Number, Valid From, Valid To, and Issuing Authority are required');
     }
@@ -44,6 +50,7 @@ export class ExciseService {
     const { data, error } = await supabase
       .from('excise_licences')
       .insert({
+        bar_id: input.barId,
         licence_type: input.licenceType,
         licence_number: input.licenceNumber,
         issue_date: input.issueDate || null,
@@ -117,10 +124,11 @@ export class ExciseService {
   /**
    * Fetch Excise Document References
    */
-  static async getDocumentReferences(params?: { referenceType?: string; search?: string }): Promise<ExciseDocumentReference[]> {
+  static async getDocumentReferences(params?: { referenceType?: string; search?: string; barId?: string }): Promise<ExciseDocumentReference[]> {
     const supabase = getSupabaseServiceClient();
     let query = supabase.from('excise_document_references').select(`
       id,
+      bar_id,
       reference_type,
       reference_number,
       reference_date,
@@ -133,6 +141,10 @@ export class ExciseService {
       created_at,
       product:products(name, product_name)
     `).order('created_at', { ascending: false });
+
+    if (params?.barId) {
+      query = query.eq('bar_id', params.barId);
+    }
 
     if (params?.referenceType && params.referenceType !== 'All') {
       query = query.eq('reference_type', params.referenceType);
@@ -159,15 +171,17 @@ export class ExciseService {
     quantity?: number;
     documentReference?: string;
     remarks?: string;
+    barId: string;
   }): Promise<ExciseDocumentReference> {
-    if (!input.referenceType || !input.referenceNumber) {
-      throw new Error('Reference type and reference number are required');
+    if (!input.referenceType || !input.referenceNumber || !input.barId) {
+      throw new Error('Reference type, reference number, and Bar ID are required');
     }
 
     const supabase = getSupabaseServiceClient();
     const { data, error } = await supabase
       .from('excise_document_references')
       .insert({
+        bar_id: input.barId,
         reference_type: input.referenceType,
         reference_number: input.referenceNumber,
         reference_date: input.referenceDate || new Date().toISOString().split('T')[0],
