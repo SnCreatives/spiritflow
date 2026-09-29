@@ -1,5 +1,5 @@
-import { getSupabaseServiceClient } from '../../lib/supabase/client.ts';
-import { StockTransactionType, DashboardStats, InventoryRecord, StockLedgerRecord } from '../../types/index.ts';
+import { getSupabaseServiceClient } from '../../lib/supabase/client.js';
+import { StockTransactionType, DashboardStats, InventoryRecord, StockLedgerRecord } from '../../types/index.js';
 
 export class InventoryService {
   /**

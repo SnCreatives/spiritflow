@@ -3,6 +3,7 @@ import { X, AlertCircle, Package, Layers, Tag } from 'lucide-react';
 import { Product, Category, Brand, PackSize, CreateProductInput, UpdateProductInput, SupportedLanguage } from '../../types';
 import { translations } from '../../utils/i18n';
 import { apiGet, apiPost, apiPut } from '../../utils/api';
+import { UnifiedBrandSelector } from '../common/UnifiedBrandSelector';
 
 interface ProductModalProps {
   isOpen: boolean;
@@ -91,16 +92,19 @@ export const ProductModal: React.FC<ProductModalProps> = ({
       setLoadingDependencies(true);
       try {
         const [brandData, packData] = await Promise.all([
-          apiGet(`/api/brands?categoryId=${categoryId}&limit=100&activeOnly=true`),
-          apiGet(`/api/pack-sizes?categoryId=${categoryId}&limit=100&activeOnly=true`),
+          apiGet(`/api/brands?categoryId=${categoryId}&limit=500&activeOnly=true`),
+          apiGet(`/api/pack-sizes?categoryId=${categoryId}&limit=500&activeOnly=true`),
         ]);
 
         if (brandData.success && brandData.data?.items) {
           setBrands(brandData.data.items);
-          // If current brandId does not belong to new category, reset it
-          if (!productToEdit && brandData.data.items.length > 0) {
-            setBrandId(brandData.data.items[0].id);
-          }
+          // Only reset brandId if current brandId does not belong to new category
+          setBrandId(prev => {
+            if (prev && brandData.data.items.some((b: Brand) => b.id === prev)) {
+              return prev;
+            }
+            return !productToEdit && brandData.data.items.length > 0 ? brandData.data.items[0].id : prev;
+          });
         }
 
         if (packData.success && packData.data?.items) {
@@ -124,9 +128,12 @@ export const ProductModal: React.FC<ProductModalProps> = ({
     loadCategoryDependencies();
   }, [categoryId, productToEdit]);
 
-  // Handle Brand selection
-  const handleBrandChange = (selectedBrandId: string) => {
+  // Handle Brand selection (also sync category if brand belongs to another category)
+  const handleBrandChange = (selectedBrandId: string, selectedBrand?: Brand) => {
     setBrandId(selectedBrandId);
+    if (selectedBrand?.category_id && selectedBrand.category_id !== categoryId) {
+      setCategoryId(selectedBrand.category_id);
+    }
   };
 
   // Auto-set pack type when Pack Size is chosen
@@ -302,27 +309,17 @@ export const ProductModal: React.FC<ProductModalProps> = ({
                 )}
               </div>
 
-              {/* Brand (Category-Dependent) */}
+              {/* Brand (Category-Grouped Unified Selector) */}
               <div>
                 <label className="block text-xs font-medium text-slate-300 mb-1.5">
                   {t.brand} <span className="text-amber-400">*</span>
-                  {loadingDependencies && <span className="text-slate-500 ml-2">Loading...</span>}
                 </label>
-                <select
+                <UnifiedBrandSelector
                   value={brandId}
-                  onChange={e => handleBrandChange(e.target.value)}
-                  disabled={!categoryId || loadingDependencies}
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400 disabled:opacity-50"
-                >
-                  <option value="">
-                    {!categoryId ? 'Select Category First' : brands.length === 0 ? 'No brands in this category' : '-- Select Brand --'}
-                  </option>
-                  {brands.map(b => (
-                    <option key={b.id} value={b.id}>
-                      {b.name}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(id, brand) => handleBrandChange(id, brand)}
+                  categories={categories}
+                  placeholder="-- Select Brand --"
+                />
                 {clientErrors.brandId && (
                   <p className="text-xs text-rose-400 mt-1">{clientErrors.brandId}</p>
                 )}

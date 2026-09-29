@@ -1,4 +1,4 @@
-import { getSupabaseServiceClient } from '../../lib/supabase/client.ts';
+import { getSupabaseServiceClient } from '../../lib/supabase/client.js';
 
 export interface ImportBatch {
   id: string;

@@ -1,7 +1,7 @@
-import { getSupabaseServiceClient } from '../../lib/supabase/client.ts';
-import { SetupInput } from '../../types/index.ts';
-import { SetupSchema, SetupSchemaType } from '../../lib/validation/setup.ts';
-import { hashPassword } from '../../lib/auth/password.ts';
+import { getSupabaseServiceClient } from '../../lib/supabase/client.js';
+import { SetupInput } from '../../types/index.js';
+import { SetupSchema, SetupSchemaType } from '../../lib/validation/setup.js';
+import { hashPassword } from '../../lib/auth/password.js';
 
 export interface SetupStatusResult {
   setupCompleted: boolean;

@@ -1,29 +1,50 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Tag,
   Plus,
   Search,
   Edit2,
   Trash2,
-  Power,
-  ChevronLeft,
-  ChevronRight,
   AlertCircle,
   CheckCircle,
   X,
   RefreshCw,
-  Building2,
-  ShieldCheck,
   Upload,
 } from 'lucide-react';
-import { Brand, Category, SupportedLanguage, PaginationMeta } from '../../types';
+import { Brand, Category, SupportedLanguage } from '../../types';
 import { translations } from '../../utils/i18n';
 import { BulkImportDialog } from '../common/BulkImportDialog';
 import { apiGet, apiPost, apiPut, apiDelete } from '../../utils/api';
+import { compareCanonicalBrands } from '../../utils/canonicalBrands';
 
 interface BrandMasterViewProps {
   language: SupportedLanguage;
 }
+
+const CATEGORY_ORDER = [
+  'whisky',
+  'rum',
+  'vodka',
+  'gin',
+  'brandy',
+  'beer',
+  'wine',
+  'country liquor',
+  'rtd',
+  'pre-mixed',
+];
+
+const CATEGORY_ICONS: Record<string, string> = {
+  whisky: '🥃',
+  rum: '🍹',
+  vodka: '🍸',
+  gin: '🌿',
+  brandy: '🍷',
+  beer: '🍺',
+  wine: '🍇',
+  'country liquor': '🏺',
+  rtd: '🥤',
+};
 
 export const BrandMasterView: React.FC<BrandMasterViewProps> = ({ language }) => {
   const t = translations[language];
@@ -34,12 +55,9 @@ export const BrandMasterView: React.FC<BrandMasterViewProps> = ({ language }) =>
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Filters & Pagination
+  // Filters
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
-  const [page, setPage] = useState(1);
-  const [limit, setLimit] = useState(10);
-  const [meta, setMeta] = useState<PaginationMeta>({ page: 1, limit: 10, total: 0, totalPages: 1 });
 
   // Modal states
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -62,7 +80,9 @@ export const BrandMasterView: React.FC<BrandMasterViewProps> = ({ language }) =>
       try {
         const catData = await apiGet('/api/categories');
         if (catData.success && catData.data) {
-          const list = Array.isArray(catData.data) ? catData.data : (catData.data.categories || catData.data.items || []);
+          const list = Array.isArray(catData.data)
+            ? catData.data
+            : catData.data.categories || catData.data.items || [];
           setCategories(Array.isArray(list) ? list : []);
         }
       } catch (err) {
@@ -78,8 +98,8 @@ export const BrandMasterView: React.FC<BrandMasterViewProps> = ({ language }) =>
     setError(null);
     try {
       const params = new URLSearchParams({
-        page: page.toString(),
-        limit: limit.toString(),
+        page: '1',
+        limit: '500',
       });
       if (searchTerm) params.append('search', searchTerm);
       if (selectedCategory) params.append('categoryId', selectedCategory);
@@ -91,22 +111,86 @@ export const BrandMasterView: React.FC<BrandMasterViewProps> = ({ language }) =>
       }
 
       setBrands(data.data.items || []);
-      setMeta(data.data.meta || { page: 1, limit: 10, total: 0, totalPages: 1 });
     } catch (err: any) {
       setError(err.message || 'Error fetching brands');
     } finally {
       setLoading(false);
     }
-  }, [page, limit, searchTerm, selectedCategory]);
+  }, [searchTerm, selectedCategory]);
 
   useEffect(() => {
     fetchBrands();
   }, [fetchBrands]);
 
+  const sortedCategories = useMemo(() => {
+    const copy = [...categories];
+    copy.sort((c1, c2) => {
+      const idx1 = CATEGORY_ORDER.findIndex(k => c1.name.toLowerCase().includes(k));
+      const idx2 = CATEGORY_ORDER.findIndex(k => c2.name.toLowerCase().includes(k));
+      if (idx1 !== -1 && idx2 !== -1) return idx1 - idx2;
+      if (idx1 !== -1) return -1;
+      if (idx2 !== -1) return 1;
+      return c1.name.localeCompare(c2.name);
+    });
+    return copy;
+  }, [categories]);
+
+  const groupedBrands = useMemo(() => {
+    const groups: Array<{
+      categoryId: string;
+      categoryName: string;
+      icon: string;
+      brands: Brand[];
+    }> = [];
+
+    sortedCategories.forEach(cat => {
+      const catBrands = brands
+        .filter(b => b.category_id === cat.id)
+        .sort((a, b) => compareCanonicalBrands(a.name, b.name));
+
+      if (catBrands.length > 0) {
+        const lower = cat.name.toLowerCase();
+        const iconKey = Object.keys(CATEGORY_ICONS).find(k => lower.includes(k));
+        groups.push({
+          categoryId: cat.id,
+          categoryName: cat.name,
+          icon: iconKey ? CATEGORY_ICONS[iconKey] : '🏷️',
+          brands: catBrands,
+        });
+      }
+    });
+
+    // Fallback if categories haven't loaded yet
+    if (groups.length === 0 && brands.length > 0) {
+      const mapByCat = new Map<string, { name: string; list: Brand[] }>();
+      brands.forEach(b => {
+        const cId = b.category_id || 'other';
+        const cName = b.category?.name || 'Brands';
+        if (!mapByCat.has(cId)) {
+          mapByCat.set(cId, { name: cName, list: [] });
+        }
+        mapByCat.get(cId)!.list.push(b);
+      });
+      Array.from(mapByCat.entries()).forEach(([cId, info]) => {
+        info.list.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+        const lower = info.name.toLowerCase();
+        const iconKey = Object.keys(CATEGORY_ICONS).find(k => lower.includes(k));
+        groups.push({
+          categoryId: cId,
+          categoryName: info.name,
+          icon: iconKey ? CATEGORY_ICONS[iconKey] : '🏷️',
+          brands: info.list,
+        });
+      });
+    }
+
+    return groups;
+  }, [brands, sortedCategories]);
+
   const handleOpenAdd = () => {
     setBrandToEdit(null);
     setName('');
-    setCategoryId(categories[0]?.id || '');
+    setCategoryId(sortedCategories[0]?.id || '');
     setMaharashtraStatus('Approved');
     setRegistrationRef('');
     setActive(true);
@@ -145,8 +229,8 @@ export const BrandMasterView: React.FC<BrandMasterViewProps> = ({ language }) =>
       };
 
       const url = brandToEdit ? `/api/brands/${brandToEdit.id}` : '/api/brands';
-      
-      const data = brandToEdit 
+
+      const data = brandToEdit
         ? await apiPut(url, payload)
         : await apiPost(url, payload);
 
@@ -165,7 +249,11 @@ export const BrandMasterView: React.FC<BrandMasterViewProps> = ({ language }) =>
   };
 
   const handleDelete = async (brand: Brand) => {
-    if (!confirm(`Are you sure you want to delete brand "${brand.name}"? If products reference it, deletion will be rejected.`)) {
+    if (
+      !confirm(
+        `Are you sure you want to delete brand "${brand.name}"? If products reference it, deletion will be rejected.`
+      )
+    ) {
       return;
     }
 
@@ -191,7 +279,7 @@ export const BrandMasterView: React.FC<BrandMasterViewProps> = ({ language }) =>
             <span>{t.brandsTitle}</span>
           </h1>
           <p className="text-xs text-slate-400 mt-1">
-            Registered excise liquor and beer brands classified by category
+            Registered excise liquor and beer brands classified by category ({brands.length} Brands)
           </p>
         </div>
 
@@ -222,7 +310,11 @@ export const BrandMasterView: React.FC<BrandMasterViewProps> = ({ language }) =>
           }`}
         >
           <div className="flex items-center gap-2">
-            {feedback.type === 'success' ? <CheckCircle className="w-4 h-4 text-emerald-400" /> : <AlertCircle className="w-4 h-4 text-rose-400" />}
+            {feedback.type === 'success' ? (
+              <CheckCircle className="w-4 h-4 text-emerald-400" />
+            ) : (
+              <AlertCircle className="w-4 h-4 text-rose-400" />
+            )}
             <span>{feedback.text}</span>
           </div>
           <button onClick={() => setFeedback(null)} className="text-slate-400 hover:text-white ml-4">
@@ -232,17 +324,14 @@ export const BrandMasterView: React.FC<BrandMasterViewProps> = ({ language }) =>
       )}
 
       {/* Filter Bar */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div className="relative">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
               value={searchTerm}
-              onChange={e => {
-                setSearchTerm(e.target.value);
-                setPage(1);
-              }}
+              onChange={e => setSearchTerm(e.target.value)}
               placeholder={t.searchBrands}
               className="w-full pl-9 pr-4 py-2 bg-slate-950 border border-slate-700/80 rounded-xl text-white placeholder-slate-500 text-sm focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400 transition-colors"
             />
@@ -251,14 +340,11 @@ export const BrandMasterView: React.FC<BrandMasterViewProps> = ({ language }) =>
           <div>
             <select
               value={selectedCategory}
-              onChange={e => {
-                setSelectedCategory(e.target.value);
-                setPage(1);
-              }}
+              onChange={e => setSelectedCategory(e.target.value)}
               className="w-full px-3 py-2 bg-slate-950 border border-slate-700/80 rounded-xl text-white text-sm focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400"
             >
               <option value="">{t.allCategories}</option>
-              {(Array.isArray(categories) ? categories : []).map(c => (
+              {sortedCategories.map(c => (
                 <option key={c.id} value={c.id}>
                   {c.name} ({c.code})
                 </option>
@@ -266,9 +352,40 @@ export const BrandMasterView: React.FC<BrandMasterViewProps> = ({ language }) =>
             </select>
           </div>
         </div>
+
+        {/* Quick Category Filter Pills */}
+        {sortedCategories.length > 0 && (
+          <div className="flex items-center gap-2 flex-wrap pt-1">
+            <button
+              type="button"
+              onClick={() => setSelectedCategory('')}
+              className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
+                selectedCategory === ''
+                  ? 'bg-amber-500 text-slate-950'
+                  : 'bg-slate-800 text-slate-300 hover:bg-slate-700 border border-slate-700'
+              }`}
+            >
+              All
+            </button>
+            {sortedCategories.map(cat => (
+              <button
+                key={cat.id}
+                type="button"
+                onClick={() => setSelectedCategory(cat.id)}
+                className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
+                  selectedCategory === cat.id
+                    ? 'bg-amber-500 text-slate-950'
+                    : 'bg-slate-800 text-slate-300 hover:bg-slate-700 border border-slate-700'
+                }`}
+              >
+                {cat.name}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
-      {/* Brands Table */}
+      {/* Category-Grouped Brands Table */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
         <div className="table-container">
           <table className="w-full text-left border-collapse">
@@ -289,7 +406,14 @@ export const BrandMasterView: React.FC<BrandMasterViewProps> = ({ language }) =>
                     <span>{t.loading}</span>
                   </td>
                 </tr>
-              ) : brands.length === 0 ? (
+              ) : error ? (
+                <tr>
+                  <td colSpan={5} className="py-12 text-center text-rose-400">
+                    <AlertCircle className="w-6 h-6 mx-auto mb-2" />
+                    <span>{error}</span>
+                  </td>
+                </tr>
+              ) : groupedBrands.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="py-12 text-center text-slate-400">
                     <Tag className="w-8 h-8 mx-auto mb-2 text-slate-600" />
@@ -297,87 +421,90 @@ export const BrandMasterView: React.FC<BrandMasterViewProps> = ({ language }) =>
                   </td>
                 </tr>
               ) : (
-                brands.map(brand => (
-                  <tr key={brand.id} className="hover:bg-slate-800/40 transition-colors">
-                    <td className="py-3.5 px-4 font-semibold text-white">
-                      {brand.name}
-                      {brand.registration_ref && (
-                        <div className="text-xs text-slate-500 font-mono mt-0.5">
-                          Ref: {brand.registration_ref}
-                        </div>
-                      )}
-                    </td>
-                    <td className="py-3.5 px-3">
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20">
-                        {brand.category?.name || 'N/A'}
-                      </span>
-                    </td>
-                    <td className="py-3.5 px-3">
-                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-950/70 text-blue-400 border border-blue-800">
-                        {brand.maharashtra_status || 'Approved'}
-                      </span>
-                    </td>
-                    <td className="py-3.5 px-3 text-center">
-                      <span
-                        className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
-                          brand.active
-                            ? 'bg-emerald-950/70 text-emerald-400 border border-emerald-800'
-                            : 'bg-slate-800 text-slate-400 border border-slate-700'
-                        }`}
+                groupedBrands.map(group => (
+                  <React.Fragment key={group.categoryId}>
+                    {/* Distinct Category Group Header Row */}
+                    <tr className="bg-slate-950/90 border-y border-slate-800">
+                      <td
+                        colSpan={5}
+                        className="py-2.5 px-4 text-xs font-bold tracking-widest uppercase text-amber-400"
                       >
-                        {brand.active ? t.active : t.inactive}
-                      </span>
-                    </td>
-                    <td className="py-3.5 px-4 text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        <button
-                          onClick={() => handleOpenEdit(brand)}
-                          className="p-1.5 text-slate-400 hover:text-amber-400 hover:bg-slate-800 rounded-lg transition-colors"
-                          title={t.editBrand}
-                        >
-                          <Edit2 className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(brand)}
-                          className="p-1.5 text-slate-500 hover:text-rose-400 hover:bg-slate-800 rounded-lg transition-colors"
-                          title={t.close}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
+                        <div className="flex items-center justify-between">
+                          <span className="flex items-center gap-2">
+                            <span>{group.icon}</span>
+                            <span>{group.categoryName.toUpperCase()}</span>
+                          </span>
+                          <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-slate-800 text-slate-300">
+                            {group.brands.length} Brands
+                          </span>
+                        </div>
+                      </td>
+                    </tr>
+
+                    {/* Brands in this Category */}
+                    {group.brands.map(brand => (
+                      <tr key={brand.id} className="hover:bg-slate-800/40 transition-colors">
+                        <td className="py-3 px-4 pl-7 font-semibold text-white">
+                          {brand.name}
+                          {brand.registration_ref && (
+                            <div className="text-xs text-slate-500 font-mono mt-0.5">
+                              Ref: {brand.registration_ref}
+                            </div>
+                          )}
+                        </td>
+                        <td className="py-3 px-3">
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                            {brand.category?.name || group.categoryName}
+                          </span>
+                        </td>
+                        <td className="py-3 px-3">
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-950/70 text-blue-400 border border-blue-800">
+                            {brand.maharashtra_status || 'Approved'}
+                          </span>
+                        </td>
+                        <td className="py-3 px-3 text-center">
+                          <span
+                            className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                              brand.active
+                                ? 'bg-emerald-950/70 text-emerald-400 border border-emerald-800'
+                                : 'bg-slate-800 text-slate-400 border border-slate-700'
+                            }`}
+                          >
+                            {brand.active ? t.active : t.inactive}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            <button
+                              onClick={() => handleOpenEdit(brand)}
+                              className="p-1.5 text-slate-400 hover:text-amber-400 hover:bg-slate-800 rounded-lg transition-colors"
+                              title={t.editBrand}
+                            >
+                              <Edit2 className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => handleDelete(brand)}
+                              className="p-1.5 text-slate-500 hover:text-rose-400 hover:bg-slate-800 rounded-lg transition-colors"
+                              title={t.close}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </React.Fragment>
                 ))
               )}
             </tbody>
           </table>
         </div>
 
-        {/* Pagination */}
+        {/* Footer Summary */}
         <div className="px-4 py-3 bg-slate-950/80 border-t border-slate-800 flex items-center justify-between text-xs text-slate-400">
           <span>
-            {t.showing} {meta.total === 0 ? 0 : (meta.page - 1) * meta.limit + 1} -{' '}
-            {Math.min(meta.page * meta.limit, meta.total)} {t.of} {meta.total}
+            {t.showing} {brands.length} {t.of} {brands.length} Brands across {groupedBrands.length} Categories
           </span>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setPage(p => Math.max(1, p - 1))}
-              disabled={page <= 1 || loading}
-              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 disabled:opacity-40"
-            >
-              <ChevronLeft className="w-4 h-4" />
-              <span>{t.previous}</span>
-            </button>
-            <span className="px-2 font-mono text-slate-300">{meta.page} / {Math.max(1, meta.totalPages)}</span>
-            <button
-              onClick={() => setPage(p => Math.min(meta.totalPages, p + 1))}
-              disabled={page >= meta.totalPages || loading}
-              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 disabled:opacity-40"
-            >
-              <span>{t.next}</span>
-              <ChevronRight className="w-4 h-4" />
-            </button>
-          </div>
         </div>
       </div>
 
@@ -412,7 +539,7 @@ export const BrandMasterView: React.FC<BrandMasterViewProps> = ({ language }) =>
                   required
                   value={name}
                   onChange={e => setName(e.target.value)}
-                  placeholder="e.g. Royal Stag Deluxe"
+                  placeholder="e.g. Royal Stag"
                   className="w-full px-3.5 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-amber-400"
                 />
               </div>
@@ -427,7 +554,7 @@ export const BrandMasterView: React.FC<BrandMasterViewProps> = ({ language }) =>
                   className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-amber-400"
                 >
                   <option value="">-- Select Category --</option>
-                  {(Array.isArray(categories) ? categories : []).map(c => (
+                  {sortedCategories.map(c => (
                     <option key={c.id} value={c.id}>
                       {c.name} ({c.code})
                     </option>

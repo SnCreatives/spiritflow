@@ -1,5 +1,5 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { validateEnvironmentConfig } from './config.ts';
+import { validateEnvironmentConfig } from './config.js';
 
 let supabaseServiceClient: SupabaseClient | null = null;
 let supabaseAnonClient: SupabaseClient | null = null;

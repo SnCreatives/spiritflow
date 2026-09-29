@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Search, ChevronDown, Check, X } from 'lucide-react';
+import { compareCanonicalBrands } from '../../utils/canonicalBrands';
 
 interface ProductPackSizeSelectorProps {
   products: any[];
@@ -10,6 +11,31 @@ interface ProductPackSizeSelectorProps {
   label?: string;
   className?: string;
 }
+
+const CATEGORY_ORDER = [
+  'whisky',
+  'rum',
+  'vodka',
+  'gin',
+  'brandy',
+  'beer',
+  'wine',
+  'country liquor',
+  'rtd',
+  'pre-mixed',
+];
+
+const CATEGORY_ICONS: Record<string, string> = {
+  whisky: '🥃',
+  rum: '🍹',
+  vodka: '🍸',
+  gin: '🌿',
+  brandy: '🍷',
+  beer: '🍺',
+  wine: '🍇',
+  'country liquor': '🏺',
+  rtd: '🥤',
+};
 
 export const ProductPackSizeSelector: React.FC<ProductPackSizeSelectorProps> = ({
   products = [],
@@ -29,19 +55,26 @@ export const ProductPackSizeSelector: React.FC<ProductPackSizeSelectorProps> = (
   const [isOpen, setIsOpen] = useState<boolean>(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Unique brands list
-  const brandMap = new Map<string, { brand_id: string; brand_name: string; brand_code: string; category_name: string }>();
-  products.forEach(p => {
-    if (p.brand_id && !brandMap.has(p.brand_id)) {
-      brandMap.set(p.brand_id, {
-        brand_id: p.brand_id,
-        brand_name: p.brand_name || 'Unbranded',
-        brand_code: p.brand_code || '',
-        category_name: p.category_name || '',
-      });
-    }
-  });
-  const allBrands = Array.from(brandMap.values()).sort((a, b) => a.brand_name.localeCompare(b.brand_name));
+  // Unique brands list from available products
+  const allBrands = useMemo(() => {
+    const brandMap = new Map<
+      string,
+      { brand_id: string; brand_name: string; brand_code: string; category_name: string }
+    >();
+    products.forEach(p => {
+      if (p.brand_id && !brandMap.has(p.brand_id)) {
+        brandMap.set(p.brand_id, {
+          brand_id: p.brand_id,
+          brand_name: p.brand_name || p.brand?.name || 'Unbranded',
+          brand_code: p.brand_code || '',
+          category_name: p.category_name || p.category?.name || 'Other',
+        });
+      }
+    });
+    return Array.from(brandMap.values()).sort((a, b) =>
+      a.brand_name.localeCompare(b.brand_name, undefined, { sensitivity: 'base' })
+    );
+  }, [products]);
 
   const selectedBrand = allBrands.find(b => b.brand_id === selectedBrandId);
 
@@ -59,11 +92,15 @@ export const ProductPackSizeSelector: React.FC<ProductPackSizeSelectorProps> = (
   // Sync search text when selected brand changes externally
   useEffect(() => {
     if (selectedBrand) {
-      setSearchText(`${selectedBrand.brand_name}${selectedBrand.brand_code ? ` [Code: ${selectedBrand.brand_code}]` : ''}`);
+      setSearchText(
+        `${selectedBrand.brand_name}${
+          selectedBrand.brand_code ? ` [Code: ${selectedBrand.brand_code}]` : ''
+        }`
+      );
     } else if (!value) {
       setSearchText('');
     }
-  }, [selectedBrandId, value]);
+  }, [selectedBrandId, value, selectedBrand]);
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -71,7 +108,11 @@ export const ProductPackSizeSelector: React.FC<ProductPackSizeSelectorProps> = (
       if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
         setIsOpen(false);
         if (selectedBrand) {
-          setSearchText(`${selectedBrand.brand_name}${selectedBrand.brand_code ? ` [Code: ${selectedBrand.brand_code}]` : ''}`);
+          setSearchText(
+            `${selectedBrand.brand_name}${
+              selectedBrand.brand_code ? ` [Code: ${selectedBrand.brand_code}]` : ''
+            }`
+          );
         } else if (!value) {
           setSearchText('');
         }
@@ -81,21 +122,73 @@ export const ProductPackSizeSelector: React.FC<ProductPackSizeSelectorProps> = (
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [selectedBrand, value]);
 
-  // Filtered brands according to typing (alphabetical / code match)
-  const filteredBrands = allBrands.filter(b => {
-    if (!searchText.trim()) return true;
-    const query = searchText.toLowerCase().trim();
-    const nameMatch = b.brand_name.toLowerCase().includes(query);
-    const codeMatch = b.brand_code.toLowerCase().includes(query);
-    return nameMatch || codeMatch;
-  });
+  // Filtered & Category-Grouped brands
+  const groupedBrands = useMemo(() => {
+    const rawQuery = searchText.toLowerCase().trim();
+    const isExactSelectedText =
+      selectedBrand &&
+      rawQuery ===
+        `${selectedBrand.brand_name}${
+          selectedBrand.brand_code ? ` [Code: ${selectedBrand.brand_code}]` : ''
+        }`.toLowerCase();
+    const query = isExactSelectedText ? '' : rawQuery;
+
+    const filtered = allBrands.filter(b => {
+      if (!query) return true;
+      const nameMatch = b.brand_name.toLowerCase().includes(query);
+      const codeMatch = b.brand_code.toLowerCase().includes(query);
+      const catMatch = b.category_name.toLowerCase().includes(query);
+      return nameMatch || codeMatch || catMatch;
+    });
+
+    const catGroups = new Map<
+      string,
+      Array<{ brand_id: string; brand_name: string; brand_code: string; category_name: string }>
+    >();
+
+    filtered.forEach(b => {
+      const cat = b.category_name || 'Other';
+      if (!catGroups.has(cat)) {
+        catGroups.set(cat, []);
+      }
+      catGroups.get(cat)!.push(b);
+    });
+
+    const result = Array.from(catGroups.entries()).map(([categoryName, list]) => {
+      list.sort((a, b) => compareCanonicalBrands(a.brand_name, b.brand_name));
+      const lower = categoryName.toLowerCase();
+      const iconKey = Object.keys(CATEGORY_ICONS).find(k => lower.includes(k));
+      return {
+        categoryName,
+        icon: iconKey ? CATEGORY_ICONS[iconKey] : '🏷️',
+        brands: list,
+      };
+    });
+
+    result.sort((g1, g2) => {
+      const idx1 = CATEGORY_ORDER.findIndex(k => g1.categoryName.toLowerCase().includes(k));
+      const idx2 = CATEGORY_ORDER.findIndex(k => g2.categoryName.toLowerCase().includes(k));
+      if (idx1 !== -1 && idx2 !== -1) return idx1 - idx2;
+      if (idx1 !== -1) return -1;
+      if (idx2 !== -1) return 1;
+      return g1.categoryName.localeCompare(g2.categoryName);
+    });
+
+    return result;
+  }, [allBrands, searchText, selectedBrand]);
 
   // Products belonging to selected brand
   const brandProducts = products.filter(p => p.brand_id === selectedBrandId);
 
-  const handleBrandSelect = (brand: { brand_id: string; brand_name: string; brand_code: string }) => {
+  const handleBrandSelect = (brand: {
+    brand_id: string;
+    brand_name: string;
+    brand_code: string;
+  }) => {
     setSelectedBrandId(brand.brand_id);
-    setSearchText(`${brand.brand_name}${brand.brand_code ? ` [Code: ${brand.brand_code}]` : ''}`);
+    setSearchText(
+      `${brand.brand_name}${brand.brand_code ? ` [Code: ${brand.brand_code}]` : ''}`
+    );
     setIsOpen(false);
 
     const matching = products.filter(p => p.brand_id === brand.brand_id);
@@ -112,16 +205,20 @@ export const ProductPackSizeSelector: React.FC<ProductPackSizeSelectorProps> = (
 
   return (
     <div className={`space-y-3 ${className}`} ref={containerRef}>
-      {/* Searchable Brand Dropdown / Typeahead */}
+      {/* Searchable Category-Grouped Brand Dropdown */}
       <div className="relative">
         <label className="block text-xs font-medium text-slate-400 mb-1">
           {label} {required && <span className="text-red-400">*</span>}
         </label>
-        
+
         <div className="relative">
           <input
             type="text"
-            placeholder={products.length === 0 ? 'No products available' : 'Type brand name or unique code...'}
+            placeholder={
+              products.length === 0
+                ? 'No products available'
+                : 'Search brand (e.g. Royal Stag, Kingfisher, Sula)...'
+            }
             value={searchText}
             onChange={e => {
               setSearchText(e.target.value);
@@ -165,32 +262,45 @@ export const ProductPackSizeSelector: React.FC<ProductPackSizeSelectorProps> = (
         </div>
 
         {isOpen && (
-          <div className="absolute z-50 left-0 right-0 mt-1 max-h-60 overflow-y-auto bg-slate-900 border border-slate-700 rounded-xl shadow-2xl">
-            {filteredBrands.length === 0 ? (
-              <div className="px-4 py-3 text-xs text-slate-400 text-center">
-                No matching brands found
+          <div className="absolute z-50 left-0 right-0 mt-1 max-h-72 overflow-y-auto bg-slate-900 border border-slate-700 rounded-xl shadow-2xl p-1.5 space-y-2">
+            {groupedBrands.length === 0 ? (
+              <div className="px-4 py-4 text-xs text-slate-400 text-center">
+                No brands found
               </div>
             ) : (
-              filteredBrands.map(b => (
-                <div
-                  key={b.brand_id}
-                  onClick={() => handleBrandSelect(b)}
-                  className={`px-3 py-2 text-xs cursor-pointer flex items-center justify-between hover:bg-slate-800 ${
-                    selectedBrandId === b.brand_id ? 'bg-amber-500/10 text-amber-400 font-medium' : 'text-white'
-                  }`}
-                >
-                  <div>
-                    <span className="font-semibold">{b.brand_name}</span>
-                    {b.brand_code && (
-                      <span className="ml-2 text-[10px] px-1.5 py-0.5 bg-slate-800 text-amber-300 rounded border border-slate-700">
-                        Code: {b.brand_code}
-                      </span>
-                    )}
-                    {b.category_name && (
-                      <span className="ml-2 text-slate-400 text-[10px]">({b.category_name})</span>
-                    )}
+              groupedBrands.map(group => (
+                <div key={group.categoryName} className="space-y-0.5">
+                  <div className="px-3 py-1 text-[10px] font-bold tracking-widest uppercase sticky top-0 z-10 bg-slate-950/95 text-amber-400 border-y border-slate-800 flex items-center justify-between select-none">
+                    <span>
+                      {group.icon} {group.categoryName.toUpperCase()}
+                    </span>
+                    <span className="text-[10px] font-mono text-slate-400">
+                      {group.brands.length}
+                    </span>
                   </div>
-                  {selectedBrandId === b.brand_id && <Check className="w-3.5 h-3.5 text-amber-400" />}
+                  {group.brands.map(b => (
+                    <div
+                      key={b.brand_id}
+                      onClick={() => handleBrandSelect(b)}
+                      className={`pl-6 pr-3 py-2 text-xs rounded-lg cursor-pointer flex items-center justify-between hover:bg-slate-800 ${
+                        selectedBrandId === b.brand_id
+                          ? 'bg-amber-500/15 text-amber-400 font-semibold'
+                          : 'text-white'
+                      }`}
+                    >
+                      <div>
+                        <span className="font-medium">{b.brand_name}</span>
+                        {b.brand_code && (
+                          <span className="ml-2 text-[10px] px-1.5 py-0.5 bg-slate-800 text-amber-300 rounded border border-slate-700">
+                            Code: {b.brand_code}
+                          </span>
+                        )}
+                      </div>
+                      {selectedBrandId === b.brand_id && (
+                        <Check className="w-3.5 h-3.5 text-amber-400" />
+                      )}
+                    </div>
+                  ))}
                 </div>
               ))
             )}
@@ -198,7 +308,7 @@ export const ProductPackSizeSelector: React.FC<ProductPackSizeSelectorProps> = (
         )}
       </div>
 
-      {/* Pack Size Dropdown */}
+      {/* Pack Size / Variant Dropdown */}
       <div>
         <label className="block text-xs font-medium text-slate-400 mb-1">
           Bottle / Pack Size <span className="text-red-400">*</span>

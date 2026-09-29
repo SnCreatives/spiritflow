@@ -7,18 +7,18 @@ try {
 
 
 import express, { Request, Response, NextFunction } from 'express';
-import { validateEnvironmentConfig } from '../lib/supabase/config.ts';
-import { getSupabaseServiceClient, ConfigurationError } from '../lib/supabase/client.ts';
-import { SetupService } from './services/setupService.ts';
-import { AuthService } from './services/authService.ts';
-import { InventoryService } from './services/inventoryService.ts';
-import { ProductService } from './services/productService.ts';
-import { MasterService } from './services/masterService.ts';
-import { ExciseService } from './services/exciseService.ts';
-import { MigrationService } from './services/migrationService.ts';
-import { ImportService } from './services/importService.ts';
-import { reportService } from './services/reportService.ts';
-import { createSessionCookie, clearSessionCookie, extractSessionTokenFromCookie, isSecureRequest } from '../lib/auth/session.ts';
+import { validateEnvironmentConfig } from '../lib/supabase/config.js';
+import { getSupabaseServiceClient, ConfigurationError } from '../lib/supabase/client.js';
+import { SetupService } from './services/setupService.js';
+import { AuthService } from './services/authService.js';
+import { InventoryService } from './services/inventoryService.js';
+import { ProductService } from './services/productService.js';
+import { MasterService } from './services/masterService.js';
+import { ExciseService } from './services/exciseService.js';
+import { MigrationService } from './services/migrationService.js';
+import { ImportService } from './services/importService.js';
+import { reportService } from './services/reportService.js';
+import { createSessionCookie, clearSessionCookie, extractSessionTokenFromCookie, isSecureRequest } from '../lib/auth/session.js';
 
 export const apiApp = express();
 apiApp.set('trust proxy', 1);
@@ -33,10 +33,15 @@ apiApp.use((req: Request, _res: Response, next: NextFunction) => {
   next();
 });
 
-// Automatically check and apply migrations in background if database credentials present
-MigrationService.runMigrations().catch(err => {
-  console.log('[Migration] Auto-run status:', err?.message || err);
-});
+// Automatically check and apply migrations and canonical Brand Master sync in background on non-serverless runtime
+if (!process.env.VERCEL) {
+  MigrationService.runMigrations().catch(err => {
+    console.log('[Migration] Auto-run status:', err?.message || err);
+  });
+  MasterService.syncCanonicalBrands().catch(err => {
+    console.log('[BrandMaster] Canonical sync status:', err?.message || err);
+  });
+}
 
 // Helper for unified success responses
 function sendSuccess<T>(res: Response, data: T, status = 200) {
@@ -229,13 +234,17 @@ apiApp.post('/login', handleLogin);
 /**
  * 5. Logout Endpoint
  */
-apiApp.post('/api/logout', async (req: Request, res: Response) => {
+const handleLogout = async (req: Request, res: Response) => {
   try {
-    const token =
-      extractSessionTokenFromCookie(req.headers.cookie) ||
-      (req.headers.authorization?.startsWith('Bearer ')
-        ? req.headers.authorization.substring(7).trim()
-        : null);
+    const headerToken =
+      typeof req.headers['x-session-token'] === 'string'
+        ? req.headers['x-session-token'].trim()
+        : null;
+    const bearerToken = req.headers.authorization?.startsWith('Bearer ')
+      ? req.headers.authorization.substring(7).trim()
+      : null;
+    const cookieToken = extractSessionTokenFromCookie(req.headers.cookie);
+    const token = headerToken || bearerToken || cookieToken;
 
     if (token) {
       await AuthService.logout(token);
@@ -246,7 +255,10 @@ apiApp.post('/api/logout', async (req: Request, res: Response) => {
   const isSecure = isSecureRequest(req);
   res.setHeader('Set-Cookie', clearSessionCookie(isSecure));
   return sendSuccess(res, { redirect: '/login' });
-});
+};
+
+apiApp.post('/api/logout', handleLogout);
+apiApp.post('/logout', handleLogout);
 
 /**
  * 6. Current User & Business Info Endpoint (Protected)
@@ -700,7 +712,7 @@ apiApp.get('/api/brands', requireAuth, async (req: Request, res: Response) => {
     const { search, categoryId, status, page, limit, activeOnly } = req.query;
     
     if (activeOnly === 'true') {
-      const brands = await MasterService.getActiveBrands();
+      const brands = await MasterService.getActiveBrands(categoryId as string);
       return sendSuccess(res, { items: brands });
     }
 
@@ -709,7 +721,7 @@ apiApp.get('/api/brands', requireAuth, async (req: Request, res: Response) => {
       categoryId: categoryId as string,
       status: status as any,
       page: page ? parseInt(page as string, 10) : 1,
-      limit: limit ? parseInt(limit as string, 10) : 20,
+      limit: limit ? parseInt(limit as string, 10) : 500,
     });
     return sendSuccess(res, result);
   } catch (err: any) {

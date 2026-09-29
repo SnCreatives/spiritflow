@@ -1,15 +1,16 @@
-import { getSupabaseServiceClient } from '../../lib/supabase/client.ts';
+import { getSupabaseServiceClient } from '../../lib/supabase/client.js';
 import {
   Product,
   CreateProductInput,
   UpdateProductInput,
   ProductFilterParams,
   PaginatedResult,
-} from '../../types/index.ts';
+} from '../../types/index.js';
 import {
   ProductCreateSchema,
   ProductUpdateSchema,
-} from '../../lib/validation/inventory.ts';
+} from '../../lib/validation/inventory.js';
+import { compareCanonicalBrands } from '../../utils/canonicalBrands.js';
 
 export class ProductService {
   /**
@@ -18,7 +19,7 @@ export class ProductService {
   static async getProducts(params: ProductFilterParams = {}): Promise<PaginatedResult<Product>> {
     const supabase = getSupabaseServiceClient();
     const page = Math.max(1, Number(params.page) || 1);
-    const limit = Math.max(1, Math.min(100, Number(params.limit) || 20));
+    const limit = Math.max(1, Math.min(500, Number(params.limit) || 20));
     const offset = (page - 1) * limit;
 
     let query = supabase
@@ -530,9 +531,9 @@ export class ProductService {
       display_label: `${row.brand?.name || row.brand?.brand_name || 'Unbranded'} — ${row.product_name || row.name} — ${row.pack_size ? `${row.pack_size.name} (${row.pack_size.volume_ml}ml)` : 'Standard'}`,
     }));
 
-    // Sort by brand_name -> product_name -> pack_size
+    // Sort by canonical brand order -> product_name -> pack_size
     items.sort((a, b) => {
-      const cmpBrand = a.brand_name.localeCompare(b.brand_name);
+      const cmpBrand = compareCanonicalBrands(a.brand_name, b.brand_name);
       if (cmpBrand !== 0) return cmpBrand;
       const cmpProd = a.product_name.localeCompare(b.product_name);
       if (cmpProd !== 0) return cmpProd;

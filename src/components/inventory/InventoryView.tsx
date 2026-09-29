@@ -19,6 +19,7 @@ import { SupportedLanguage, InventoryRecord, StockLedgerRecord } from '../../typ
 import { apiGet, apiPost } from '../../utils/api';
 import { translations } from '../../utils/i18n';
 import { BulkImportDialog } from '../common/BulkImportDialog';
+import { ProductPackSizeSelector } from '../common/ProductPackSizeSelector';
 
 interface InventoryViewProps {
   language: SupportedLanguage;
@@ -689,20 +690,13 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ language }) => {
               </div>
 
               <div className="sm:col-span-2">
-                <label className="text-slate-400 block mb-1">Product *</label>
-                <select
-                  required
+                <ProductPackSizeSelector
+                  products={productsList}
                   value={inwardForm.productId}
-                  onChange={e => setInwardForm({ ...inwardForm, productId: e.target.value })}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-white"
-                >
-                  <option value="">Select Product</option>
-                  {productsList.map(p => (
-                    <option key={p.id} value={p.id}>
-                      {p.product_name || p.name} ({p.sku || 'SKU'})
-                    </option>
-                  ))}
-                </select>
+                  onChange={productId => setInwardForm({ ...inwardForm, productId })}
+                  required
+                  label="Product / Brand"
+                />
               </div>
 
               <div>
@@ -777,18 +771,13 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ language }) => {
 
             <div className="space-y-3 text-xs">
               <div>
-                <label className="text-slate-400 block mb-1">Product *</label>
-                <select
-                  required
+                <ProductPackSizeSelector
+                  products={productsList}
                   value={adjForm.productId}
-                  onChange={e => setAdjForm({ ...adjForm, productId: e.target.value })}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-white"
-                >
-                  <option value="">Select Product</option>
-                  {productsList.map(p => (
-                    <option key={p.id} value={p.id}>{p.product_name || p.name}</option>
-                  ))}
-                </select>
+                  onChange={productId => setAdjForm({ ...adjForm, productId })}
+                  required
+                  label="Product / Brand"
+                />
               </div>
 
               <div>
@@ -867,18 +856,13 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ language }) => {
 
             <div className="space-y-3 text-xs">
               <div>
-                <label className="text-slate-400 block mb-1">Product *</label>
-                <select
-                  required
+                <ProductPackSizeSelector
+                  products={productsList}
                   value={openingForm.productId}
-                  onChange={e => setOpeningForm({ ...openingForm, productId: e.target.value })}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-white"
-                >
-                  <option value="">Select Product</option>
-                  {productsList.map(p => (
-                    <option key={p.id} value={p.id}>{p.product_name || p.name}</option>
-                  ))}
-                </select>
+                  onChange={productId => setOpeningForm({ ...openingForm, productId })}
+                  required
+                  label="Product / Brand"
+                />
               </div>
 
               <div>

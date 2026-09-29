@@ -1,5 +1,5 @@
-import { getSupabaseServiceClient } from '../../lib/supabase/client.ts';
-import { ExciseLicence, ExciseDocumentReference, ComplianceReference } from '../../types/index.ts';
+import { getSupabaseServiceClient } from '../../lib/supabase/client.js';
+import { ExciseLicence, ExciseDocumentReference, ComplianceReference } from '../../types/index.js';
 
 export class ExciseService {
   /**

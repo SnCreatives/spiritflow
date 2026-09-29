@@ -20,6 +20,7 @@ import { Product, Category, Brand, SupportedLanguage, PaginationMeta } from '../
 import { translations } from '../../utils/i18n';
 import { ProductModal } from './ProductModal';
 import { BulkImportDialog } from '../common/BulkImportDialog';
+import { UnifiedBrandSelector } from '../common/UnifiedBrandSelector';
 import { apiGet, apiPut, apiDelete } from '../../utils/api';
 
 interface ProductListViewProps {
@@ -87,7 +88,7 @@ export const ProductListView: React.FC<ProductListViewProps> = ({ language }) =>
   useEffect(() => {
     async function loadBrandsForFilter() {
       try {
-        const url = selectedCategory ? `/api/brands?categoryId=${selectedCategory}&limit=100` : '/api/brands?limit=100';
+        const url = selectedCategory ? `/api/brands?categoryId=${selectedCategory}&limit=500` : '/api/brands?limit=500';
         const data = await apiGet(url);
         if (data.success && data.data?.items) {
           setBrands(data.data.items);
@@ -124,7 +125,7 @@ export const ProductListView: React.FC<ProductListViewProps> = ({ language }) =>
       }
 
       setProducts(data.data.items || []);
-      setMeta(data.data.meta || { page: 1, limit: 10, total: 0, totalPages: 1 });
+      setMeta(data.data.pagination || data.data.meta || { page: 1, limit: 10, total: 0, totalPages: 1 });
     } catch (err: any) {
       setError(err.message || 'Error communicating with database');
     } finally {
@@ -278,23 +279,19 @@ export const ProductListView: React.FC<ProductListViewProps> = ({ language }) =>
             </select>
           </div>
 
-          {/* Brand Filter (Dependent on selectedCategory) */}
+          {/* Brand Filter (Category-Grouped Unified Selector) */}
           <div>
-            <select
+            <UnifiedBrandSelector
               value={selectedBrand}
-              onChange={e => {
-                setSelectedBrand(e.target.value);
+              onChange={(id) => {
+                setSelectedBrand(id);
                 setPage(1);
               }}
-              className="w-full px-3 py-2 bg-slate-950 border border-slate-700/80 rounded-xl text-white text-sm focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400"
-            >
-              <option value="">{t.allBrands}</option>
-              {brands.map(b => (
-                <option key={b.id} value={b.id}>
-                  {b.name}
-                </option>
-              ))}
-            </select>
+              categories={categories}
+              categoryId={selectedCategory || undefined}
+              placeholder={t.allBrands}
+              allowClear={true}
+            />
           </div>
 
           {/* Status Filter */}

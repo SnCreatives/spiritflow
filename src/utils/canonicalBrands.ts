@@ -1,0 +1,150 @@
+export const CANONICAL_CATEGORY_ORDER = [
+  'Whisky',
+  'Rum',
+  'Vodka',
+  'Gin',
+  'Brandy',
+  'Beer',
+  'Wine',
+] as const;
+
+export const CANONICAL_BRAND_MASTER: Record<string, string[]> = {
+  Whisky: [
+    'Royal Stag',
+    'Royal Stag Barrel Select',
+    'Blenders Pride',
+    'Blenders Pride Reserve Collection',
+    'Imperial Blue',
+    "McDowell's No.1",
+    'Signature',
+    'Signature Premier',
+    "Officer's Choice",
+    "Officer's Choice Blue",
+    'Sterling Reserve',
+    'Sterling Reserve B7',
+    '8 PM',
+    'Rockford',
+    'Rockford Reserve',
+    'Antiquity Blue',
+    'Antiquity Rare',
+    'Royal Challenge',
+    'DSP Black',
+    "Director's Special",
+    'Peter Scot',
+    'Bagpiper',
+    'Aristocrat',
+    'White & Blue',
+    'Black Dog',
+    '100 Pipers',
+    "Ballantine's",
+    'Chivas Regal',
+    'Johnnie Walker',
+    "Teacher's",
+    'VAT 69',
+    'The Glenlivet',
+  ],
+  Rum: [
+    'Old Monk',
+    'Old Monk Supreme',
+    'Old Monk Gold Reserve',
+    "McDowell's No.1 Celebration",
+    'Bacardi',
+    'Bacardi Carta Blanca',
+    'Bacardi Black',
+    'Captain Morgan',
+    'Contessa',
+    'Hercules',
+    'Maka Zai',
+  ],
+  Vodka: [
+    'Magic Moments',
+    'Magic Moments Green Apple',
+    'Magic Moments Orange',
+    'Magic Moments Remix',
+    'Smirnoff',
+    'Absolut',
+    'Romanov',
+    'White Mischief',
+    'Fuel',
+  ],
+  Gin: [
+    'Blue Riband',
+    "Gordon's",
+    "Gordon's Pink",
+    'Bombay Sapphire',
+    'Tanqueray',
+    'Greater Than',
+    'Hapusa',
+    'Jaisalmer',
+  ],
+  Brandy: [
+    'Mansion House',
+    "McDowell's No.1 Brandy",
+    'Honey Bee',
+    'Morpheus',
+    'Morpheus Blue',
+    'Dreher',
+    'St-Rémy',
+  ],
+  Beer: [
+    'Kingfisher',
+    'Kingfisher Premium',
+    'Kingfisher Strong',
+    'Kingfisher Ultra',
+    'Kingfisher Ultra Max',
+    'Kingfisher Blue',
+    'Budweiser',
+    'Budweiser Magnum',
+    'Tuborg',
+    'Tuborg Strong',
+    'Carlsberg',
+    'Carlsberg Elephant',
+    'Heineken',
+    'Heineken Silver',
+    'Corona Extra',
+    'Corona Premier',
+    "Foster's",
+    'Haywards 5000',
+    'Haywards 2000',
+    'bira 91',
+    'bira 91 Blonde',
+    'bira 91 Strong',
+    'bira 91 White',
+    'bira 91 Gold',
+    'bira 91 IPA',
+    'Hoegaarden',
+    'Stella Artois',
+    "Beck's",
+    'Simba',
+    'White Owl',
+    'Miller',
+  ],
+  Wine: [
+    'Sula',
+    'Fratelli',
+    'York',
+    'Grover Zampa',
+    'Reveilo',
+    'Myra',
+    'Four Seasons',
+    'Nine Hills',
+    'Big Banyan',
+  ],
+};
+
+// Map lowercase brand name -> canonical index for deterministic sorting
+const BRAND_ORDER_INDEX = new Map<string, number>();
+Object.values(CANONICAL_BRAND_MASTER)
+  .flat()
+  .forEach((name, idx) => {
+    BRAND_ORDER_INDEX.set(name.toLowerCase(), idx);
+  });
+
+export function compareCanonicalBrands(nameA: string, nameB: string): number {
+  const idxA = BRAND_ORDER_INDEX.get((nameA || '').toLowerCase());
+  const idxB = BRAND_ORDER_INDEX.get((nameB || '').toLowerCase());
+  if (idxA !== undefined && idxB !== undefined) return idxA - idxB;
+  if (idxA !== undefined) return -1;
+  if (idxB !== undefined) return 1;
+  return (nameA || '').localeCompare(nameB || '', undefined, { sensitivity: 'base' });
+}

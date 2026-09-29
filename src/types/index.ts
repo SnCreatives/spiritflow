@@ -80,6 +80,8 @@ export interface Brand {
 export interface Product {
   id: string;
   name: string;
+  variant?: string;
+  abv?: number;
   category_id: string;
   brand_id: string;
   pack_size_id: string;

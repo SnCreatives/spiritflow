@@ -14,6 +14,7 @@ import {
 import { SupportedLanguage, Category, Brand, Product, PackSize } from '../../types';
 import { apiGet } from '../../utils/api';
 import { translations } from '../../utils/i18n';
+import { UnifiedBrandSelector } from '../common/UnifiedBrandSelector';
 
 interface MlStockReportViewProps {
   language: SupportedLanguage;
@@ -256,18 +257,14 @@ export const MlStockReportView: React.FC<MlStockReportViewProps> = ({ language }
 
           <div>
             <label className="block text-[11px] font-medium text-slate-400 mb-1">Brand</label>
-            <select
+            <UnifiedBrandSelector
               value={brandId}
-              onChange={e => setBrandId(e.target.value)}
-              className="w-full px-3 py-1.5 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs focus:outline-none focus:border-amber-400"
-            >
-              <option value="">All Brands</option>
-              {brands.map(b => (
-                <option key={b.id} value={b.id}>
-                  {b.name}
-                </option>
-              ))}
-            </select>
+              onChange={(id) => setBrandId(id)}
+              categories={categories}
+              categoryId={categoryId || undefined}
+              placeholder="All Brands"
+              allowClear={true}
+            />
           </div>
 
           <div>

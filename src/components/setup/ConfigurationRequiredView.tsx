@@ -28,11 +28,12 @@ export const ConfigurationRequiredView: React.FC<ConfigurationRequiredViewProps>
     }
   };
 
-  const sampleEnv = `# LiquorFlow Production Supabase Credentials
+  const sampleEnv = `# LiquorFlow Production Credentials
 NEXT_PUBLIC_SUPABASE_URL="https://your-project.supabase.co"
 NEXT_PUBLIC_SUPABASE_ANON_KEY="eyJhbGciOi..."
 SUPABASE_SERVICE_ROLE_KEY="eyJhbGciOi..."
-SESSION_SECRET="${Math.random().toString(36).substring(2) + Math.random().toString(36).substring(2)}"`;
+LOGIN_MOBILE_NUMBER="9876543210"
+LOGIN_PASSWORD="your-secure-password"`;
 
   const copyEnv = () => {
     navigator.clipboard.writeText(sampleEnv);
@@ -66,7 +67,7 @@ SESSION_SECRET="${Math.random().toString(36).substring(2) + Math.random().toStri
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             {(missingVariables.length > 0
               ? missingVariables
-              : ['NEXT_PUBLIC_SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'SESSION_SECRET']
+              : ['NEXT_PUBLIC_SUPABASE_URL', 'NEXT_PUBLIC_SUPABASE_ANON_KEY', 'SUPABASE_SERVICE_ROLE_KEY']
             ).map(varName => (
               <div
                 key={varName}
