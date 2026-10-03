@@ -51,11 +51,14 @@ export async function apiFetch<T = any>(
       data = JSON.parse(text);
     } catch {
       console.error(`[API] Received non-JSON response (${res.status}) from ${url}:`, text.substring(0, 200));
+      const isHtml = text.trim().startsWith('<!DOCTYPE') || text.trim().startsWith('<html') || text.trim().startsWith('<head');
       return {
         success: false,
         error: {
           code: 'INVALID_SERVER_RESPONSE',
-          message: `Server returned an invalid response (${res.status}). Please verify server configuration.`,
+          message: isHtml 
+            ? `Server returned HTML instead of JSON (${res.status}). The backend server might be restarting or the route is invalid.`
+            : `Server returned an invalid response (${res.status}). Please verify server configuration.`,
         },
       };
     }

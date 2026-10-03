@@ -467,8 +467,8 @@ export const translations: Record<SupportedLanguage, TranslationDictionary> = {
     settingUp: 'Configuring your business...',
 
     // Login
-    loginHeading: 'Login to Elite24',
-    loginSubheading: 'Manage daily property consulting operations',
+    loginHeading: 'Login to LiquorFlow',
+    loginSubheading: 'Manage daily bar & retail operations',
     loginButton: 'Login',
     loggingIn: 'Authenticating...',
     invalidCredentialsAlert: 'Invalid username or password',

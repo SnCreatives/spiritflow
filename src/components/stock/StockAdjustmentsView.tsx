@@ -21,6 +21,7 @@ import { translations } from '../../utils/i18n';
 import { BulkImportDialog } from '../common/BulkImportDialog';
 import { ProductPackSizeSelector } from '../common/ProductPackSizeSelector';
 import { useBar } from '../../lib/contexts/BarContext';
+import { useToast } from '../../lib/contexts/ToastContext';
 
 interface StockAdjustmentsViewProps {
   language: SupportedLanguage;
@@ -30,6 +31,7 @@ interface StockAdjustmentsViewProps {
 export const StockAdjustmentsView: React.FC<StockAdjustmentsViewProps> = ({ language, selectedBarId }) => {
   const t = translations[language];
   const { selectedBar } = useBar();
+  const { showSuccess, showError } = useToast();
 
   const [adjustments, setAdjustments] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
@@ -55,9 +57,13 @@ export const StockAdjustmentsView: React.FC<StockAdjustmentsViewProps> = ({ lang
 
   const fetchData = async () => {
     setLoading(true);
+    setAdjustments([]);
     try {
+      const adjUrl = activeBarId
+        ? `/api/inventory/adjustments?barId=${encodeURIComponent(activeBarId)}`
+        : '/api/inventory/adjustments';
       const [adjData, prodData] = await Promise.all([
-        apiGet('/api/inventory/adjustments'),
+        apiGet(adjUrl),
         apiGet('/api/products/selection'),
       ]);
 
@@ -78,13 +84,11 @@ export const StockAdjustmentsView: React.FC<StockAdjustmentsViewProps> = ({ lang
     }
   };
 
-  useEffect(() => {
-    if (selectedBarId) {
+  const activeBarId = selectedBarId || selectedBar?.id;
 
+  useEffect(() => {
     fetchData();
-  
-    }
-  }, [selectedBarId]);
+  }, [activeBarId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -98,6 +102,7 @@ export const StockAdjustmentsView: React.FC<StockAdjustmentsViewProps> = ({ lang
 
     try {
       const result = await apiPost('/api/inventory/adjustments', {
+        barId: activeBarId,
         adjustmentNumber: formData.adjustmentNumber,
         adjustmentDate: formData.adjustmentDate,
         productId: formData.productId,
@@ -117,7 +122,7 @@ export const StockAdjustmentsView: React.FC<StockAdjustmentsViewProps> = ({ lang
         type: 'success',
         message: `Stock adjustment #${formData.adjustmentNumber} processed! New stock: ${result.data?.newStock} units.`,
       });
-
+      showSuccess(`Stock adjustment #${formData.adjustmentNumber} processed successfully!`);
       setFormData(prev => ({
         ...prev,
         adjustmentNumber: `ADJ-${new Date().getFullYear()}-${Date.now().toString().slice(-5)}`,
@@ -129,6 +134,7 @@ export const StockAdjustmentsView: React.FC<StockAdjustmentsViewProps> = ({ lang
       fetchData();
     } catch (err: any) {
       setFeedback({ type: 'error', message: err.message });
+      showError(err.message || 'Failed to record stock adjustment');
     } finally {
       setSaving(false);
     }

@@ -2,6 +2,8 @@ import { Pool } from 'pg';
 
 const PASSWORDS = [
   'Liquorflow9699',
+  'Atul@spiritflow',
+  'Atul@spiritflow9699',
   'LiquorFlow9699',
   'liquorflow9699',
   'Liquorflow@9699',

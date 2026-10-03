@@ -50,6 +50,7 @@ export interface Category {
   id: string;
   name: string;
   code: string;
+  sales_tax_rate?: number;
   active: boolean;
   created_at: string;
 }
@@ -107,7 +108,8 @@ export interface Product {
 export interface BarOutlet {
   id: string;
   name: string;
-  code: string;
+  owner_user_id?: string | null;
+  code?: string;
   address?: string | null;
   city?: string | null;
   state?: string | null;
@@ -116,6 +118,16 @@ export interface BarOutlet {
   phone?: string | null;
   email?: string | null;
   license_number?: string | null;
+  status: 'Active' | 'Inactive';
+  created_at: string;
+  updated_at: string;
+}
+
+export interface BarUserAuthorization {
+  id: string;
+  bar_id: string;
+  user_id: string;
+  role: string;
   status: 'Active' | 'Inactive';
   created_at: string;
   updated_at: string;
@@ -142,24 +154,29 @@ export interface Customer {
 export interface Purchase {
   id: string;
   bar_id: string;
-  inward_number: string;
+  purchase_number: string;
+  tp_number: string;
+  serial_number: number;
   purchase_date: string;
-  tp_permit_ref: string | null;
-  total_amount: number;
+  tp_permit_reference: string | null;
+  excise_reference: string | null;
+  document_reference: string | null;
+  total_value: number;
   remarks: string | null;
   created_at: string;
+  updated_at: string;
 }
 
 export interface PurchaseItem {
   id: string;
   purchase_id: string;
+  bar_id: string;
   product_id: string;
   batch_id?: string | null;
   quantity: number;
-  purchase_tp_price?: number;
-  purchase_price?: number;
-  total_value?: number;
-  total?: number;
+  purchase_tp_price: number;
+  total_value: number;
+  mrp_reference: number;
   product?: Product;
 }
 
@@ -290,6 +307,17 @@ export interface StockLedgerRecord {
   product?: Product;
 }
 
+export interface ScmCode {
+  id: string;
+  product_id: string;
+  scm_code: string;
+  effective_from: string;
+  effective_to: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 // API Response Standard
 export interface ApiSuccessResponse<T> {
   success: true;
@@ -331,6 +359,9 @@ export interface AuthUser {
   mobile_number: string;
   business_name: string;
   selected_language: SupportedLanguage;
+  username?: string;
+  email?: string;
+  role?: string;
   bars?: BarOutlet[];
 }
 

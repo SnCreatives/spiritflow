@@ -1,6 +1,7 @@
-import { getSupabaseServiceClient } from '../../lib/supabase/client.js';
+import { getSupabaseServiceClient, checkDbHasBarId } from '../../lib/supabase/client.js';
 import { StockTransactionType, DashboardStats, InventoryRecord, StockLedgerRecord } from '../../types/index.js';
 import { BarStoreService } from './barStoreService.js';
+import { ProductMasterService } from './productMasterService.js';
 
 export class InventoryService {
   /**
@@ -62,31 +63,37 @@ export class InventoryService {
 
     const tpPrice = data.purchaseTpPrice !== undefined ? data.purchaseTpPrice : Number(product.purchase_tp_price || 0);
 
+    const hasBarId = await checkDbHasBarId();
+
     // Optional batch record
     let batchId: string | null = null;
     if (data.batchNumber) {
+      const batchPayload: any = {
+        product_id: data.productId,
+        batch_number: data.batchNumber,
+        quantity: data.quantity,
+        purchase_tp_value: data.quantity * tpPrice,
+        remarks: data.remarks || 'Opening stock batch',
+      };
+      if (hasBarId && data.barId) batchPayload.bar_id = data.barId;
+
       const { data: batch } = await supabase
         .from('batches')
-        .insert({
-          bar_id: data.barId,
-          product_id: data.productId,
-          batch_number: data.batchNumber,
-          quantity: data.quantity,
-          purchase_tp_value: data.quantity * tpPrice,
-          remarks: data.remarks || 'Opening stock batch',
-        })
+        .insert(batchPayload)
         .select('id')
         .single();
       if (batch) batchId = batch.id;
     }
 
     // Check existing inventory
-    const { data: existingInv } = await supabase
+    let invQuery = supabase
       .from('inventory')
       .select('*')
-      .eq('product_id', data.productId)
-      .eq('bar_id', data.barId)
-      .maybeSingle();
+      .eq('product_id', data.productId);
+    if (hasBarId && data.barId) {
+      invQuery = invQuery.eq('bar_id', data.barId);
+    }
+    const { data: existingInv } = await invQuery.maybeSingle();
 
     let newCurrent = 0;
     if (existingInv) {
@@ -96,7 +103,7 @@ export class InventoryService {
       const returned = Number(existingInv.returned_quantity || 0);
       newCurrent = data.quantity + purchased + adjustments + returned;
 
-      await supabase
+      let updateQuery = supabase
         .from('inventory')
         .update({
           opening_quantity: data.quantity,
@@ -104,12 +111,14 @@ export class InventoryService {
           stock_value: newCurrent * tpPrice,
           updated_at: new Date().toISOString(),
         })
-        .eq('product_id', data.productId)
-        .eq('bar_id', data.barId);
+        .eq('product_id', data.productId);
+      if (hasBarId && data.barId) {
+        updateQuery = updateQuery.eq('bar_id', data.barId);
+      }
+      await updateQuery;
     } else {
       newCurrent = data.quantity;
-      await supabase.from('inventory').insert({
-        bar_id: data.barId,
+      const invPayload: any = {
         product_id: data.productId,
         opening_quantity: data.quantity,
         purchased_quantity: 0,
@@ -117,12 +126,14 @@ export class InventoryService {
         returned_quantity: 0,
         current_quantity: newCurrent,
         stock_value: newCurrent * tpPrice,
-      });
+      };
+      if (hasBarId && data.barId) invPayload.bar_id = data.barId;
+
+      await supabase.from('inventory').insert(invPayload);
     }
 
     // Record in Stock Ledger
-    await supabase.from('stock_ledger').insert({
-      bar_id: data.barId,
+    const ledgerPayload: any = {
       product_id: data.productId,
       transaction_date: new Date().toISOString(),
       transaction_type: 'OPENING',
@@ -132,7 +143,10 @@ export class InventoryService {
       balance: newCurrent,
       remarks: data.remarks || 'Initial opening balance',
       import_batch_id: (data as any).import_batch_id || null,
-    });
+    };
+    if (hasBarId && data.barId) ledgerPayload.bar_id = data.barId;
+
+    await supabase.from('stock_ledger').insert(ledgerPayload);
 
     return {
       productId: data.productId,
@@ -171,7 +185,7 @@ export class InventoryService {
 
     const supabase = getSupabaseServiceClient();
 
-    // Validate quantities and prices
+    // Validate quantities, prices, and active product status
     for (const item of purchaseData.items) {
       if (item.quantity <= 0) {
         throw new Error('Purchase item quantity must be greater than zero');
@@ -179,6 +193,7 @@ export class InventoryService {
       if (item.purchaseTpPrice < 0) {
         throw new Error('Purchase TP price cannot be negative');
       }
+      await ProductMasterService.assertProductActiveForTransaction(item.productId);
     }
 
     const totalValue = purchaseData.items.reduce(
@@ -186,20 +201,28 @@ export class InventoryService {
       0
     );
 
+    if (!purchaseData.barId || purchaseData.barId === 'ALL_BARS') {
+      throw new Error('Please select a bar before creating this transaction.');
+    }
+
+    const hasBarId = await checkDbHasBarId();
+
     // 1. Create Purchase Record
+    const purchasePayload: any = {
+      purchase_number: purchaseData.purchaseNumber,
+      purchase_date: purchaseData.purchaseDate || new Date().toISOString().split('T')[0],
+      tp_permit_reference: purchaseData.tpPermitReference || null,
+      excise_reference: purchaseData.exciseReference || null,
+      document_reference: purchaseData.documentReference || null,
+      total_value: totalValue,
+      remarks: purchaseData.remarks || null,
+      import_batch_id: (purchaseData as any).import_batch_id || null,
+      bar_id: purchaseData.barId,
+    };
+
     const { data: purchase, error: pError } = await supabase
       .from('purchases')
-      .insert({
-        bar_id: purchaseData.barId,
-        purchase_number: purchaseData.purchaseNumber,
-        purchase_date: purchaseData.purchaseDate || new Date().toISOString().split('T')[0],
-        tp_permit_reference: purchaseData.tpPermitReference || null,
-        excise_reference: purchaseData.exciseReference || null,
-        document_reference: purchaseData.documentReference || null,
-        total_value: totalValue,
-        remarks: purchaseData.remarks || null,
-        import_batch_id: (purchaseData as any).import_batch_id || null,
-      })
+      .insert(purchasePayload)
       .select('id, purchase_number, total_value')
       .single();
 
@@ -217,40 +240,48 @@ export class InventoryService {
       // Create batch record if batch number provided
       let batchId: string | null = null;
       if (item.batchNumber) {
+        const batchPayload: any = {
+          product_id: item.productId,
+          batch_number: item.batchNumber,
+          quantity: item.quantity,
+          purchase_tp_value: itemTotal,
+          mrp_reference: item.mrpReference || 0,
+          excise_reference: purchaseData.exciseReference || null,
+          document_reference: purchaseData.documentReference || null,
+        };
+        if (hasBarId && purchaseData.barId) batchPayload.bar_id = purchaseData.barId;
+
         const { data: batch } = await supabase
           .from('batches')
-          .insert({
-            bar_id: purchaseData.barId,
-            product_id: item.productId,
-            batch_number: item.batchNumber,
-            quantity: item.quantity,
-            purchase_tp_value: itemTotal,
-            mrp_reference: item.mrpReference || 0,
-            excise_reference: purchaseData.exciseReference || null,
-            document_reference: purchaseData.documentReference || null,
-          })
+          .insert(batchPayload)
           .select('id')
           .single();
         if (batch) batchId = batch.id;
       }
 
       // Insert Purchase Item
-      await supabase.from('purchase_items').insert({
+      const itemPayload: any = {
         purchase_id: purchase.id,
         product_id: item.productId,
         batch_id: batchId,
         quantity: item.quantity,
         purchase_tp_price: item.purchaseTpPrice,
         total_value: itemTotal,
-      });
+      };
+      if (hasBarId && purchaseData.barId) {
+        itemPayload.bar_id = purchaseData.barId;
+      }
+      await supabase.from('purchase_items').insert(itemPayload);
 
       // Update Inventory
-      const { data: currentInv } = await supabase
+      let invQuery = supabase
         .from('inventory')
         .select('*')
-        .eq('product_id', item.productId)
-        .eq('bar_id', purchaseData.barId)
-        .maybeSingle();
+        .eq('product_id', item.productId);
+      if (hasBarId && purchaseData.barId) {
+        invQuery = invQuery.eq('bar_id', purchaseData.barId);
+      }
+      const { data: currentInv } = await invQuery.maybeSingle();
 
       let newCurrentStock = item.quantity;
       if (currentInv) {
@@ -260,7 +291,7 @@ export class InventoryService {
         const returned = Number(currentInv.returned_quantity || 0);
         newCurrentStock = opening + newPurchased + adjustments + returned;
 
-        await supabase
+        let updateQuery = supabase
           .from('inventory')
           .update({
             purchased_quantity: newPurchased,
@@ -268,11 +299,13 @@ export class InventoryService {
             stock_value: newCurrentStock * item.purchaseTpPrice,
             updated_at: new Date().toISOString(),
           })
-          .eq('product_id', item.productId)
-          .eq('bar_id', purchaseData.barId);
+          .eq('product_id', item.productId);
+        if (hasBarId && purchaseData.barId) {
+          updateQuery = updateQuery.eq('bar_id', purchaseData.barId);
+        }
+        await updateQuery;
       } else {
-        await supabase.from('inventory').insert({
-          bar_id: purchaseData.barId,
+        const invPayload: any = {
           product_id: item.productId,
           opening_quantity: 0,
           purchased_quantity: item.quantity,
@@ -280,12 +313,14 @@ export class InventoryService {
           returned_quantity: 0,
           current_quantity: item.quantity,
           stock_value: itemTotal,
-        });
+        };
+        if (hasBarId && purchaseData.barId) invPayload.bar_id = purchaseData.barId;
+
+        await supabase.from('inventory').insert(invPayload);
       }
 
       // Record in Stock Ledger
-      await supabase.from('stock_ledger').insert({
-        bar_id: purchaseData.barId,
+      const ledgerPayload: any = {
         product_id: item.productId,
         transaction_date: new Date().toISOString(),
         transaction_type: 'PURCHASE',
@@ -295,7 +330,10 @@ export class InventoryService {
         stock_out: 0,
         balance: newCurrentStock,
         remarks: `Inward Purchase #${purchase.purchase_number}`,
-      });
+      };
+      if (hasBarId && purchaseData.barId) ledgerPayload.bar_id = purchaseData.barId;
+
+      await supabase.from('stock_ledger').insert(ledgerPayload);
 
       // Link Excise Document Reference if TP permit or excise ref present
       if (purchaseData.tpPermitReference || purchaseData.exciseReference) {
@@ -607,8 +645,11 @@ export class InventoryService {
     const defaultBar = Object.values(barMap)[0] || null;
     const selectedBar = params?.barId && params.barId !== 'ALL_BARS' ? (barMap[params.barId] || defaultBar) : defaultBar;
 
+    const hasBarId = await checkDbHasBarId();
+
     let query = supabase.from('inventory').select(`
       id,
+      bar_id,
       product_id,
       opening_quantity,
       purchased_quantity,
@@ -629,6 +670,16 @@ export class InventoryService {
         pack_size:pack_sizes(name, volume_ml, pack_type)
       )
     `);
+
+    if (hasBarId) {
+      if (params?.barId && params.barId !== 'ALL_BARS') {
+        query = query.eq('bar_id', params.barId);
+      } else if (params?.barIds && params.barIds.length > 0) {
+        query = query.in('bar_id', params.barIds);
+      } else {
+        throw new Error('Please select a bar to view this inventory.');
+      }
+    }
 
     const { data, error } = await query;
     if (error) {
@@ -680,6 +731,7 @@ export class InventoryService {
       .select(`
         id,
         product_id,
+        bar_id,
         transaction_date,
         transaction_type,
         reference_id,
@@ -689,10 +741,24 @@ export class InventoryService {
         balance,
         remarks,
         created_at,
-        product:products(id, name, product_name, sku)
+        product:products(
+          id,
+          name,
+          product_name,
+          sku,
+          category:categories(id, name),
+          brand:brands(id, name, brand_name),
+          pack_size:pack_sizes(id, name, volume_ml, pack_type)
+        )
       `);
 
     query = query.order('created_at', { ascending: false }).limit(limit);
+
+    if (singleBarId) {
+      query = query.eq('bar_id', singleBarId);
+    } else if (Array.isArray(barIdOrIds) && barIdOrIds.length > 0) {
+      query = query.in('bar_id', barIdOrIds);
+    }
 
     if (productId) {
       query = query.eq('product_id', productId);
@@ -705,8 +771,8 @@ export class InventoryService {
 
     const records = ((data as unknown as StockLedgerRecord[]) || []).map(r => ({
       ...r,
-      bar_id: (r as any).bar_id || selectedBar.id,
-      bar: ((r as any).bar_id ? barMap[(r as any).bar_id] : null) || selectedBar,
+      bar_id: (r as any).bar_id || selectedBar?.id || '',
+      bar: ((r as any).bar_id ? barMap[(r as any).bar_id] : null) || selectedBar || null,
     }));
 
     return records;
@@ -720,17 +786,41 @@ export class InventoryService {
     const supabase = getSupabaseServiceClient();
     const today = new Date().toISOString().split('T')[0];
 
+    // Resolve target scope
+    let selectedBarId: string | undefined = undefined;
+    let selectedBarIds: string[] | undefined = undefined;
+
+    if (typeof params === 'string') {
+      if (params !== 'ALL_BARS') {
+        selectedBarId = params;
+      }
+    } else if (params && typeof params === 'object') {
+      if (params.barId && params.barId !== 'ALL_BARS') {
+        selectedBarId = params.barId;
+      } else if (Array.isArray(params.authorizedBarIds) && params.authorizedBarIds.length > 0) {
+        selectedBarIds = params.authorizedBarIds;
+      }
+    }
+
     // Today's Inward Purchases
-    const { data: todayPurchases } = await supabase
+    let purchasesQuery = supabase
       .from('purchases')
       .select('*')
       .eq('purchase_date', today);
+    if (selectedBarId) {
+      purchasesQuery = purchasesQuery.eq('bar_id', selectedBarId);
+    } else if (selectedBarIds) {
+      purchasesQuery = purchasesQuery.in('bar_id', selectedBarIds);
+    } else {
+      purchasesQuery = purchasesQuery.eq('bar_id', '00000000-0000-0000-0000-000000000000');
+    }
+    const { data: todayPurchases } = await purchasesQuery;
 
     const todaysPurchases =
       todayPurchases?.reduce((sum, p: any) => sum + Number(p.total_value || p.total_amount || 0), 0) || 0;
 
     // Current Stock & Valuation
-    const { data: invList } = await supabase.from('inventory').select(`
+    let invQuery = supabase.from('inventory').select(`
         *,
         product:products(
           id,
@@ -741,6 +831,14 @@ export class InventoryService {
           category:categories(name)
         )
       `);
+    if (selectedBarId) {
+      invQuery = invQuery.eq('bar_id', selectedBarId);
+    } else if (selectedBarIds) {
+      invQuery = invQuery.in('bar_id', selectedBarIds);
+    } else {
+      invQuery = invQuery.eq('bar_id', '00000000-0000-0000-0000-000000000000');
+    }
+    const { data: invList } = await invQuery;
 
     let currentStockUnits = 0;
     let stockValuation = 0;
@@ -781,7 +879,7 @@ export class InventoryService {
       .eq('status', 'Active');
 
     // Recent stock ledger transactions
-    const { data: recentLedger } = await supabase
+    let ledgerQuery = supabase
       .from('stock_ledger')
       .select(`
         id,
@@ -795,7 +893,15 @@ export class InventoryService {
         remarks,
         created_at,
         product:products(name, product_name)
-      `)
+      `);
+    if (selectedBarId) {
+      ledgerQuery = ledgerQuery.eq('bar_id', selectedBarId);
+    } else if (selectedBarIds) {
+      ledgerQuery = ledgerQuery.in('bar_id', selectedBarIds);
+    } else {
+      ledgerQuery = ledgerQuery.eq('bar_id', '00000000-0000-0000-0000-000000000000');
+    }
+    const { data: recentLedger } = await ledgerQuery
       .order('created_at', { ascending: false })
       .limit(8);
 
@@ -975,11 +1081,9 @@ export class InventoryService {
    */
   static async getPurchases(params?: { barId?: string; search?: string; limit?: number }) {
     const supabase = getSupabaseServiceClient();
-    let query = supabase
-      .from('purchases')
-      .select(`
+    const hasBarId = await checkDbHasBarId();
+    let selectFields = `
         id,
-        bar_id,
         purchase_number,
         purchase_date,
         tp_permit_reference,
@@ -995,13 +1099,31 @@ export class InventoryService {
           quantity,
           purchase_tp_price,
           total_value,
-          product:products(id, name, sku)
+          product:products(
+            id,
+            name,
+            product_name,
+            sku,
+            category:categories(id, name),
+            brand:brands(id, name, brand_name),
+            pack_size:pack_sizes(id, name, volume_ml, pack_type)
+          )
         )
-      `)
+    `;
+    if (hasBarId) {
+      selectFields = `bar_id,\n` + selectFields;
+    }
+
+    let query = supabase
+      .from('purchases')
+      .select(selectFields)
       .order('purchase_date', { ascending: false })
       .limit(params?.limit || 100);
 
-    if (params?.barId) {
+    if (hasBarId) {
+      if (!params?.barId || params.barId === 'ALL_BARS') {
+        throw new Error('Please select a bar to view these purchases.');
+      }
       query = query.eq('bar_id', params.barId);
     }
 
@@ -1016,10 +1138,127 @@ export class InventoryService {
       items = items.filter(
         (p: any) =>
           p.purchase_number?.toLowerCase().includes(q) ||
-          p.tp_permit_reference?.toLowerCase().includes(q)
+          p.tp_permit_reference?.toLowerCase().includes(q) ||
+          (p.items || []).some((item: any) =>
+            item.product?.name?.toLowerCase().includes(q) ||
+            item.product?.product_name?.toLowerCase().includes(q) ||
+            item.product?.brand?.name?.toLowerCase().includes(q) ||
+            item.product?.brand?.brand_name?.toLowerCase().includes(q)
+          )
       );
     }
     return items;
+  }
+
+  /**
+   * Fetch single purchase by ID scoped strictly to authorized barId.
+   * Returns null if purchase doesn't exist or belongs to a different bar (404/no leakage).
+   */
+  static async getPurchaseById(id: string, barId: string) {
+    if (!id || !barId || barId === 'ALL_BARS') {
+      return null;
+    }
+    const supabase = getSupabaseServiceClient();
+    const { data: purchase, error } = await supabase
+      .from('purchases')
+      .select(`
+        id,
+        purchase_number,
+        purchase_date,
+        tp_permit_reference,
+        excise_reference,
+        document_reference,
+        total_value,
+        remarks,
+        bar_id,
+        created_at,
+        items:purchase_items(
+          id,
+          product_id,
+          batch_id,
+          quantity,
+          purchase_tp_price,
+          total_value,
+          bar_id,
+          product:products(
+            id,
+            name,
+            product_name,
+            sku
+          )
+        )
+      `)
+      .eq('id', id)
+      .eq('bar_id', barId)
+      .maybeSingle();
+
+    if (error || !purchase) {
+      return null;
+    }
+    return purchase;
+  }
+
+  /**
+   * Update purchase scoped strictly to authorized barId.
+   * Prevents changing bar_id. Returns null if not found or belongs to another bar.
+   */
+  static async updatePurchase(id: string, barId: string, updates: {
+    remarks?: string;
+    tpPermitReference?: string;
+    exciseReference?: string;
+    documentReference?: string;
+  }) {
+    if (!id || !barId || barId === 'ALL_BARS') {
+      return null;
+    }
+    const existing = await this.getPurchaseById(id, barId);
+    if (!existing) {
+      return null;
+    }
+
+    const payload: any = {};
+    if (updates.remarks !== undefined) payload.remarks = updates.remarks;
+    if (updates.tpPermitReference !== undefined) payload.tp_permit_reference = updates.tpPermitReference;
+    if (updates.exciseReference !== undefined) payload.excise_reference = updates.exciseReference;
+    if (updates.documentReference !== undefined) payload.document_reference = updates.documentReference;
+
+    const supabase = getSupabaseServiceClient();
+    const { data: updated, error } = await supabase
+      .from('purchases')
+      .update(payload)
+      .eq('id', id)
+      .eq('bar_id', barId)
+      .select()
+      .maybeSingle();
+
+    if (error) {
+      throw new Error(`Failed to update purchase: ${error.message}`);
+    }
+    return updated;
+  }
+
+  /**
+   * Delete purchase scoped strictly to authorized barId.
+   * Returns false if not found or belongs to another bar.
+   */
+  static async deletePurchase(id: string, barId: string) {
+    if (!id || !barId || barId === 'ALL_BARS') {
+      return false;
+    }
+    const existing = await this.getPurchaseById(id, barId);
+    if (!existing) {
+      return false;
+    }
+
+    const supabase = getSupabaseServiceClient();
+    // Delete child items first with bar_id constraint
+    await supabase.from('purchase_items').delete().eq('purchase_id', id).eq('bar_id', barId);
+    // Delete parent purchase
+    const { error } = await supabase.from('purchases').delete().eq('id', id).eq('bar_id', barId);
+    if (error) {
+      throw new Error(`Failed to delete purchase: ${error.message}`);
+    }
+    return true;
   }
 
   /**
@@ -1042,12 +1281,24 @@ export class InventoryService {
         reason,
         remarks,
         created_at,
-        product:products(id, name, sku, category:categories(name), brand:brands(name))
+        product:products(
+          id,
+          name,
+          product_name,
+          sku,
+          category:categories(id, name),
+          brand:brands(id, name, brand_name),
+          pack_size:pack_sizes(id, name, volume_ml, pack_type)
+        )
       `)
       .order('adjustment_date', { ascending: false })
       .limit(params?.limit || 100);
 
-    if (params?.barId) {
+    const hasBarId = await checkDbHasBarId();
+    if (hasBarId) {
+      if (!params?.barId || params.barId === 'ALL_BARS') {
+        throw new Error('Please select a bar to view these adjustments.');
+      }
       query = query.eq('bar_id', params.barId);
     }
 
@@ -1071,7 +1322,9 @@ export class InventoryService {
           a.adjustment_number?.toLowerCase().includes(q) ||
           a.reference?.toLowerCase().includes(q) ||
           a.reason?.toLowerCase().includes(q) ||
-          a.product?.name?.toLowerCase().includes(q)
+          a.product?.name?.toLowerCase().includes(q) ||
+          a.product?.product_name?.toLowerCase().includes(q) ||
+          a.product?.brand?.name?.toLowerCase().includes(q)
       );
     }
     return items;
@@ -1099,12 +1352,13 @@ export class InventoryService {
         product:products(
           id,
           name,
+          product_name,
           sku,
-          mrp,
-          purchase_price,
-          category:categories(name),
-          brand:brands(name),
-          pack_size:pack_sizes(name, volume_ml)
+          mrp_reference,
+          purchase_tp_price,
+          category:categories(id, name),
+          brand:brands(id, name, brand_name),
+          pack_size:pack_sizes(id, name, volume_ml, pack_type)
         )
       `)
       .in('transaction_type', ['OPENING', 'Opening'])
@@ -1146,7 +1400,15 @@ export class InventoryService {
         document_reference,
         remarks,
         created_at,
-        product:products(id, name, sku, category:categories(name), brand:brands(name))
+        product:products(
+          id,
+          name,
+          product_name,
+          sku,
+          category:categories(id, name),
+          brand:brands(id, name, brand_name),
+          pack_size:pack_sizes(id, name, volume_ml, pack_type)
+        )
       `)
       .order('batch_date', { ascending: false });
 
@@ -1170,7 +1432,9 @@ export class InventoryService {
         (b: any) =>
           b.batch_number?.toLowerCase().includes(q) ||
           b.excise_reference?.toLowerCase().includes(q) ||
-          b.product?.name?.toLowerCase().includes(q)
+          b.product?.name?.toLowerCase().includes(q) ||
+          b.product?.product_name?.toLowerCase().includes(q) ||
+          b.product?.brand?.name?.toLowerCase().includes(q)
       );
     }
     return items;

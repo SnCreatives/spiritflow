@@ -87,8 +87,10 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ language }) => {
   const fetchInventory = async () => {
     setLoading(true);
     setError(null);
+    setItems([]);
     try {
-      const data = await apiGet(`/api/inventory?search=${encodeURIComponent(search)}&lowStockOnly=${lowStockFilter}`);
+      const barParam = selectedBar?.id ? `&barId=${encodeURIComponent(selectedBar.id)}` : '';
+      const data = await apiGet(`/api/inventory?search=${encodeURIComponent(search)}&lowStockOnly=${lowStockFilter}${barParam}`);
       if (!data.success) {
         throw new Error(data.error?.message || 'Failed to fetch inventory');
       }
@@ -101,8 +103,10 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ language }) => {
   };
 
   const fetchLedger = async () => {
+    setLedger([]);
     try {
-      const data = await apiGet('/api/inventory/ledger');
+      const ledgerUrl = selectedBar?.id ? `/api/inventory/ledger?barId=${encodeURIComponent(selectedBar.id)}` : '/api/inventory/ledger';
+      const data = await apiGet(ledgerUrl);
       if (data.success) {
         setLedger(data.data?.ledger || []);
       }
@@ -146,6 +150,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ language }) => {
     setFeedback(null);
     try {
       const data = await apiPost('/api/inventory/purchases', {
+        barId: selectedBar?.id,
         purchaseNumber: inwardForm.purchaseNumber || `PO-${Date.now().toString().slice(-6)}`,
         purchaseDate: inwardForm.purchaseDate,
         tpPermitReference: inwardForm.tpPermitReference || null,

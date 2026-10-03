@@ -376,58 +376,21 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               <span>Appearance & Color Theme</span>
             </h3>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {/* Dark Theme Card */}
-              <button
-                type="button"
-                onClick={() => setTheme('dark')}
-                className={`p-4 rounded-xl border flex items-center justify-between text-left transition-all cursor-pointer ${
-                  theme === 'dark'
-                    ? 'bg-amber-500/10 border-amber-500 text-white shadow-md shadow-amber-500/5'
-                    : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-200'
-                }`}
-              >
+            <div className="grid grid-cols-1 gap-4">
+              <div className="p-4 rounded-xl border border-amber-500 bg-amber-500/10 text-slate-900 flex items-center justify-between shadow-xs">
                 <div className="flex items-center gap-3">
-                  <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800 text-amber-400">
-                    <Moon className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <div className="text-sm font-bold">Dark Mode</div>
-                    <div className="text-xs opacity-70">Deep slate background, high contrast for low-light environments</div>
-                  </div>
-                </div>
-                {theme === 'dark' && (
-                  <span className="text-xs font-bold text-amber-400 px-2 py-0.5 rounded bg-amber-500/20 border border-amber-500/40">
-                    Active
-                  </span>
-                )}
-              </button>
-
-              {/* Light Theme Card */}
-              <button
-                type="button"
-                onClick={() => setTheme('light')}
-                className={`p-4 rounded-xl border flex items-center justify-between text-left transition-all cursor-pointer ${
-                  theme === 'light'
-                    ? 'bg-amber-500/10 border-amber-500 text-slate-900 shadow-md shadow-amber-500/5'
-                    : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-200'
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <div className="p-2.5 rounded-lg bg-slate-100 border border-slate-200 text-indigo-600">
+                  <div className="p-2.5 rounded-lg bg-slate-100 border border-slate-200 text-amber-600">
                     <Sun className="w-5 h-5" />
                   </div>
                   <div>
-                    <div className="text-sm font-bold">Light Mode</div>
-                    <div className="text-xs opacity-70">Clean bright background, high contrast for bright environments</div>
+                    <div className="text-sm font-bold text-slate-900">Light ERP Theme</div>
+                    <div className="text-xs text-slate-600">Clean white/slate background, high contrast professional ERP styling</div>
                   </div>
                 </div>
-                {theme === 'light' && (
-                  <span className="text-xs font-bold text-amber-500 px-2 py-0.5 rounded bg-amber-500/20 border border-amber-500/40">
-                    Active
-                  </span>
-                )}
-              </button>
+                <span className="text-xs font-bold text-amber-800 px-2.5 py-0.5 rounded-full bg-amber-100 border border-amber-300">
+                  Active
+                </span>
+              </div>
             </div>
           </div>
           <div className="flex justify-end pt-4 border-t border-slate-800">

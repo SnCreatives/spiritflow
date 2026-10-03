@@ -63,6 +63,7 @@ export function validateEnvironmentConfig(): EnvValidationResult {
     DEFAULT_SUPABASE_ANON_KEY;
 
   const supabaseServiceRoleKey =
+    process.env.SUPABASE_SECRET_KEY?.trim() ||
     process.env.STORAGE_SUPABASE_SERVICE_ROLE_KEY?.trim() ||
     process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() ||
     DEFAULT_SUPABASE_SERVICE_ROLE_KEY;

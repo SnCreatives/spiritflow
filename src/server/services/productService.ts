@@ -11,6 +11,7 @@ import {
   ProductUpdateSchema,
 } from '../../lib/validation/inventory.js';
 import { compareCanonicalBrands } from '../../utils/canonicalBrands.js';
+import { ProductMasterService } from './productMasterService.js';
 
 export class ProductService {
   /**
@@ -190,7 +191,7 @@ export class ProductService {
       );
     }
 
-    // 4. Strict Server-Side Pack Size Validation & Category Linkage
+    // 4. Strict Server-Side Pack Size Validation
     const { data: packSize, error: packError } = await supabase
       .from('pack_sizes')
       .select('id, name, category_id, volume_ml, pack_type')
@@ -201,18 +202,32 @@ export class ProductService {
       throw new Error('Selected Pack Size does not exist');
     }
 
-    if (packSize.category_id !== validData.categoryId) {
-      throw new Error(
-        `Invalid category-pack size combination: Pack size "${packSize.name}" does not belong to category "${category.name}".`
-      );
-    }
+    const productType = ProductMasterService.resolveProductType(category.name || category.code);
+    const isWhisky = category.name.toLowerCase().includes('whisky') || category.name.toLowerCase().includes('whiskey');
+    ProductMasterService.validateBottleSize(productType, Number(packSize.volume_ml), isWhisky);
 
     // Strict constraint: Do not allow 500 ml Pint
     if (packSize.volume_ml === 500 && packSize.pack_type?.toLowerCase() === 'pint') {
       throw new Error('Invalid pack specification: 500 ml cannot be classified as Pint.');
     }
 
-    // 5. Generate SKU if missing
+    const packType = validData.packType || packSize.pack_type || 'Bottle';
+
+    // 5. Check for Duplicate Master Product (Brand + Variant + Size + Packaging)
+    const variantName = validData.name.trim();
+    const { data: existingDup } = await supabase
+      .from('products')
+      .select('id, name')
+      .eq('brand_id', validData.brandId)
+      .eq('pack_size_id', validData.packSizeId)
+      .ilike('name', variantName)
+      .maybeSingle();
+
+    if (existingDup) {
+      throw new Error(`Duplicate product rejected: A product with brand "${brand.name || brand.brand_name}", variant "${variantName}", and size "${packSize.name}" already exists.`);
+    }
+
+    // 6. Generate SKU if missing
     let sku = validData.sku?.trim() || null;
     if (!sku) {
       const bName = brand.name || brand.brand_name || 'PROD';
@@ -220,8 +235,6 @@ export class ProductService {
       const cleanCat = category.code.substring(0, 3).toUpperCase();
       sku = `${cleanCat}-${cleanBrand}-${packSize.volume_ml}`;
     }
-
-    const packType = validData.packType || packSize.pack_type || 'Bottle';
 
     // 7. Insert Product Record
     const { data: product, error: insertError } = await supabase
@@ -254,25 +267,27 @@ export class ProductService {
       throw new Error(`Failed to create product: ${insertError?.message || 'Database error'}`);
     }
 
-    // 8. Initialize Inventory Record
+    // 8. Initialize Bar-Scoped Inventory Record if barId is provided
+    const barId = (input as any).barId;
     const openingStock = Math.max(0, validData.openingStock || 0);
-    const { error: invError } = await supabase.from('inventory').insert({
-      product_id: product.id,
-      opening_quantity: openingStock,
-      current_quantity: openingStock,
-      purchased_quantity: 0,
-      adjustment_quantity: 0,
-      returned_quantity: 0,
-      stock_value: openingStock * (validData.purchasePrice || 0),
-    });
+    if (barId && barId !== 'ALL_BARS' && openingStock > 0) {
+      const { error: invError } = await supabase.from('inventory').insert({
+        bar_id: barId,
+        product_id: product.id,
+        opening_quantity: openingStock,
+        current_quantity: openingStock,
+        purchased_quantity: 0,
+        adjustment_quantity: 0,
+        returned_quantity: 0,
+        stock_value: openingStock * (validData.purchasePrice || 0),
+      });
 
-    if (invError) {
-      console.error('Warning: failed to create inventory row:', invError.message);
-    }
+      if (invError) {
+        console.error('Warning: failed to create inventory row:', invError.message);
+      }
 
-    // 9. If opening stock > 0, write entry to stock ledger
-    if (openingStock > 0) {
       await supabase.from('stock_ledger').insert({
+        bar_id: barId,
         product_id: product.id,
         transaction_type: 'OPENING',
         reference_type: 'INITIAL_STOCK',
@@ -283,7 +298,6 @@ export class ProductService {
         unit_price: validData.purchasePrice || 0,
         total_value: openingStock * (validData.purchasePrice || 0),
         remarks: 'Opening stock recorded upon product master registration',
-        import_batch_id: (input as any).import_batch_id || null,
       });
     }
 

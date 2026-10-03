@@ -33,28 +33,14 @@ export class MasterService {
     const { data, error } = await supabase
       .from('categories')
       .select('id, name, code, active, created_at')
-      .eq('active', true);
+      .eq('active', true)
+      .order('name', { ascending: true });
 
     if (error) {
       throw new Error(`Failed to fetch categories: ${error.message}`);
     }
 
-    const canonicalSet = new Set(CANONICAL_CATEGORY_ORDER.map(c => c.toLowerCase()));
-    const filtered = ((data as Category[]) || []).filter(c =>
-      canonicalSet.has(c.name.toLowerCase())
-    );
-
-    filtered.sort((a, b) => {
-      const idxA = CANONICAL_CATEGORY_ORDER.findIndex(
-        c => c.toLowerCase() === a.name.toLowerCase()
-      );
-      const idxB = CANONICAL_CATEGORY_ORDER.findIndex(
-        c => c.toLowerCase() === b.name.toLowerCase()
-      );
-      return (idxA === -1 ? 99 : idxA) - (idxB === -1 ? 99 : idxB);
-    });
-
-    return filtered;
+    return (data as Category[]) || [];
   }
 
   // ==========================================
@@ -820,7 +806,7 @@ export class MasterService {
   static async createBar(
     data: {
       name: string;
-      code: string;
+      code?: string | null;
       address?: string | null;
       city?: string | null;
       state?: string | null;

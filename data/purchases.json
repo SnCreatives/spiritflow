@@ -1,5 +1,141 @@
 [
   {
+    "id": "f0512ac8-0f2f-4036-99c8-3284c96281e9",
+    "bar_id": "aed17417-ff64-48b1-a698-dfb9e8bab282",
+    "purchase_number": "PO-BETA-7269",
+    "purchase_date": "2026-09-30",
+    "tp_permit_reference": null,
+    "excise_reference": null,
+    "document_reference": "[BAR_ID:aed17417-ff64-48b1-a698-dfb9e8bab282]",
+    "total_value": 10000,
+    "remarks": "[BAR_ID:aed17417-ff64-48b1-a698-dfb9e8bab282]",
+    "created_at": "2026-09-30T07:22:19.831Z",
+    "updated_at": "2026-09-30T07:22:19.831Z",
+    "items": [
+      {
+        "id": "bfec7470-b358-40da-b77d-ef9d0c00f094",
+        "purchase_id": "f0512ac8-0f2f-4036-99c8-3284c96281e9",
+        "bar_id": "aed17417-ff64-48b1-a698-dfb9e8bab282",
+        "product_id": "prod-test-7269",
+        "batch_id": null,
+        "quantity": 25,
+        "purchase_tp_price": 400,
+        "total_value": 10000,
+        "mrp_reference": 550,
+        "batch_number": null,
+        "product": {
+          "id": "prod-test-7269",
+          "name": "Product",
+          "product_name": "Product",
+          "purchase_tp_price": 400,
+          "mrp_reference": 550
+        }
+      }
+    ]
+  },
+  {
+    "id": "1de05901-173d-4a57-93be-6da744219d3b",
+    "bar_id": "726a0566-f141-4586-8fda-84111f4d10d4",
+    "purchase_number": "PO-ALPHA-7269",
+    "purchase_date": "2026-09-30",
+    "tp_permit_reference": null,
+    "excise_reference": null,
+    "document_reference": "[BAR_ID:726a0566-f141-4586-8fda-84111f4d10d4]",
+    "total_value": 20000,
+    "remarks": "[BAR_ID:726a0566-f141-4586-8fda-84111f4d10d4]",
+    "created_at": "2026-09-30T07:22:18.819Z",
+    "updated_at": "2026-09-30T07:22:18.819Z",
+    "items": [
+      {
+        "id": "8c49f7d4-a5eb-4612-a203-b93520aa4627",
+        "purchase_id": "1de05901-173d-4a57-93be-6da744219d3b",
+        "bar_id": "726a0566-f141-4586-8fda-84111f4d10d4",
+        "product_id": "prod-test-7269",
+        "batch_id": null,
+        "quantity": 50,
+        "purchase_tp_price": 400,
+        "total_value": 20000,
+        "mrp_reference": 550,
+        "batch_number": null,
+        "product": {
+          "id": "prod-test-7269",
+          "name": "Product",
+          "product_name": "Product",
+          "purchase_tp_price": 400,
+          "mrp_reference": 550
+        }
+      }
+    ]
+  },
+  {
+    "id": "c677c728-06dd-44bc-8269-bf4299ef2a61",
+    "bar_id": "d09eb834-2cde-46da-8452-b705060056d1",
+    "purchase_number": "PO-BETA-6418",
+    "purchase_date": "2026-09-30",
+    "tp_permit_reference": null,
+    "excise_reference": null,
+    "document_reference": "[BAR_ID:d09eb834-2cde-46da-8452-b705060056d1]",
+    "total_value": 10000,
+    "remarks": "[BAR_ID:d09eb834-2cde-46da-8452-b705060056d1]",
+    "created_at": "2026-09-30T07:20:38.703Z",
+    "updated_at": "2026-09-30T07:20:38.703Z",
+    "items": [
+      {
+        "id": "a4446566-35d7-44e3-a003-fc98064e2666",
+        "purchase_id": "c677c728-06dd-44bc-8269-bf4299ef2a61",
+        "bar_id": "d09eb834-2cde-46da-8452-b705060056d1",
+        "product_id": "prod-test-6418",
+        "batch_id": null,
+        "quantity": 25,
+        "purchase_tp_price": 400,
+        "total_value": 10000,
+        "mrp_reference": 550,
+        "batch_number": null,
+        "product": {
+          "id": "prod-test-6418",
+          "name": "Product",
+          "product_name": "Product",
+          "purchase_tp_price": 400,
+          "mrp_reference": 550
+        }
+      }
+    ]
+  },
+  {
+    "id": "9f75b7ad-239c-4294-9fac-d10ced96c569",
+    "bar_id": "b4da4bb3-7741-4216-bf71-f3e9ed2938a3",
+    "purchase_number": "PO-ALPHA-6418",
+    "purchase_date": "2026-09-30",
+    "tp_permit_reference": null,
+    "excise_reference": null,
+    "document_reference": "[BAR_ID:b4da4bb3-7741-4216-bf71-f3e9ed2938a3]",
+    "total_value": 20000,
+    "remarks": "[BAR_ID:b4da4bb3-7741-4216-bf71-f3e9ed2938a3]",
+    "created_at": "2026-09-30T07:20:37.901Z",
+    "updated_at": "2026-09-30T07:20:37.901Z",
+    "items": [
+      {
+        "id": "2145a6e7-6bb4-46d0-9b49-c35000d196a2",
+        "purchase_id": "9f75b7ad-239c-4294-9fac-d10ced96c569",
+        "bar_id": "b4da4bb3-7741-4216-bf71-f3e9ed2938a3",
+        "product_id": "prod-test-6418",
+        "batch_id": null,
+        "quantity": 50,
+        "purchase_tp_price": 400,
+        "total_value": 20000,
+        "mrp_reference": 550,
+        "batch_number": null,
+        "product": {
+          "id": "prod-test-6418",
+          "name": "Product",
+          "product_name": "Product",
+          "purchase_tp_price": 400,
+          "mrp_reference": 550
+        }
+      }
+    ]
+  },
+  {
     "id": "dummy-tx-1790705910024",
     "bar_id": "2ce36da5-fac2-479b-8a6f-6be67744dc8e",
     "grand_total": 5000

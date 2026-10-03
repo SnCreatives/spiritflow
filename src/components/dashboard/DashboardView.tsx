@@ -24,7 +24,6 @@ import { SupportedLanguage, DashboardStats, AuthUser } from '../../types';
 import { translations } from '../../utils/i18n';
 import { apiGet, apiFetch } from '../../utils/api';
 import { useBar } from '../../lib/contexts/BarContext';
-import { ReportScopeSelector, ReportScope } from '../common/ReportScopeSelector';
 
 interface DashboardViewProps {
   language: SupportedLanguage;
@@ -34,11 +33,10 @@ interface DashboardViewProps {
 
 export const DashboardView: React.FC<DashboardViewProps> = ({ language, user, onRouteChange }) => {
   const t = translations[language];
-  const { selectedBar, availableBars } = useBar();
+  const { selectedBar } = useBar();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [scope, setScope] = useState<ReportScope>('CURRENT_BAR');
 
   // Embedded Product Master Search states
   const [searchQuery, setSearchQuery] = useState('');
@@ -182,9 +180,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ language, user, on
     setLoading(true);
     setError(null);
     try {
-      const url = scope === 'ALL_BARS'
-        ? '/api/dashboard/stats?barScope=ALL_BARS'
-        : `/api/dashboard/stats?barId=${selectedBar?.id || ''}`;
+      const url = `/api/dashboard/stats?barId=${selectedBar?.id || ''}`;
       const data = await apiGet(url);
       if (!data.success) {
         throw new Error(data.error?.message || 'Failed to load dashboard statistics');
@@ -216,7 +212,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ language, user, on
 
   useEffect(() => {
     fetchDashboardStats();
-  }, [selectedBar?.id, scope]);
+  }, [selectedBar?.id]);
 
   return (
     <div className="page-container px-4 sm:px-6 lg:px-8 py-8 space-y-6">
@@ -227,12 +223,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ language, user, on
             <h1 className="text-xl sm:text-2xl font-bold text-white tracking-tight">
               {t.navDashboard}
             </h1>
-            <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 border border-emerald-500/30 text-emerald-400">
-              Inventory & Excise Only
+            <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-500/10 border border-amber-500/30 text-amber-400">
+              Current Bar: {selectedBar?.name || 'Loading...'}
             </span>
           </div>
           <p className="text-xs sm:text-sm text-slate-400 mt-1">
-            Real-time stock valuation, TP permits, inward tracking & excise compliance ledger.
+            Real-time stock valuation, TP permits, inward tracking & excise compliance ledger for <span className="text-amber-300 font-semibold">{selectedBar?.name}</span>.
           </p>
         </div>
 
@@ -256,13 +252,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ language, user, on
           </button>
         </div>
       </div>
-
-      {/* Analytics Scope Selector */}
-      <ReportScopeSelector
-        title="Dashboard Analytics Scope"
-        scope={scope}
-        onChange={setScope}
-      />
 
       {/* Main Dashboard Product Master Search Box */}
       <div className="bg-slate-900 border border-amber-500/30 p-4 sm:p-5 rounded-2xl shadow-lg relative">

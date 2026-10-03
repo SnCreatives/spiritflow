@@ -74,11 +74,7 @@ export const ExciseView: React.FC<ExciseViewProps> = ({ language, selectedBarId 
   };
 
   useEffect(() => {
-    if (selectedBarId) {
-
     fetchExciseData();
-  
-    }
   }, [selectedBarId]);
 
   const handleCreateLicence = async (e: React.FormEvent) => {

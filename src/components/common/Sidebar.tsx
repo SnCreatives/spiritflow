@@ -4,122 +4,75 @@ import {
   Package,
   Layers,
   Award,
-  Factory,
   Box,
   FileInput,
   ArrowDownToLine,
-  ArrowUpRight,
-  Store,
-  SlidersHorizontal,
-  FileSpreadsheet,
-  QrCode,
+  ShoppingCart,
   ShieldCheck,
   BarChart3,
-  Settings,
-  LogOut,
-  Sun,
-  Moon,
+  Database,
+  Store,
+  User,
+  SlidersHorizontal,
+  FileSpreadsheet,
 } from 'lucide-react';
-import { SupportedLanguage, AuthUser } from '../../types';
-import { translations } from '../../utils/i18n';
+import { AuthUser } from '../../types';
 import { LiquorFlowLogo } from './LiquorFlowLogo';
-import { useTheme } from '../../utils/ThemeContext';
-import { BarSwitcher } from './BarSwitcher';
 import { useBar } from '../../lib/contexts/BarContext';
 
 interface SidebarProps {
   currentRoute: string;
   onRouteChange: (route: string) => void;
-  language: SupportedLanguage;
   user: AuthUser | null;
   onLogout: () => void;
-  collapsed?: boolean;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
   currentRoute,
   onRouteChange,
-  language,
   user,
-  onLogout,
 }) => {
-  const t = translations[language];
-  const { theme, toggleTheme } = useTheme();
   const { selectedBar } = useBar();
 
-  const navigationItems = [
+  const navigationSections = [
     {
       group: 'OVERVIEW',
       items: [
         {
           id: '/dashboard',
-          label: t.navDashboard || 'Dashboard',
+          label: 'Dashboard',
           icon: LayoutDashboard,
         },
       ],
     },
     {
-      group: 'INVENTORY & STOCK',
+      group: 'CORE OPERATIONS',
       items: [
         {
-          id: '/inventory',
-          label: t.navInventory || 'Inventory',
-          icon: Package,
-        },
-        {
           id: '/stock/opening',
-          label: 'Opening / TP Stock',
+          label: 'Opening Stock',
           icon: FileInput,
         },
         {
           id: '/purchases',
-          label: 'Purchase / Inward',
+          label: 'Received Stock',
           icon: ArrowDownToLine,
         },
         {
-          id: '/stock/adjustments',
-          label: 'Stock Adjustments',
-          icon: SlidersHorizontal,
+          id: '/transactions',
+          label: 'Transaction Entry',
+          icon: ShoppingCart,
+          badge: 'Sales & Closing',
+        },
+        {
+          id: '/inventory',
+          label: 'Inventory Register',
+          icon: Package,
         },
         {
           id: '/stock-ledger',
           label: 'Stock Ledger',
           icon: FileSpreadsheet,
-        },
-        {
-          id: '/stock/transfers',
-          label: 'Stock Transfers',
-          icon: ArrowUpRight,
-        },
-        {
-          id: '/batches',
-          label: 'Batches',
-          icon: QrCode,
-        },
-      ],
-    },
-    {
-      group: 'MASTERS',
-      items: [
-        {
-          id: '/bars',
-          label: 'Bar / Outlet Management',
-          icon: Store,
-        },
-        {
-          id: '/products',
-          label: t.navProducts || 'Products',
-          icon: Layers,
-        },
-        {
-          id: '/brands',
-          label: t.navBrands || 'Brands',
-          icon: Award,
-        },
-        {
-          id: '/pack-sizes',
-          label: t.navPackSizes || 'Pack Sizes',
-          icon: Box,
         },
       ],
     },
@@ -127,112 +80,143 @@ export const Sidebar: React.FC<SidebarProps> = ({
       group: 'EXCISE & AUDIT',
       items: [
         {
-          id: '/excise',
-          label: 'Excise Management',
-          icon: ShieldCheck,
-        },
-        {
           id: '/reports',
-          label: t.navReports || 'Reports',
+          label: 'Excise & ERP Reports',
           icon: BarChart3,
         },
         {
-          id: '/settings',
-          label: t.navSettings || 'Settings',
-          icon: Settings,
+          id: '/scm-code',
+          label: 'SCM Code Master',
+          icon: ShieldCheck,
+        },
+      ],
+    },
+    {
+      group: 'PRODUCT MASTERS',
+      items: [
+        {
+          id: '/products',
+          label: 'Product Master',
+          icon: Layers,
+        },
+        {
+          id: '/brands',
+          label: 'Brand Master',
+          icon: Award,
+        },
+        {
+          id: '/pack-sizes',
+          label: 'Bottle Sizes',
+          icon: Box,
+        },
+      ],
+    },
+    {
+      group: 'SYSTEM & SETTINGS',
+      items: [
+        {
+          id: '/backup-restore',
+          label: 'Backup & Restore',
+          icon: Database,
+        },
+        {
+          id: '/bar-settings',
+          label: 'Bar Settings',
+          icon: Store,
+        },
+        {
+          id: '/user-settings',
+          label: 'User Settings',
+          icon: User,
         },
       ],
     },
   ];
 
   return (
-    <aside className="w-64 bg-slate-900 border-r border-slate-800 flex flex-col shrink-0 h-screen sticky top-0 overflow-y-auto select-none">
-      {/* Brand Header */}
-      <div className="p-4 border-b border-slate-800 flex flex-col gap-2">
-        <LiquorFlowLogo size="sm" showSubtitle={true} orientation="horizontal" />
-        <div className="flex items-center justify-between px-1 pt-1 border-t border-slate-800/60 text-xs">
-          <span className="text-slate-400 font-medium truncate max-w-[130px]">
-            {user?.business_name || 'Active Session'}
+    <aside className="w-64 bg-slate-50 border-r border-slate-200 min-h-screen flex flex-col justify-between select-none">
+      <div className="flex-1 py-4 px-3 space-y-6 overflow-y-auto">
+        {/* Brand Banner */}
+        <div className="px-2 flex items-center gap-2">
+          <LiquorFlowLogo size="sm" showText={true} />
+        </div>
+
+        {/* Selected Bar Mini-Badge */}
+        <div className="mx-1 px-3 py-2.5 bg-white border border-slate-200 rounded-xl shadow-2xs">
+          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+            Selected Bar Outlet
           </span>
-          <span className="inline-flex items-center gap-1 text-[10px] text-emerald-400 font-mono">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            Online
+          <span className="text-xs font-black text-slate-900 truncate block mt-0.5">
+            {selectedBar?.name || 'All Authorized Bars'}
           </span>
         </div>
-      </div>
 
-      {/* Mobile Drawer Bar Switcher */}
-      <div className="p-3 border-b border-slate-800 md:hidden">
-        <BarSwitcher variant="drawer" onNavigateToBarsMaster={() => onRouteChange('/bars')} />
-      </div>
+        {/* Navigation Sections */}
+        <nav className="space-y-5">
+          {navigationSections.map(section => (
+            <div key={section.group} className="space-y-1">
+              <span className="px-2 text-[10px] font-bold uppercase tracking-wider text-slate-600 block">
+                {section.group}
+              </span>
+              <div className="space-y-0.5">
+                {section.items.map(item => {
+                  const Icon = item.icon;
+                  const isActive =
+                    currentRoute === item.id ||
+                    (item.id === '/transactions' && currentRoute.startsWith('/transactions')) ||
+                    (item.id === '/stock/opening' && currentRoute === '/opening-stock') ||
+                    (item.id === '/purchases' && currentRoute === '/received-stock') ||
+                    (item.id === '/bar-settings' && currentRoute === '/bars') ||
+                    (item.id === '/user-settings' && currentRoute === '/settings');
 
-      {/* Navigation List */}
-
-      <nav className="flex-1 px-3 py-4 space-y-6">
-        {navigationItems.map((group, groupIdx) => (
-          <div key={groupIdx} className="space-y-1">
-            <div className="px-3 text-[10px] font-bold text-slate-500 tracking-wider uppercase mb-1">
-              {group.group}
+                  return (
+                    <button
+                      key={item.id}
+                      onClick={() => onRouteChange(item.id)}
+                      className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                        isActive
+                          ? 'bg-amber-500 text-slate-950 font-black shadow-xs'
+                          : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-slate-950' : 'text-slate-500'}`} />
+                        <span>{item.label}</span>
+                      </div>
+                      {item.badge && (
+                        <span className={`text-[9px] px-1.5 py-0.2 rounded font-bold ${
+                          isActive ? 'bg-amber-600 text-white' : 'bg-slate-200 text-slate-700'
+                        }`}>
+                          {item.badge}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-            {group.items.map(item => {
-              const Icon = item.icon;
-              const isActive = currentRoute === item.id;
-              return (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => onRouteChange(item.id)}
-                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold transition-all duration-150 cursor-pointer ${
-                    isActive
-                      ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30 shadow-sm shadow-amber-500/5'
-                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 border border-transparent'
-                  }`}
-                >
-                  <Icon
-                    className={`w-4 h-4 shrink-0 transition-colors ${
-                      isActive ? 'text-amber-400' : 'text-slate-400 group-hover:text-slate-300'
-                    }`}
-                  />
-                  <span className="truncate">{item.label}</span>
-                </button>
-              );
-            })}
-          </div>
-        ))}
-      </nav>
-
-      {/* Footer / User Profile & Theme Toggle & Logout */}
-      <div className="p-3 border-t border-slate-800 bg-slate-900/60 space-y-1.5">
-        <button
-          type="button"
-          onClick={toggleTheme}
-          className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium text-slate-300 hover:text-white hover:bg-slate-800/80 border border-slate-800 hover:border-slate-700 transition-colors cursor-pointer"
-        >
-          <div className="flex items-center gap-2.5">
-            {theme === 'dark' ? (
-              <Sun className="w-4 h-4 text-amber-400" />
-            ) : (
-              <Moon className="w-4 h-4 text-indigo-400" />
-            )}
-            <span>{theme === 'dark' ? 'Light Mode' : 'Dark Mode'}</span>
-          </div>
-          <span className="text-[10px] bg-slate-800/80 border border-slate-700/60 px-1.5 py-0.5 rounded text-amber-400 font-mono">
-            {theme === 'dark' ? 'DARK' : 'LIGHT'}
-          </span>
-        </button>
-
-        <button
-          type="button"
-          onClick={onLogout}
-          className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium text-rose-400 hover:bg-rose-950/30 hover:text-rose-300 border border-transparent hover:border-rose-900/40 transition-colors cursor-pointer"
-        >
-          <div className="flex items-center gap-2.5">
-            <LogOut className="w-4 h-4" />
-            <span>{t.navLogout || 'Logout'}</span>
-          </div>
-          <span className="text-[10px] bg-slate-800 px-1.5 py-0.5 rounded text-slate-400">Exit</span>
-        </button>
+          ))}
+        </nav>
       </div>
+
+      {/* User Footer Summary */}
+      {user && (
+        <div className="p-3 border-t border-slate-200 bg-white m-2 rounded-xl">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-full bg-amber-100 border border-amber-200 flex items-center justify-center text-amber-800 font-bold text-xs">
+              {user.username ? user.username.slice(0, 2).toUpperCase() : 'US'}
+            </div>
+            <div className="flex-1 min-w-0">
+              <span className="text-xs font-bold text-slate-900 truncate block">
+                {user.username || 'Admin User'}
+              </span>
+              <span className="text-[10px] text-slate-500 truncate block font-mono">
+                {user.email || 'Excise Manager'}
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
     </aside>
   );
 };

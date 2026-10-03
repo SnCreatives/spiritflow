@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
-import { Lock, AlertCircle, ArrowRight, ShieldCheck, User, Eye, EyeOff, Loader2, Sun, Moon } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Lock, AlertCircle, ArrowRight, ShieldCheck, User, Eye, EyeOff, Loader2, Sun, Moon, Building2 } from 'lucide-react';
 import { SupportedLanguage, AuthUser } from '../../types';
-import { apiPost } from '../../utils/api';
+import { apiPost, apiGet } from '../../utils/api';
 import { translations } from '../../utils/i18n';
 import { LiquorFlowLogo } from '../common/LiquorFlowLogo';
 import { useTheme } from '../../utils/ThemeContext';
@@ -43,6 +43,23 @@ export const LoginView: React.FC<LoginViewProps> = ({
   const [showPassword, setShowPassword] = useState<boolean>(false);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [selectedBarId, setSelectedBarId] = useState<string>('');
+  const [barsList, setBarsList] = useState<{ id: string; name: string; code?: string }[]>([]);
+
+  useEffect(() => {
+    async function fetchBars() {
+      try {
+        const res = await apiGet('/api/bars/public');
+        if (res.success && Array.isArray(res.data?.bars)) {
+          setBarsList(res.data.bars);
+          if (res.data.bars.length > 0) {
+            setSelectedBarId(res.data.bars[0].id);
+          }
+        }
+      } catch {}
+    }
+    fetchBars();
+  }, []);
 
   const handleUsernameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setUsername(e.target.value);
@@ -73,6 +90,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
         username: trimmedUsername,
         mobileNumber: trimmedUsername,
         password: password,
+        barId: selectedBarId,
       });
 
       if (!result.success || !result.data) {
@@ -83,6 +101,9 @@ export const LoginView: React.FC<LoginViewProps> = ({
         try {
           sessionStorage.setItem('liquorflow_session_token', result.data.sessionToken);
           localStorage.setItem('liquorflow_session_token', result.data.sessionToken);
+          if (selectedBarId) {
+            localStorage.setItem('liquorflow_selected_bar_id', selectedBarId);
+          }
         } catch {
           // Ignore storage quota errors
         }
@@ -127,7 +148,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
               isLight ? 'bg-slate-100 border-slate-200' : 'bg-slate-900/90 border-slate-800'
             }`}
           >
-            <LiquorFlowLogo size="xs" showText={true} showSubtitle={false} />
+            <LiquorFlowLogo size="xs" showText={false} showSubtitle={false} />
           </div>
           <div
             className={`hidden sm:block font-mono text-[0.65rem] uppercase tracking-[0.18em] font-semibold border-l pl-3.5 ${
@@ -352,6 +373,47 @@ export const LoginView: React.FC<LoginViewProps> = ({
             )}
 
             <form onSubmit={handleSubmit} className="space-y-5" autoComplete="off">
+              <div className="space-y-2">
+                <label
+                  htmlFor="bar-select-input"
+                  className={`block font-mono text-[0.65rem] uppercase tracking-[0.18em] font-semibold ${
+                    isLight ? 'text-slate-700' : 'text-slate-300'
+                  }`}
+                >
+                  {language === 'mr'
+                    ? 'बार आउटलेट निवडा *'
+                    : language === 'hi'
+                    ? 'बार आउटलेट चुनें *'
+                    : 'Select Active Bar Outlet *'}
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                    <Building2 className="w-4 h-4" />
+                  </div>
+                  <select
+                    id="bar-select-input"
+                    name="barId"
+                    value={selectedBarId}
+                    onChange={(e) => setSelectedBarId(e.target.value)}
+                    className={`w-full pl-11 pr-4 py-3.5 font-mono text-sm rounded-xl outline-none transition-all shadow-sm border appearance-none ${
+                      isLight
+                        ? 'bg-slate-50 border-slate-300 text-slate-900 focus:border-amber-600 focus:ring-2 focus:ring-amber-500/20'
+                        : 'bg-slate-900/90 border-slate-700/80 text-white focus:border-amber-500 focus:ring-1 focus:ring-amber-500'
+                    }`}
+                  >
+                    {barsList.length === 0 ? (
+                      <option value="">Loading Active Bars...</option>
+                    ) : (
+                      barsList.map(b => (
+                        <option key={b.id} value={b.id}>
+                          {b.name} {b.code ? `(${b.code})` : ''}
+                        </option>
+                      ))
+                    )}
+                  </select>
+                </div>
+              </div>
+
               <div className="space-y-2">
                 <label
                   htmlFor="username-input"

@@ -1,4 +1,4 @@
-import { getSupabaseServiceClient } from '../../lib/supabase/client.js';
+import { getSupabaseServiceClient, checkDbHasBarId } from '../../lib/supabase/client.js';
 import { BarStoreService } from './barStoreService.js';
 
 export class ReportService {

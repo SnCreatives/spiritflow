@@ -14,10 +14,18 @@ import { AuthService } from './services/authService.js';
 import { InventoryService } from './services/inventoryService.js';
 import { ProductService } from './services/productService.js';
 import { MasterService } from './services/masterService.js';
+import { BarStoreService } from './services/barStoreService.js';
 import { ExciseService } from './services/exciseService.js';
 import { MigrationService } from './services/migrationService.js';
 import { ImportService } from './services/importService.js';
 import { reportService } from './services/reportService.js';
+import { ProductMasterService, ALLOWED_PACKAGING_TYPES } from './services/productMasterService.js';
+import { ScmService } from './services/scmService.js';
+import { SalesService } from './services/salesService.js';
+import { DryDayService } from './services/dryDayService.js';
+import { ErpReportService } from './services/erpReportService.js';
+import { BackupService } from './services/backupService.js';
+import { TaxService } from './services/taxService.js';
 import { createSessionCookie, clearSessionCookie, extractSessionTokenFromCookie, isSecureRequest } from '../lib/auth/session.js';
 
 export const apiApp = express();
@@ -108,20 +116,34 @@ async function requireAuth(req: Request, res: Response, next: NextFunction) {
     console.log(`=========================================================================\n`);
     (req as any).user = user;
 
-    // Validate Bar Access if x-bar-id is provided
-    const barId = req.headers['x-bar-id'] as string;
-    if (barId && typeof barId === 'string' && barId.trim().length > 0) {
-      if (Array.isArray(user.bars) && user.bars.length > 0) {
-        const hasAccess = user.bars.some((b: any) => b.id === barId);
-        if (hasAccess) {
-          (req as any).barId = barId;
+    // Validate Bar Access if barId is provided in headers, query, or body
+    const barId = (req.headers['x-bar-id'] as string) || (req.query.barId as string) || (req.body.barId as string);
+    if (barId && typeof barId === 'string' && barId.trim().length > 0 && barId !== 'ALL_BARS') {
+      const cleanBarId = barId.trim();
+      let hasAccess = Array.isArray(user.bars) && user.bars.some((b: any) => b.id === cleanBarId);
+      if (!hasAccess) {
+        const auths = await BarStoreService.getAuthorizations({ barId: cleanBarId, userId: user.id });
+        hasAccess = auths.some((a: any) => a.status === 'Active');
+      }
+      if (!hasAccess) {
+        const bar = await BarStoreService.getBarById(cleanBarId);
+        if (bar && bar.owner_user_id && bar.owner_user_id === user.id) {
+          hasAccess = true;
         }
       }
+      
+      if (!hasAccess) {
+        console.warn(`[AUTH TRACE] ❌ Access denied to bar ${cleanBarId} for user ${user.id}`);
+        console.log(`=========================================================================\n`);
+        return sendError(res, 'FORBIDDEN', 'You do not have access to this bar.', 403);
+      }
+      
+      (req as any).barId = cleanBarId;
     }
 
     next();
   } catch (err: any) {
-    console.error(`[AUTH TRACE ERROR] Exception during session validation:`, err?.message);
+    console.warn(`[AUTH TRACE WARNING] Exception during session validation:`, err?.message);
     console.log(`=========================================================================\n`);
     return sendError(res, 'AUTH_ERROR', err?.message || 'Authentication error', 500);
   }
@@ -235,7 +257,7 @@ const handleLogin = async (req: Request, res: Response) => {
 
     return sendSuccess(res, { redirect: '/dashboard', user, sessionToken });
   } catch (err: any) {
-    console.error(`[/api/login] Login failed for input:`, req.body?.username || req.body?.mobileNumber, `Error:`, err?.message);
+    console.warn(`[/api/login] Login failed for input:`, req.body?.username || req.body?.mobileNumber, `Reason:`, err?.message);
     return sendError(res, 'AUTH_FAILED', err?.message || 'Invalid username or password', 401);
   }
 };
@@ -359,12 +381,70 @@ apiApp.post('/api/inventory/opening-stock', requireAuth, async (req: Request, re
 apiApp.post('/api/inventory/purchases', requireAuth, async (req: Request, res: Response) => {
   try {
     const barId = (req as any).barId || req.body.barId;
+    if (!barId || barId === 'ALL_BARS') {
+      return sendError(res, 'BAR_REQUIRED', 'Please select a bar before creating this transaction.', 400);
+    }
     const result = await InventoryService.processPurchase({ ...req.body, barId });
     return sendSuccess(res, result, 201);
   } catch (err: any) {
     return sendError(res, 'PURCHASE_FAILED', err?.message || 'Inward purchase transaction failed', 400);
   }
 });
+
+const handleGetPurchaseById = async (req: Request, res: Response) => {
+  try {
+    const barId = (req as any).barId || (req.query.barId as string);
+    if (!barId || barId === 'ALL_BARS') {
+      return sendError(res, 'BAR_REQUIRED', 'Please select a bar before viewing this transaction.', 400);
+    }
+    const purchase = await InventoryService.getPurchaseById(req.params.id, barId);
+    if (!purchase) {
+      return sendError(res, 'NOT_FOUND', 'Purchase record not found.', 404);
+    }
+    return sendSuccess(res, { purchase });
+  } catch (err: any) {
+    return sendError(res, 'PURCHASE_FETCH_FAILED', err?.message || 'Failed to fetch purchase', 500);
+  }
+};
+
+const handleUpdatePurchase = async (req: Request, res: Response) => {
+  try {
+    const barId = (req as any).barId || req.body.barId;
+    if (!barId || barId === 'ALL_BARS') {
+      return sendError(res, 'BAR_REQUIRED', 'Please select a bar before updating this transaction.', 400);
+    }
+    const updated = await InventoryService.updatePurchase(req.params.id, barId, req.body);
+    if (!updated) {
+      return sendError(res, 'NOT_FOUND', 'Purchase record not found.', 404);
+    }
+    return sendSuccess(res, { purchase: updated });
+  } catch (err: any) {
+    return sendError(res, 'PURCHASE_UPDATE_FAILED', err?.message || 'Failed to update purchase', 400);
+  }
+};
+
+const handleDeletePurchase = async (req: Request, res: Response) => {
+  try {
+    const barId = (req as any).barId || (req.query.barId as string);
+    if (!barId || barId === 'ALL_BARS') {
+      return sendError(res, 'BAR_REQUIRED', 'Please select a bar before deleting this transaction.', 400);
+    }
+    const deleted = await InventoryService.deletePurchase(req.params.id, barId);
+    if (!deleted) {
+      return sendError(res, 'NOT_FOUND', 'Purchase record not found.', 404);
+    }
+    return sendSuccess(res, { success: true });
+  } catch (err: any) {
+    return sendError(res, 'PURCHASE_DELETE_FAILED', err?.message || 'Failed to delete purchase', 400);
+  }
+};
+
+apiApp.get('/api/inventory/purchases/:id', requireAuth, handleGetPurchaseById);
+apiApp.get('/api/purchases/:id', requireAuth, handleGetPurchaseById);
+apiApp.put('/api/inventory/purchases/:id', requireAuth, handleUpdatePurchase);
+apiApp.put('/api/purchases/:id', requireAuth, handleUpdatePurchase);
+apiApp.delete('/api/inventory/purchases/:id', requireAuth, handleDeletePurchase);
+apiApp.delete('/api/purchases/:id', requireAuth, handleDeletePurchase);
 
 apiApp.post('/api/inventory/adjustments', requireAuth, async (req: Request, res: Response) => {
   try {
@@ -781,6 +861,438 @@ apiApp.delete('/api/products/:id', requireAuth, async (req: Request, res: Respon
 });
 
 /**
+ * Canonical Cascading Dropdown API (Section 17)
+ * Flow: Product Type -> Brand -> Variant -> Bottle Size -> Packaging -> Product -> MRP / SCM Code
+ */
+apiApp.get('/api/products/cascading', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const { productType, categoryId, brandId, variant, packSizeId, packagingType } = req.query;
+    const data = await ProductMasterService.getCascadingData({
+      productType: productType as string,
+      categoryId: categoryId as string,
+      brandId: brandId as string,
+      variant: variant as string,
+      packSizeId: packSizeId as string,
+      packagingType: packagingType as string,
+    });
+    return sendSuccess(res, data);
+  } catch (err: any) {
+    return sendError(res, 'CASCADE_FETCH_FAILED', err?.message || 'Failed to fetch cascading data', 500);
+  }
+});
+
+/**
+ * Filter Validation API (Section 18)
+ * Validates combinations against canonical business rules
+ */
+apiApp.post('/api/products/validate-combination', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const { categoryId, brandId, packSizeId, variant, packType } = req.body;
+    const validation = await ProductMasterService.validateCombination({
+      categoryId,
+      brandId,
+      packSizeId,
+      variant,
+      packType,
+    });
+    if (!validation.isValid) {
+      return sendError(res, 'INVALID_COMBINATION', validation.error || 'Invalid product combination', 400);
+    }
+    return sendSuccess(res, { isValid: true });
+  } catch (err: any) {
+    return sendError(res, 'VALIDATION_FAILED', err?.message || 'Validation error', 400);
+  }
+});
+
+/**
+ * Packaging Types Master
+ */
+apiApp.get('/api/packaging-types', requireAuth, async (_req: Request, res: Response) => {
+  return sendSuccess(res, { packagingTypes: ALLOWED_PACKAGING_TYPES });
+});
+
+/**
+ * SCM / Maharashtra Excise Regulatory Code Endpoints (Section 10 & 11)
+ */
+apiApp.get('/api/scm-codes', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const { search, productId, activeOnly, limit } = req.query;
+    const codes = await ScmService.getScmCodes({
+      search: search as string,
+      productId: productId as string,
+      activeOnly: activeOnly === 'true',
+      limit: limit ? parseInt(limit as string, 10) : 100,
+    });
+    return sendSuccess(res, { scmCodes: codes });
+  } catch (err: any) {
+    return sendError(res, 'SCM_FETCH_FAILED', err?.message || 'Failed to fetch SCM codes', 500);
+  }
+});
+
+apiApp.get('/api/scm-codes/product/:productId', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const current = await ScmService.getCurrentScmCode(req.params.productId);
+    return sendSuccess(res, { scmCode: current });
+  } catch (err: any) {
+    return sendError(res, 'SCM_FETCH_FAILED', err?.message || 'Failed to fetch current SCM code', 500);
+  }
+});
+
+apiApp.get('/api/scm-codes/history/:productId', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const history = await ScmService.getScmHistory(req.params.productId);
+    return sendSuccess(res, { history });
+  } catch (err: any) {
+    return sendError(res, 'SCM_HISTORY_FETCH_FAILED', err?.message || 'Failed to fetch SCM history', 500);
+  }
+});
+
+apiApp.post('/api/scm-codes', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const record = await ScmService.createScmCode(req.body);
+    return sendSuccess(res, { scmCode: record }, 201);
+  } catch (err: any) {
+    return sendError(res, 'SCM_CREATE_FAILED', err?.message || 'Failed to assign SCM code', 400);
+  }
+});
+
+/**
+ * Excel Import Preview / Validation Foundation (Section 19)
+ */
+apiApp.post('/api/products/import-preview', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const { rows } = req.body;
+    if (!Array.isArray(rows)) {
+      return sendError(res, 'INVALID_PAYLOAD', 'Rows must be an array', 400);
+    }
+    const result = await ProductMasterService.validateImportBatch(rows);
+    return sendSuccess(res, result);
+  } catch (err: any) {
+    return sendError(res, 'IMPORT_PREVIEW_FAILED', err?.message || 'Failed to preview import', 400);
+  }
+});
+
+/**
+ * 13B. Sales Transactions & Closing Stock Endpoints (Bar-Scoped)
+ */
+apiApp.post('/api/sales', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const barId = (req as any).barId || req.body.barId;
+    if (!barId || barId === 'ALL_BARS') {
+      return sendError(res, 'BAR_REQUIRED', 'Please select a bar before creating this transaction.', 400);
+    }
+    const result = await SalesService.createSale({ ...req.body, barId });
+    return sendSuccess(res, result, 201);
+  } catch (err: any) {
+    return sendError(res, 'SALE_FAILED', err?.message || 'Failed to create sale transaction', 400);
+  }
+});
+
+apiApp.get('/api/sales', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const barId = (req as any).barId || (req.query.barId as string);
+    if (!barId || barId === 'ALL_BARS') {
+      return sendError(res, 'BAR_REQUIRED', 'Please select a bar to view sales.', 400);
+    }
+    const result = await SalesService.getSales({
+      barId,
+      startDate: req.query.startDate as string,
+      endDate: req.query.endDate as string,
+      search: req.query.search as string,
+      page: req.query.page ? parseInt(req.query.page as string, 10) : 1,
+      limit: req.query.limit ? parseInt(req.query.limit as string, 10) : 50,
+    });
+    return sendSuccess(res, result);
+  } catch (err: any) {
+    return sendError(res, 'SALES_FETCH_FAILED', err?.message || 'Failed to fetch sales', 500);
+  }
+});
+
+apiApp.get('/api/sales/closing-stock', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const barId = (req as any).barId || (req.query.barId as string);
+    if (!barId || barId === 'ALL_BARS') {
+      return sendError(res, 'BAR_REQUIRED', 'Please select a bar for closing stock calculation.', 400);
+    }
+    const result = await SalesService.calculateClosingStock({
+      barId,
+      startDate: req.query.startDate as string,
+      endDate: req.query.endDate as string,
+      productId: req.query.productId as string,
+    });
+    return sendSuccess(res, { closingStock: result });
+  } catch (err: any) {
+    return sendError(res, 'CLOSING_STOCK_FAILED', err?.message || 'Failed to calculate closing stock', 500);
+  }
+});
+
+apiApp.get('/api/sales/:id', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const barId = (req as any).barId || (req.query.barId as string);
+    if (!barId || barId === 'ALL_BARS') {
+      return sendError(res, 'BAR_REQUIRED', 'Please select a bar before viewing this transaction.', 400);
+    }
+    const sale = await SalesService.getSaleById(req.params.id, barId);
+    if (!sale) {
+      return sendError(res, 'NOT_FOUND', 'Sales transaction not found.', 404);
+    }
+    return sendSuccess(res, { sale });
+  } catch (err: any) {
+    return sendError(res, 'SALE_FETCH_FAILED', err?.message || 'Failed to fetch sale', 500);
+  }
+});
+
+apiApp.put('/api/sales/:id', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const barId = (req as any).barId || req.body.barId;
+    if (!barId || barId === 'ALL_BARS') {
+      return sendError(res, 'BAR_REQUIRED', 'Please select a bar before updating this transaction.', 400);
+    }
+    const updated = await SalesService.updateSale(req.params.id, barId, req.body);
+    if (!updated) {
+      return sendError(res, 'NOT_FOUND', 'Sales transaction not found.', 404);
+    }
+    return sendSuccess(res, { sale: updated });
+  } catch (err: any) {
+    return sendError(res, 'SALE_UPDATE_FAILED', err?.message || 'Failed to update sale', 400);
+  }
+});
+
+apiApp.delete('/api/sales/:id', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const barId = (req as any).barId || (req.query.barId as string);
+    if (!barId || barId === 'ALL_BARS') {
+      return sendError(res, 'BAR_REQUIRED', 'Please select a bar before deleting this transaction.', 400);
+    }
+    const deleted = await SalesService.deleteSale(req.params.id, barId);
+    if (!deleted) {
+      return sendError(res, 'NOT_FOUND', 'Sales transaction not found.', 404);
+    }
+    return sendSuccess(res, { success: true });
+  } catch (err: any) {
+    return sendError(res, 'SALE_DELETE_FAILED', err?.message || 'Failed to delete sale', 400);
+  }
+});
+
+/**
+ * 13C. Dry Days Management Endpoints (Bar-Scoped & State-Wide)
+ */
+apiApp.get('/api/dry-days', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const barId = (req as any).barId || (req.query.barId as string);
+    const dryDays = await DryDayService.getDryDays(barId);
+    return sendSuccess(res, { dryDays });
+  } catch (err: any) {
+    return sendError(res, 'DRY_DAYS_FETCH_FAILED', err?.message || 'Failed to fetch dry days', 500);
+  }
+});
+
+apiApp.post('/api/dry-days', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const barId = (req as any).barId || req.body.barId;
+    const dryDay = await DryDayService.createDryDay({
+      barId: barId !== 'ALL_BARS' ? barId : null,
+      dryDate: req.body.dryDate,
+      reason: req.body.reason,
+    });
+    return sendSuccess(res, { dryDay }, 201);
+  } catch (err: any) {
+    return sendError(res, 'DRY_DAY_CREATE_FAILED', err?.message || 'Failed to add dry day', 400);
+  }
+});
+
+apiApp.delete('/api/dry-days/:id', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const barId = (req as any).barId || (req.query.barId as string);
+    const deleted = await DryDayService.deleteDryDay(req.params.id, barId);
+    return sendSuccess(res, { success: deleted });
+  } catch (err: any) {
+    return sendError(res, 'DRY_DAY_DELETE_FAILED', err?.message || 'Failed to delete dry day', 400);
+  }
+});
+
+/**
+ * 13D. Comprehensive ERP & Excise Reporting Endpoints
+ */
+apiApp.get('/api/reports/daily-sales', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const barId = (req as any).barId || (req.query.barId as string);
+    if (!barId || barId === 'ALL_BARS') {
+      return sendError(res, 'BAR_REQUIRED', 'Please select a bar before generating reports.', 400);
+    }
+    const report = await ErpReportService.getDailySalesReport({
+      barId,
+      date: req.query.date as string,
+    });
+    return sendSuccess(res, report);
+  } catch (err: any) {
+    return sendError(res, 'REPORT_FAILED', err?.message || 'Failed to generate report', 500);
+  }
+});
+
+apiApp.get('/api/reports/monthly', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const barId = (req as any).barId || (req.query.barId as string);
+    if (!barId || barId === 'ALL_BARS') {
+      return sendError(res, 'BAR_REQUIRED', 'Please select a bar before generating reports.', 400);
+    }
+    const report = await ErpReportService.getMonthlyReport({
+      barId,
+      month: req.query.month as string,
+    });
+    return sendSuccess(res, report);
+  } catch (err: any) {
+    return sendError(res, 'REPORT_FAILED', err?.message || 'Failed to generate report', 500);
+  }
+});
+
+apiApp.get('/api/reports/excise-log-book', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const barId = (req as any).barId || (req.query.barId as string);
+    if (!barId || barId === 'ALL_BARS') {
+      return sendError(res, 'BAR_REQUIRED', 'Please select a bar before generating reports.', 400);
+    }
+    const report = await ErpReportService.getExciseLogBook({
+      barId,
+      startDate: req.query.startDate as string,
+      endDate: req.query.endDate as string,
+    });
+    return sendSuccess(res, report);
+  } catch (err: any) {
+    return sendError(res, 'REPORT_FAILED', err?.message || 'Failed to generate excise log book', 500);
+  }
+});
+
+apiApp.get('/api/reports/sales-tax', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const barId = (req as any).barId || (req.query.barId as string);
+    if (!barId || barId === 'ALL_BARS') {
+      return sendError(res, 'BAR_REQUIRED', 'Please select a bar before generating reports.', 400);
+    }
+    const report = await ErpReportService.getSalesTaxReport({
+      barId,
+      startDate: req.query.startDate as string,
+      endDate: req.query.endDate as string,
+    });
+    return sendSuccess(res, report);
+  } catch (err: any) {
+    return sendError(res, 'REPORT_FAILED', err?.message || 'Failed to generate sales tax report', 500);
+  }
+});
+
+apiApp.get('/api/reports/received-tp', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const barId = (req as any).barId || (req.query.barId as string);
+    if (!barId || barId === 'ALL_BARS') {
+      return sendError(res, 'BAR_REQUIRED', 'Please select a bar before generating reports.', 400);
+    }
+    const report = await ErpReportService.getReceivedTpReport({
+      barId,
+      startDate: req.query.startDate as string,
+      endDate: req.query.endDate as string,
+    });
+    return sendSuccess(res, report);
+  } catch (err: any) {
+    return sendError(res, 'REPORT_FAILED', err?.message || 'Failed to generate received TP report', 500);
+  }
+});
+
+apiApp.get('/api/reports/available-stock', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const barId = (req as any).barId || (req.query.barId as string);
+    if (!barId || barId === 'ALL_BARS') {
+      return sendError(res, 'BAR_REQUIRED', 'Please select a bar before generating reports.', 400);
+    }
+    const report = await ErpReportService.getAvailableStockStatus({ barId });
+    return sendSuccess(res, report);
+  } catch (err: any) {
+    return sendError(res, 'REPORT_FAILED', err?.message || 'Failed to fetch available stock status', 500);
+  }
+});
+
+apiApp.get('/api/reports/sales-summary', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const barId = (req as any).barId || (req.query.barId as string);
+    if (!barId || barId === 'ALL_BARS') {
+      return sendError(res, 'BAR_REQUIRED', 'Please select a bar before generating reports.', 400);
+    }
+    const report = await ErpReportService.getSalesReportSummary({
+      barId,
+      startDate: req.query.startDate as string,
+      endDate: req.query.endDate as string,
+    });
+    return sendSuccess(res, report);
+  } catch (err: any) {
+    return sendError(res, 'REPORT_FAILED', err?.message || 'Failed to generate sales summary report', 500);
+  }
+});
+
+apiApp.get('/api/reports/permit-bills', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const barId = (req as any).barId || (req.query.barId as string);
+    if (!barId || barId === 'ALL_BARS') {
+      return sendError(res, 'BAR_REQUIRED', 'Please select a bar before generating reports.', 400);
+    }
+    const report = await ErpReportService.getPermitBills({
+      barId,
+      startDate: req.query.startDate as string,
+      endDate: req.query.endDate as string,
+    });
+    return sendSuccess(res, report);
+  } catch (err: any) {
+    return sendError(res, 'REPORT_FAILED', err?.message || 'Failed to generate permit bills report', 500);
+  }
+});
+
+apiApp.get('/api/reports/stock-value', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const barId = (req as any).barId || (req.query.barId as string);
+    if (!barId || barId === 'ALL_BARS') {
+      return sendError(res, 'BAR_REQUIRED', 'Please select a bar before generating reports.', 400);
+    }
+    const report = await ErpReportService.getStockValueReport({ barId });
+    return sendSuccess(res, report);
+  } catch (err: any) {
+    return sendError(res, 'REPORT_FAILED', err?.message || 'Failed to generate stock value report', 500);
+  }
+});
+
+/**
+ * 13E. Bar-Scoped Backup & Restore Endpoints
+ */
+apiApp.post('/api/backup/export', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const barId = (req as any).barId || req.body.barId;
+    if (!barId || barId === 'ALL_BARS') {
+      return sendError(res, 'BAR_REQUIRED', 'Please select a bar before exporting backup.', 400);
+    }
+    const user = (req as any).user;
+    const backup = await BackupService.exportBackup({
+      barId,
+      dataType: req.body.dataType,
+      userId: user?.id,
+    });
+    return sendSuccess(res, backup);
+  } catch (err: any) {
+    return sendError(res, 'BACKUP_EXPORT_FAILED', err?.message || 'Failed to export backup', 500);
+  }
+});
+
+apiApp.post('/api/backup/restore', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const barId = (req as any).barId || req.body.barId;
+    if (!barId || barId === 'ALL_BARS') {
+      return sendError(res, 'BAR_REQUIRED', 'Please select a target bar for restore.', 400);
+    }
+    const user = (req as any).user;
+    const result = await BackupService.restoreBackup(barId, req.body.backupPackage, user?.id);
+    return sendSuccess(res, result);
+  } catch (err: any) {
+    return sendError(res, 'BACKUP_RESTORE_FAILED', err?.message || 'Failed to restore backup', 400);
+  }
+});
+
+/**
  * 14. Brands CRUD Endpoints (Protected)
  */
 apiApp.get('/api/brands', requireAuth, async (req: Request, res: Response) => {
@@ -883,6 +1395,15 @@ apiApp.patch('/api/pack-sizes/:id/status', requireAuth, async (req: Request, res
 /**
  * 16. Bar Outlets CRUD Endpoints (Protected)
  */
+apiApp.get('/api/bars/public', async (_req: Request, res: Response) => {
+  try {
+    const bars = await MasterService.getBars();
+    return sendSuccess(res, { bars: bars.map(b => ({ id: b.id, name: b.name, code: b.code })) });
+  } catch (err: any) {
+    return sendError(res, 'BARS_FETCH_FAILED', err?.message || 'Failed to fetch public bars', 500);
+  }
+});
+
 apiApp.get('/api/bars', requireAuth, async (req: Request, res: Response) => {
   try {
     const user = (req as any).user;
@@ -943,6 +1464,29 @@ apiApp.delete('/api/bars/:id', requireAuth, async (req: Request, res: Response) 
     return sendSuccess(res, result);
   } catch (err: any) {
     return sendError(res, 'BAR_DELETE_FAILED', err?.message || 'Failed to delete bar outlet', 400);
+  }
+});
+
+apiApp.get('/api/bars/:id/authorizations', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const authorizations = await BarStoreService.getAuthorizations({ barId: req.params.id });
+    return sendSuccess(res, authorizations);
+  } catch (err: any) {
+    return sendError(res, 'BAR_AUTH_FETCH_FAILED', err?.message || 'Failed to fetch bar authorizations', 500);
+  }
+});
+
+apiApp.get('/api/bar-authorizations', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const user = (req as any).user;
+    const barId = req.query.barId as string;
+    const authorizations = await BarStoreService.getAuthorizations({
+      barId: barId || undefined,
+      userId: user?.id || undefined,
+    });
+    return sendSuccess(res, authorizations);
+  } catch (err: any) {
+    return sendError(res, 'BAR_AUTH_FETCH_FAILED', err?.message || 'Failed to fetch authorizations', 500);
   }
 });
 

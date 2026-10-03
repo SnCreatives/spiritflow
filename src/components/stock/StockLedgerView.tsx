@@ -15,18 +15,16 @@ import { SupportedLanguage, StockLedgerRecord } from '../../types';
 import { apiGet } from '../../utils/api';
 import { translations } from '../../utils/i18n';
 import { useBar } from '../../lib/contexts/BarContext';
-import { ReportScopeSelector, ReportScope } from '../common/ReportScopeSelector';
 
 interface StockLedgerViewProps {
   language: SupportedLanguage;
   selectedBarId?: string | null;
 }
 
-export const StockLedgerView: React.FC<StockLedgerViewProps> = ({ language, selectedBarId }) => {
+export const StockLedgerView: React.FC<StockLedgerViewProps> = ({ language }) => {
   const t = translations[language];
-  const { selectedBar, availableBars } = useBar();
+  const { selectedBar } = useBar();
 
-  const [scope, setScope] = useState<ReportScope>('CURRENT_BAR');
   const [ledger, setLedger] = useState<StockLedgerRecord[]>([]);
   const [products, setProducts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -39,7 +37,7 @@ export const StockLedgerView: React.FC<StockLedgerViewProps> = ({ language, sele
   const fetchData = async () => {
     setLoading(true);
     try {
-      const scopeParam = scope === 'ALL_BARS' ? '&barScope=ALL_BARS' : `&barId=${selectedBar?.id || ''}`;
+      const scopeParam = `&barId=${selectedBar?.id || ''}`;
       const [ledData, prodData] = await Promise.all([
         apiGet(`/api/inventory/ledger?limit=300${selectedProductId ? `&productId=${selectedProductId}` : ''}${scopeParam}`),
         apiGet('/api/products/selection'),
@@ -60,13 +58,11 @@ export const StockLedgerView: React.FC<StockLedgerViewProps> = ({ language, sele
 
   useEffect(() => {
     fetchData();
-  }, [selectedProductId, selectedBar?.id, scope]);
+  }, [selectedProductId, selectedBar?.id]);
 
   const exportCSV = () => {
     if (filteredLedger.length === 0) return;
-    const isAllBars = scope === 'ALL_BARS';
     const headers = [
-      ...(isAllBars ? ['Bar / Outlet'] : []),
       'Date',
       'Product',
       'Transaction Type',
@@ -78,10 +74,8 @@ export const StockLedgerView: React.FC<StockLedgerViewProps> = ({ language, sele
     ];
     const rows = filteredLedger.map(entry => {
       const p = entry.product as any;
-      const b = (entry as any).bar as any;
       const productName = p?.product_name || p?.name || 'Product';
       return [
-        ...(isAllBars ? [b?.name ? `${b.name} (${b.code})` : 'All Outlets'] : []),
         entry.transaction_date?.split('T')[0] || '',
         productName,
         entry.transaction_type || '',
@@ -98,7 +92,7 @@ export const StockLedgerView: React.FC<StockLedgerViewProps> = ({ language, sele
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `Stock_Ledger_Audited_${scope}_${new Date().toISOString().split('T')[0]}.csv`;
+    a.download = `Stock_Ledger_${selectedBar?.name || 'Bar'}_${new Date().toISOString().split('T')[0]}.csv`;
     a.click();
   };
 
@@ -148,13 +142,6 @@ export const StockLedgerView: React.FC<StockLedgerViewProps> = ({ language, sele
           </button>
         </div>
       </div>
-
-      {/* Scope Selector */}
-      <ReportScopeSelector
-        title="Stock Ledger Audit Scope"
-        scope={scope}
-        onChange={setScope}
-      />
 
       {/* Filter Bar */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shadow-sm">
@@ -227,7 +214,6 @@ export const StockLedgerView: React.FC<StockLedgerViewProps> = ({ language, sele
           <table className="w-full text-left text-xs text-slate-300">
             <thead className="bg-slate-950/60 text-slate-400 uppercase font-mono text-[10px] border-b border-slate-800">
               <tr>
-                {scope === 'ALL_BARS' && <th className="px-4 py-3">Outlet / Bar</th>}
                 <th className="px-4 py-3">Date</th>
                 <th className="px-4 py-3">Product Name</th>
                 <th className="px-4 py-3">Transaction Type</th>
@@ -241,24 +227,18 @@ export const StockLedgerView: React.FC<StockLedgerViewProps> = ({ language, sele
             <tbody className="divide-y divide-slate-800/60 font-sans">
               {paginatedLedger.length === 0 ? (
                 <tr>
-                  <td colSpan={scope === 'ALL_BARS' ? 9 : 8} className="px-4 py-12 text-center text-slate-500 text-xs">
+                  <td colSpan={8} className="px-4 py-12 text-center text-slate-500 text-xs">
                     No stock ledger transactions found for the selected filters.
                   </td>
                 </tr>
               ) : (
                 paginatedLedger.map((item: any) => {
                   const p = item.product as any;
-                  const b = (item as any).bar as any;
                   const isStockIn = Number(item.stock_in || 0) > 0;
                   const isStockOut = Number(item.stock_out || 0) > 0;
 
                   return (
                     <tr key={item.id} className="hover:bg-slate-800/30 transition-colors">
-                      {scope === 'ALL_BARS' && (
-                        <td className="px-4 py-3 font-semibold text-slate-200">
-                          {b?.name ? `${b.name} (${b.code})` : 'All Outlets'}
-                        </td>
-                      )}
                       <td className="px-4 py-3 font-mono text-slate-400">
                         {item.transaction_date?.split('T')[0] || '-'}
                       </td>

@@ -1,6 +1,3 @@
-import fs from 'fs';
-import path from 'path';
-import crypto from 'crypto';
 import { getSupabaseServiceClient } from '../../lib/supabase/client.js';
 import { BarOutlet } from '../../types/index.js';
 
@@ -14,134 +11,42 @@ export interface UserBarAccessRecord {
   updated_at: string;
 }
 
-const DATA_DIR = path.join(process.cwd(), 'data');
-const BARS_FILE = path.join(DATA_DIR, 'bar_outlets.json');
-const ACCESS_FILE = path.join(DATA_DIR, 'user_bar_access.json');
-
-const DEFAULT_BARS: BarOutlet[] = [];
+export type BarUserAuthorizationRecord = UserBarAccessRecord;
 
 export class BarStoreService {
-  private static ensureDataDir() {
-    if (!fs.existsSync(DATA_DIR)) {
-      try {
-        fs.mkdirSync(DATA_DIR, { recursive: true });
-      } catch (err) {
-        console.error('[BarStore] Failed creating data dir:', err);
-      }
-    }
-  }
-
-  private static loadBarsFromDisk(): BarOutlet[] {
-    this.ensureDataDir();
-    if (fs.existsSync(BARS_FILE)) {
-      try {
-        const content = fs.readFileSync(BARS_FILE, 'utf-8');
-        const parsed = JSON.parse(content);
-        if (Array.isArray(parsed)) {
-          return parsed;
-        }
-      } catch (err) {
-        console.error('[BarStore] Error reading bars file:', err);
-      }
-    }
-    // Initialize empty bars store
-    this.saveBarsToDisk([]);
-    return [];
-  }
-
-  private static saveBarsToDisk(bars: BarOutlet[]): void {
-    this.ensureDataDir();
-    try {
-      fs.writeFileSync(BARS_FILE, JSON.stringify(bars, null, 2), 'utf-8');
-    } catch (err) {
-      console.error('[BarStore] Failed writing bars file:', err);
-    }
-  }
-
-  private static loadAccessFromDisk(): UserBarAccessRecord[] {
-    this.ensureDataDir();
-    if (fs.existsSync(ACCESS_FILE)) {
-      try {
-        const content = fs.readFileSync(ACCESS_FILE, 'utf-8');
-        const parsed = JSON.parse(content);
-        if (Array.isArray(parsed)) {
-          return parsed;
-        }
-      } catch (err) {
-        console.error('[BarStore] Error reading access file:', err);
-      }
-    }
-    return [];
-  }
-
-  private static saveAccessToDisk(access: UserBarAccessRecord[]): void {
-    this.ensureDataDir();
-    try {
-      fs.writeFileSync(ACCESS_FILE, JSON.stringify(access, null, 2), 'utf-8');
-    } catch (err) {
-      console.error('[BarStore] Failed writing access file:', err);
-    }
-  }
-
   /**
    * Get all bars, filtered optionally by user permissions.
+   * STRICT: Uses actual Supabase database.
    */
   static async getBars(userId?: string): Promise<BarOutlet[]> {
-    let bars: BarOutlet[] = [];
+    const supabase = getSupabaseServiceClient();
+    
+    // 1. Fetch all bars
+    const { data: dbBars, error: barError } = await supabase
+      .from('bar_outlets')
+      .select('*')
+      .order('name', { ascending: true });
 
-    // 1. Try Supabase table if available
-    try {
-      const supabase = getSupabaseServiceClient();
-      const { data: dbBars, error } = await supabase
-        .from('bar_outlets')
-        .select('*')
-        .order('name', { ascending: true });
-
-      if (!error && Array.isArray(dbBars) && dbBars.length > 0) {
-        bars = dbBars;
-      }
-    } catch {
-      // Supabase table not available
+    if (barError) {
+      throw new Error(`Failed to fetch bars from database: ${barError.message}`);
     }
 
-    // 2. Fallback to resilient file store if DB query returned nothing or failed
-    if (bars.length === 0) {
-      bars = this.loadBarsFromDisk();
-    }
+    const bars = dbBars || [];
 
-    // 3. If userId is provided, filter by user_bar_access if access records exist
-    if (userId) {
-      // Check Supabase user_bar_access
-      let userAccessBars: BarOutlet[] = [];
-      try {
-        const supabase = getSupabaseServiceClient();
-        const { data: accessList, error } = await supabase
-          .from('user_bar_access')
-          .select('bar_id, status')
-          .eq('user_id', userId)
-          .eq('status', 'Active');
+    // 2. If userId is provided, filter by user authorizations
+    if (userId && bars.length > 0) {
+      const { data: accessList, error: accessError } = await supabase
+        .from('bar_user_authorizations')
+        .select('bar_id')
+        .eq('user_id', userId)
+        .eq('status', 'Active');
 
-        if (!error && Array.isArray(accessList) && accessList.length > 0) {
-          const allowedBarIds = new Set(accessList.map((a: any) => a.bar_id));
-          userAccessBars = bars.filter(b => allowedBarIds.has(b.id));
-        }
-      } catch {
-        // Ignore error
+      if (accessError) {
+        throw new Error(`Failed to verify bar access: ${accessError.message}`);
       }
 
-      // If Supabase didn't return access, check disk access store
-      if (userAccessBars.length === 0) {
-        const accessList = this.loadAccessFromDisk();
-        const userRecords = accessList.filter(a => a.user_id === userId && a.status === 'Active');
-        if (userRecords.length > 0) {
-          const allowedBarIds = new Set(userRecords.map(a => a.bar_id));
-          userAccessBars = bars.filter(b => allowedBarIds.has(b.id));
-        }
-      }
-
-      if (userAccessBars.length > 0) {
-        return userAccessBars;
-      }
+      const allowedBarIds = new Set(accessList?.map((a: any) => a.bar_id) || []);
+      return bars.filter(b => allowedBarIds.has(b.id));
     }
 
     return bars;
@@ -151,120 +56,77 @@ export class BarStoreService {
    * Fetch single bar by ID.
    */
   static async getBarById(id: string): Promise<BarOutlet | null> {
-    // 1. Try Supabase
-    try {
-      const supabase = getSupabaseServiceClient();
-      const { data, error } = await supabase
-        .from('bar_outlets')
-        .select('*')
-        .eq('id', id)
-        .maybeSingle();
+    const supabase = getSupabaseServiceClient();
+    const { data, error } = await supabase
+      .from('bar_outlets')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle();
 
-      if (!error && data) {
-        return data;
-      }
-    } catch {
-      // Ignore
+    if (error) {
+      throw new Error(`Database error fetching bar "${id}": ${error.message}`);
     }
 
-    // 2. Disk store
-    const bars = this.loadBarsFromDisk();
-    return bars.find(b => b.id === id) || null;
+    return data;
   }
 
   /**
    * Create a new Bar Outlet.
+   * ID is database-generated UUID.
    */
   static async createBar(
     data: {
       name: string;
-      code: string;
+      code?: string | null;
       address?: string | null;
       city?: string | null;
       state?: string | null;
       pincode?: string | null;
-      contact_person?: string | null;
-      phone?: string | null;
-      email?: string | null;
       license_number?: string | null;
       status?: 'Active' | 'Inactive';
     },
     ownerId?: string
   ): Promise<BarOutlet> {
-    const trimmedName = data.name.trim();
-    const trimmedCode = data.code.trim().toUpperCase();
+    const trimmedName = data.name ? data.name.trim() : '';
 
     if (!trimmedName) {
       throw new Error('Bar name is required');
     }
-    if (!trimmedCode) {
-      throw new Error('Bar code is required');
+
+    const supabase = getSupabaseServiceClient();
+    
+    // Attempt insert into Supabase. Let the DB generate the UUID.
+    const { data: dbBar, error } = await supabase
+      .from('bar_outlets')
+      .insert({
+        name: trimmedName,
+        code: data.code || null,
+        address: data.address || null,
+        city: data.city || null,
+        state: data.state || 'Maharashtra',
+        pincode: data.pincode || null,
+        license_number: data.license_number || null,
+        status: data.status || 'Active',
+        owner_user_id: ownerId || null
+      })
+      .select()
+      .single();
+
+    if (error) {
+      throw new Error(`Failed to create bar outlet: ${error.message}`);
     }
 
-    // Verify code uniqueness in disk store
-    const bars = this.loadBarsFromDisk();
-    const existing = bars.find(b => b.code.toUpperCase() === trimmedCode);
-    if (existing) {
-      throw new Error(`A bar with code "${trimmedCode}" already exists.`);
+    if (!dbBar) {
+      throw new Error('Failed to retrieve created bar outlet from database');
     }
 
-    const now = new Date().toISOString();
-    const newBar: BarOutlet = {
-      id: crypto.randomUUID(),
-      name: trimmedName,
-      code: trimmedCode,
-      address: data.address || null,
-      city: data.city || null,
-      state: data.state || 'Maharashtra',
-      pincode: data.pincode || null,
-      contact_person: data.contact_person || null,
-      phone: data.phone || null,
-      email: data.email || null,
-      license_number: data.license_number || null,
-      status: data.status || 'Active',
-      created_at: now,
-      updated_at: now,
-    };
-
-    // 1. Try persisting to Supabase table
-    try {
-      const supabase = getSupabaseServiceClient();
-      const { data: dbBar, error } = await supabase
-        .from('bar_outlets')
-        .insert({
-          id: newBar.id,
-          name: newBar.name,
-          code: newBar.code,
-          address: newBar.address,
-          city: newBar.city,
-          state: newBar.state,
-          pincode: newBar.pincode,
-          contact_person: newBar.contact_person,
-          phone: newBar.phone,
-          email: newBar.email,
-          license_number: newBar.license_number,
-          status: newBar.status,
-        })
-        .select()
-        .single();
-
-      if (!error && dbBar) {
-        newBar.id = dbBar.id;
-      }
-    } catch {
-      // Supabase table not available, using disk store
-    }
-
-    // 2. Persist to Disk store
-    bars.push(newBar);
-    this.saveBarsToDisk(bars);
-
-    // 3. Assign access to owner if provided
+    // Automatically assign owner authorization if ownerId is provided
+    // This should ideally be handled by a DB trigger, but we provide service-level logic for now
     if (ownerId) {
-      await this.assignUserAccess(ownerId, newBar.id, 'Owner');
+      await this.assignUserAccess(ownerId, dbBar.id, 'Owner');
     }
 
-    return newBar;
+    return dbBar;
   }
 
   /**
@@ -279,74 +141,27 @@ export class BarStoreService {
       city: string | null;
       state: string | null;
       pincode: string | null;
-      contact_person: string | null;
-      phone: string | null;
-      email: string | null;
       license_number: string | null;
       status: 'Active' | 'Inactive';
     }>
   ): Promise<BarOutlet> {
-    const bars = this.loadBarsFromDisk();
-    const index = bars.findIndex(b => b.id === id);
-    if (index === -1) {
-      throw new Error(`Bar outlet with ID "${id}" not found`);
+    const supabase = getSupabaseServiceClient();
+    
+    const { data: updatedBar, error } = await supabase
+      .from('bar_outlets')
+      .update({
+        ...data,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) {
+      throw new Error(`Failed to update bar outlet: ${error.message}`);
     }
 
-    if (data.code) {
-      const upperCode = data.code.trim().toUpperCase();
-      const codeDuplicate = bars.find(b => b.id !== id && b.code.toUpperCase() === upperCode);
-      if (codeDuplicate) {
-        throw new Error(`A bar with code "${upperCode}" already exists.`);
-      }
-    }
-
-    const now = new Date().toISOString();
-    const existing = bars[index];
-    const updated: BarOutlet = {
-      ...existing,
-      name: data.name !== undefined ? data.name.trim() : existing.name,
-      code: data.code !== undefined ? data.code.trim().toUpperCase() : existing.code,
-      address: data.address !== undefined ? data.address : existing.address,
-      city: data.city !== undefined ? data.city : existing.city,
-      state: data.state !== undefined ? data.state : existing.state,
-      pincode: data.pincode !== undefined ? data.pincode : existing.pincode,
-      contact_person: data.contact_person !== undefined ? data.contact_person : existing.contact_person,
-      phone: data.phone !== undefined ? data.phone : existing.phone,
-      email: data.email !== undefined ? data.email : existing.email,
-      license_number: data.license_number !== undefined ? data.license_number : existing.license_number,
-      status: data.status !== undefined ? data.status : existing.status,
-      updated_at: now,
-    };
-
-    // 1. Try Supabase update
-    try {
-      const supabase = getSupabaseServiceClient();
-      await supabase
-        .from('bar_outlets')
-        .update({
-          name: updated.name,
-          code: updated.code,
-          address: updated.address,
-          city: updated.city,
-          state: updated.state,
-          pincode: updated.pincode,
-          contact_person: updated.contact_person,
-          phone: updated.phone,
-          email: updated.email,
-          license_number: updated.license_number,
-          status: updated.status,
-          updated_at: now,
-        })
-        .eq('id', id);
-    } catch {
-      // Ignore
-    }
-
-    // 2. Update Disk store
-    bars[index] = updated;
-    this.saveBarsToDisk(bars);
-
-    return updated;
+    return updatedBar;
   }
 
   /**
@@ -357,48 +172,58 @@ export class BarStoreService {
   }
 
   /**
-   * Assign user access to a bar.
+   * Assign user authorization to a bar.
+   * Strictly enforces UNIQUE(bar_id, user_id) via Supabase upsert logic.
    */
   static async assignUserAccess(userId: string, barId: string, role = 'Owner'): Promise<void> {
-    // 1. Try Supabase table
-    try {
-      const supabase = getSupabaseServiceClient();
-      await supabase
-        .from('user_bar_access')
-        .insert({
-          user_id: userId,
-          bar_id: barId,
-          role,
-          status: 'Active',
-        })
-        .select();
-    } catch {
-      // Ignore
-    }
-
-    // 2. Disk store
-    const accessList = this.loadAccessFromDisk();
-    const existing = accessList.find(a => a.user_id === userId && a.bar_id === barId);
-    if (!existing) {
-      accessList.push({
-        id: crypto.randomUUID(),
+    const supabase = getSupabaseServiceClient();
+    
+    const { error } = await supabase
+      .from('bar_user_authorizations')
+      .upsert({
         user_id: userId,
         bar_id: barId,
         role,
         status: 'Active',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      });
-      this.saveAccessToDisk(accessList);
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'bar_id, user_id' });
+
+    if (error) {
+      throw new Error(`Failed to assign bar access: ${error.message}`);
     }
+
+    // Mirror to legacy table if it exists (best effort)
+    try {
+      await supabase.from('user_bar_access').upsert({
+        user_id: userId,
+        bar_id: barId,
+        role,
+        status: 'Active'
+      }, { onConflict: 'user_id, bar_id' });
+    } catch {}
+  }
+
+  /**
+   * Retrieve authorizations for a bar or user.
+   */
+  static async getAuthorizations(params?: { barId?: string; userId?: string }): Promise<UserBarAccessRecord[]> {
+    const supabase = getSupabaseServiceClient();
+    let query = supabase.from('bar_user_authorizations').select('*');
+
+    if (params?.barId) query = query.eq('bar_id', params.barId);
+    if (params?.userId) query = query.eq('user_id', params.userId);
+
+    const { data, error } = await query;
+    if (error) {
+      throw new Error(`Failed to fetch authorizations: ${error.message}`);
+    }
+
+    return data || [];
   }
 
   /**
    * Safe Delete a bar outlet.
-   * Checks for transactional records across inventory, opening stock, purchases,
-   * purchases inward, sales, stock transfers, stock adjustments, stock ledger, batches, etc.
-   * If transactions exist, deactivates the bar outlet instead of hard deleting to protect audit trail.
-   * If no transactions exist, permanently deletes bar record & user_bar_access records.
+   * Checks for transactional records in Supabase before deletion.
    */
   static async deleteBar(id: string): Promise<{ action: 'deleted' | 'deactivated'; message: string; bar: BarOutlet }> {
     const existing = await this.getBarById(id);
@@ -410,110 +235,42 @@ export class BarStoreService {
     const transactionCheckDetails: string[] = [];
 
     // Helper to safely check Supabase table
-    const checkSupabaseTable = async (tableName: string, barColumn = 'bar_id') => {
-      try {
-        const { count, error } = await supabase
-          .from(tableName)
-          .select('id', { count: 'exact', head: true })
-          .eq(barColumn, id);
-        if (!error && count && count > 0) {
-          return count;
-        }
-      } catch {
-        // Table or column might not exist in Supabase schema cache
-      }
-      return 0;
+    const checkTable = async (tableName: string, barColumn = 'bar_id') => {
+      const { count, error } = await supabase
+        .from(tableName)
+        .select('id', { count: 'exact', head: true })
+        .eq(barColumn, id);
+      return (!error && count) ? count : 0;
     };
 
-    // Helper to safely check disk JSON data file
-    const checkDiskFile = (fileName: string, barColumnKeys = ['bar_id', 'barId', 'source_bar_id', 'destination_bar_id']) => {
-      try {
-        const filePath = path.join(DATA_DIR, fileName);
-        if (fs.existsSync(filePath)) {
-          const content = fs.readFileSync(filePath, 'utf-8');
-          const parsed = JSON.parse(content);
-          if (Array.isArray(parsed)) {
-            const matches = parsed.filter(item =>
-              barColumnKeys.some(key => item[key] === id)
-            );
-            return matches.length;
-          }
-        }
-      } catch {
-        // Ignore read errors
-      }
-      return 0;
-    };
+    const [invCount, osCount, purCount, ledgerCount] = await Promise.all([
+      checkTable('inventory'),
+      checkTable('opening_stock'),
+      checkTable('purchases'),
+      checkTable('stock_ledger')
+    ]);
 
-    // 1. Inventory
-    const invCount = Math.max(await checkSupabaseTable('inventory'), checkDiskFile('inventory.json'));
     if (invCount > 0) transactionCheckDetails.push(`${invCount} inventory items`);
-
-    // 2. Opening Stock
-    const osCount = Math.max(await checkSupabaseTable('opening_stock'), checkDiskFile('opening_stock.json'));
     if (osCount > 0) transactionCheckDetails.push(`${osCount} opening stock entries`);
-
-    // 3. Purchases
-    const purCount = Math.max(await checkSupabaseTable('purchases'), checkDiskFile('purchases.json'));
     if (purCount > 0) transactionCheckDetails.push(`${purCount} purchase records`);
-
-    // 4. Purchases Inward
-    const inwCount = Math.max(await checkSupabaseTable('purchases_inward'), checkDiskFile('purchases_inward.json'));
-    if (inwCount > 0) transactionCheckDetails.push(`${inwCount} inward register entries`);
-
-    // 5. Stock Adjustments
-    const adjCount = Math.max(await checkSupabaseTable('stock_adjustments'), checkDiskFile('stock_adjustments.json'));
-    if (adjCount > 0) transactionCheckDetails.push(`${adjCount} stock adjustments`);
-
-    // 6. Stock Transfers
-    const trnsSourceCount = Math.max(
-      await checkSupabaseTable('stock_transfers', 'source_bar_id'),
-      checkDiskFile('stock_transfers.json', ['source_bar_id'])
-    );
-    const trnsDestCount = Math.max(
-      await checkSupabaseTable('stock_transfers', 'destination_bar_id'),
-      checkDiskFile('stock_transfers.json', ['destination_bar_id'])
-    );
-    const trnsCount = trnsSourceCount + trnsDestCount;
-    if (trnsCount > 0) transactionCheckDetails.push(`${trnsCount} stock transfers`);
-
-    // 7. Stock Ledger
-    const ledgerCount = Math.max(await checkSupabaseTable('stock_ledger'), checkDiskFile('stock_ledger.json'));
     if (ledgerCount > 0) transactionCheckDetails.push(`${ledgerCount} stock ledger records`);
 
-    // 8. Batches
-    const batchCount = Math.max(await checkSupabaseTable('batches'), checkDiskFile('batches.json'));
-    if (batchCount > 0) transactionCheckDetails.push(`${batchCount} product batches`);
-
-    const hasTransactions = transactionCheckDetails.length > 0;
-
-    if (hasTransactions) {
-      // SAFE DEACTIVATION: Bar has historical transactional data. Preserve compliance & audit trail!
+    if (transactionCheckDetails.length > 0) {
       const deactivatedBar = await this.updateBar(id, { status: 'Inactive' });
       return {
         action: 'deactivated',
-        message: `Bar "${existing.name}" contains historical transactions (${transactionCheckDetails.join(', ')}). To preserve audit compliance and register history, it has been deactivated instead of hard-deleted.`,
+        message: `Bar "${existing.name}" contains historical transactions (${transactionCheckDetails.join(', ')}). It has been deactivated to preserve audit compliance.`,
         bar: deactivatedBar,
       };
     }
 
     // NO TRANSACTIONS EXIST: Perform permanent safe removal
-    // 1. Delete from Supabase
-    try {
-      await supabase.from('user_bar_access').delete().eq('bar_id', id);
-      await supabase.from('bar_outlets').delete().eq('id', id);
-    } catch (err) {
-      console.error('[BarStore] Supabase bar delete error:', err);
+    const { error: delAuthError } = await supabase.from('bar_user_authorizations').delete().eq('bar_id', id);
+    const { error: delBarError } = await supabase.from('bar_outlets').delete().eq('id', id);
+
+    if (delBarError || delAuthError) {
+      throw new Error(`Database error during bar deletion: ${delBarError?.message || delAuthError?.message}`);
     }
-
-    // 2. Delete from Disk store
-    const bars = this.loadBarsFromDisk();
-    const updatedBars = bars.filter(b => b.id !== id);
-    this.saveBarsToDisk(updatedBars);
-
-    const accessList = this.loadAccessFromDisk();
-    const updatedAccess = accessList.filter(a => a.bar_id !== id);
-    this.saveAccessToDisk(updatedAccess);
 
     return {
       action: 'deleted',
@@ -523,14 +280,15 @@ export class BarStoreService {
   }
 
   /**
-   * Get dictionary mapping barId -> BarOutlet for quick in-memory lookups.
+   * Get dictionary mapping barId -> { id, name, code } for quick lookups.
    */
   static async getBarMap(): Promise<Record<string, { id: string; name: string; code: string }>> {
     const bars = await this.getBars();
     const map: Record<string, { id: string; name: string; code: string }> = {};
     for (const b of bars) {
-      map[b.id] = { id: b.id, name: b.name, code: b.code };
+      map[b.id] = { id: b.id, name: b.name, code: b.code || b.name.slice(0, 4).toUpperCase() };
     }
     return map;
   }
 }
+

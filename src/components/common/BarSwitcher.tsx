@@ -46,7 +46,7 @@ export const BarSwitcher: React.FC<BarSwitcherProps> = ({
     const q = searchQuery.toLowerCase();
     return (
       bar.name.toLowerCase().includes(q) ||
-      bar.code.toLowerCase().includes(q) ||
+      (bar.code && bar.code.toLowerCase().includes(q)) ||
       (bar.city && bar.city.toLowerCase().includes(q)) ||
       (bar.license_number && bar.license_number.toLowerCase().includes(q))
     );

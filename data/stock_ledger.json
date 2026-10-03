@@ -1,0 +1,58 @@
+[
+  {
+    "id": "9bf78245-c961-4ad6-8d72-ed8ae117f7cb",
+    "bar_id": "aed17417-ff64-48b1-a698-dfb9e8bab282",
+    "product_id": "prod-test-7269",
+    "transaction_date": "2026-09-30T07:22:20.162Z",
+    "transaction_type": "PURCHASE",
+    "reference_id": "f0512ac8-0f2f-4036-99c8-3284c96281e9",
+    "reference_number": "PO-BETA-7269",
+    "stock_in": 25,
+    "stock_out": 0,
+    "balance": 25,
+    "remarks": "Inward Purchase #PO-BETA-7269",
+    "created_at": "2026-09-30T07:22:20.162Z"
+  },
+  {
+    "id": "e09cc109-aa86-49ba-8cc6-feff654561ed",
+    "bar_id": "726a0566-f141-4586-8fda-84111f4d10d4",
+    "product_id": "prod-test-7269",
+    "transaction_date": "2026-09-30T07:22:19.427Z",
+    "transaction_type": "PURCHASE",
+    "reference_id": "1de05901-173d-4a57-93be-6da744219d3b",
+    "reference_number": "PO-ALPHA-7269",
+    "stock_in": 50,
+    "stock_out": 0,
+    "balance": 50,
+    "remarks": "Inward Purchase #PO-ALPHA-7269",
+    "created_at": "2026-09-30T07:22:19.427Z"
+  },
+  {
+    "id": "0402d5ee-f994-40bc-9c6c-355e6f157ee5",
+    "bar_id": "d09eb834-2cde-46da-8452-b705060056d1",
+    "product_id": "prod-test-6418",
+    "transaction_date": "2026-09-30T07:20:39.101Z",
+    "transaction_type": "PURCHASE",
+    "reference_id": "c677c728-06dd-44bc-8269-bf4299ef2a61",
+    "referenceNumber": "PO-BETA-6418",
+    "stock_in": 25,
+    "stock_out": 0,
+    "balance": 25,
+    "remarks": "Inward Purchase #PO-BETA-6418",
+    "created_at": "2026-09-30T07:20:39.101Z"
+  },
+  {
+    "id": "64a5cf47-c503-4c92-829c-2094e8d9eb17",
+    "bar_id": "b4da4bb3-7741-4216-bf71-f3e9ed2938a3",
+    "product_id": "prod-test-6418",
+    "transaction_date": "2026-09-30T07:20:38.295Z",
+    "transaction_type": "PURCHASE",
+    "reference_id": "9f75b7ad-239c-4294-9fac-d10ced96c569",
+    "referenceNumber": "PO-ALPHA-6418",
+    "stock_in": 50,
+    "stock_out": 0,
+    "balance": 50,
+    "remarks": "Inward Purchase #PO-ALPHA-6418",
+    "created_at": "2026-09-30T07:20:38.295Z"
+  }
+]
