@@ -21,6 +21,7 @@ import {
 import { useBar } from '../../lib/contexts/BarContext';
 import { useToast } from '../../lib/contexts/ToastContext';
 import { apiGet } from '../../utils/api';
+import { getBarExportHeader } from '../../utils/exportHeader';
 
 export type ReportType =
   | 'daily-sales'
@@ -117,10 +118,11 @@ export const ReportsView: React.FC = () => {
     if (!reportData || !selectedBar) return;
     const barName = selectedBar.name;
     let filename = `LiquorFlow_${activeReport}_${barName}_${new Date().toISOString().split('T')[0]}.csv`;
-    let csvContent = '';
+    
+    const headerInfo = getBarExportHeader(selectedBar, activeReport.replace(/-/g, ' ').toUpperCase(), `${startDate} to ${endDate}`);
+    let csvContent = headerInfo.csvRows.map(row => row.join(',')).join('\n') + '\n';
 
     if (activeReport === 'excise-log-book') {
-      csvContent = `Selected Bar: ${barName}\nPeriod: ${startDate} to ${endDate}\n\n`;
       csvContent += `Serial Number,Date,Spirit / IMFL,Fermented Beer,Mild Beer,Wine,MML,Country Liquor,Total Units\n`;
       (reportData.entries || []).forEach((r: any) => {
         csvContent += `${r.serialNumber},${r.date},${r.spiritImfl},${r.fermentedBeer},${r.mildBeer},${r.wine},${r.mml},${r.countryLiquor},${r.totalUnits}\n`;
@@ -130,26 +132,22 @@ export const ReportsView: React.FC = () => {
         csvContent += `Total,TOTAL,${t.spiritImfl},${t.fermentedBeer},${t.mildBeer},${t.wine},${t.mml},${t.countryLiquor},${t.totalUnits}\n`;
       }
     } else if (activeReport === 'sales-tax') {
-      csvContent = `Selected Bar: ${barName}\nPeriod: ${startDate} to ${endDate}\n\n`;
       csvContent += `Category,Taxable Value (INR),VAT Rate (%),VAT Amount (INR),Total Value (INR)\n`;
       (reportData.categories || []).forEach((c: any) => {
         csvContent += `"${c.category}",${c.taxableValue},${c.vatRate}%,${c.vatAmount},${c.totalValue}\n`;
       });
       csvContent += `Total,${reportData.totalTaxable},,${reportData.totalVat},${reportData.totalInvoice}\n`;
     } else if (activeReport === 'stock-value') {
-      csvContent = `Selected Bar: ${barName}\nAs of: ${new Date().toLocaleDateString()}\n\n`;
       csvContent += `Product Name,SKU,Category,Brand,Opening,Purchased,Adjustments,Current Stock,TP Cost Price,MRP,TP Value,MRP Value\n`;
       (reportData.items || []).forEach((i: any) => {
         csvContent += `"${i.productName}","${i.sku}","${i.category}","${i.brand}",${i.openingQty},${i.purchasedQty},${i.adjustmentQty},${i.currentQty},${i.purchaseTpPrice},${i.mrp},${i.tpCostValue},${i.mrpTotalValue}\n`;
       });
     } else if (activeReport === 'received-tp') {
-      csvContent = `Selected Bar: ${barName}\nPeriod: ${startDate} to ${endDate}\n\n`;
       csvContent += `Purchase Number,Date,TP Permit Ref,Excise Ref,Total Value (INR)\n`;
       (reportData.purchases || []).forEach((p: any) => {
         csvContent += `"${p.purchase_number}","${p.purchase_date}","${p.tp_permit_reference || ''}","${p.excise_reference || ''}",${p.total_value}\n`;
       });
     } else {
-      csvContent = `Selected Bar: ${barName}\nExport Date: ${new Date().toISOString()}\n\n`;
       csvContent += JSON.stringify(reportData, null, 2);
     }
 

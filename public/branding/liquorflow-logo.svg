@@ -1,0 +1,9 @@
+<svg viewBox="0 0 400 100" xmlns="http://www.w3.org/2000/svg">
+  <!-- Mark -->
+  <g>
+    <path d="M40 10 C 20 10, 10 30, 10 50 C 10 70, 25 90, 40 90 C 55 90, 70 70, 70 50 C 70 30, 60 10, 40 10 Z" fill="#1e293b"/>
+    <path d="M30 30 L 50 70" stroke="#059669" stroke-width="4" stroke-linecap="round"/>
+  </g>
+  <!-- Wordmark -->
+  <text x="90" y="65" font-family="sans-serif" font-weight="bold" font-size="40" fill="#1e293b" letter-spacing="2">LIQUORFLOW</text>
+</svg>

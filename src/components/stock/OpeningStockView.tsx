@@ -14,28 +14,13 @@ import {
   Lock,
   X,
   Trash2,
+  Clipboard,
 } from 'lucide-react';
 import { useBar } from '../../lib/contexts/BarContext';
 import { useToast } from '../../lib/contexts/ToastContext';
 import { apiGet, apiPost } from '../../utils/api';
 import { CanonicalProductSelector, SelectedProductDetail } from '../common/CanonicalProductSelector';
-
-interface ParsedBatchRow {
-  rowId: string;
-  date: string;
-  skuOrName: string;
-  brand: string;
-  variant: string;
-  bottleSize: string;
-  packaging: string;
-  scmCode: string;
-  tpNumber: string;
-  quantity: number;
-  matchedProductId?: string;
-  matchedProductName?: string;
-  status: 'valid' | 'invalid';
-  errorMessage?: string;
-}
+import { UniversalBulkEntryModal, BulkEntryRow } from '../common/UniversalBulkEntryModal';
 
 export const OpeningStockView: React.FC = () => {
   const { selectedBar } = useBar();
@@ -45,7 +30,6 @@ export const OpeningStockView: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [records, setRecords] = useState<any[]>([]);
   const [search, setSearch] = useState('');
-  const [catalogProducts, setCatalogProducts] = useState<any[]>([]);
 
   // Single Entry Form State
   const [entryDate, setEntryDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
@@ -56,9 +40,6 @@ export const OpeningStockView: React.FC = () => {
 
   // Multi-row Excel / TSV Paste State
   const [showPasteModal, setShowPasteModal] = useState<boolean>(false);
-  const [pastedText, setPastedText] = useState<string>('');
-  const [parsedRows, setParsedRows] = useState<ParsedBatchRow[]>([]);
-  const [isBatchValid, setIsBatchValid] = useState<boolean>(false);
 
   // Clear operational records on bar switch
   useEffect(() => {
@@ -70,16 +51,9 @@ export const OpeningStockView: React.FC = () => {
     if (!selectedBar?.id || selectedBar.id === 'ALL_BARS') return;
     setLoading(true);
     try {
-      const [recData, prodData] = await Promise.all([
-        apiGet(`/api/inventory/opening-stock?barId=${encodeURIComponent(selectedBar.id)}`),
-        apiGet('/api/products/selection'),
-      ]);
-
+      const recData = await apiGet(`/api/inventory/opening-stock?barId=${encodeURIComponent(selectedBar.id)}`);
       if (recData.success) {
         setRecords(recData.data?.records || []);
-      }
-      if (prodData.success) {
-        setCatalogProducts(prodData.data?.items || []);
       }
     } catch (err: any) {
       showError(err.message || 'Failed to load opening stock records');
@@ -137,107 +111,23 @@ export const OpeningStockView: React.FC = () => {
     }
   };
 
-  // Handler: Parse Excel / TSV Paste
-  const handleParsePastedText = () => {
-    if (!pastedText.trim()) {
-      showError('Please paste rows from Excel, TSV, or Google Sheets.');
-      return;
-    }
-
-    const lines = pastedText.trim().split('\n');
-    const rows: ParsedBatchRow[] = [];
-    let allValid = true;
-
-    lines.forEach((line, index) => {
-      const cleanLine = line.trim();
-      if (!cleanLine) return;
-
-      // Split by tab (Excel/Google sheets default) or comma
-      const cols = cleanLine.includes('\t') ? cleanLine.split('\t') : cleanLine.split(',');
-      const dateVal = cols[0]?.trim() || new Date().toISOString().split('T')[0];
-      const prodOrSku = cols[1]?.trim() || '';
-      const brandVal = cols[2]?.trim() || '';
-      const variantVal = cols[3]?.trim() || '';
-      const sizeVal = cols[4]?.trim() || '';
-      const pkgVal = cols[5]?.trim() || 'Bottle';
-      const scmVal = cols[6]?.trim() || '';
-      const tpVal = cols[7]?.trim() || '';
-      const qtyVal = parseInt(cols[8]?.trim() || cols[2]?.trim() || '0', 10);
-
-      // Match against catalog products
-      let matched = catalogProducts.find(
-        p =>
-          (p.sku && p.sku.toLowerCase() === prodOrSku.toLowerCase()) ||
-          (p.name && p.name.toLowerCase() === prodOrSku.toLowerCase()) ||
-          (p.product_name && p.product_name.toLowerCase() === prodOrSku.toLowerCase())
-      );
-
-      if (!matched && brandVal) {
-        matched = catalogProducts.find(
-          p =>
-            (p.brand?.name || '').toLowerCase().includes(brandVal.toLowerCase()) &&
-            (!sizeVal || (p.volume_ml && p.volume_ml.toString() === sizeVal.replace(/\D/g, '')))
-        );
-      }
-
-      const isValidRow = Boolean(matched && qtyVal > 0);
-      if (!isValidRow) allValid = false;
-
-      rows.push({
-        rowId: `row-${index + 1}`,
-        date: dateVal,
-        skuOrName: prodOrSku,
-        brand: brandVal,
-        variant: variantVal,
-        bottleSize: sizeVal,
-        packaging: pkgVal,
-        scmCode: scmVal,
-        tpNumber: tpVal,
-        quantity: qtyVal,
-        matchedProductId: matched?.id,
-        matchedProductName: matched?.name || matched?.product_name,
-        status: isValidRow ? 'valid' : 'invalid',
-        errorMessage: !matched
-          ? `Product not found in Product Master: "${prodOrSku}"`
-          : qtyVal <= 0
-          ? 'Quantity must be > 0'
-          : undefined,
-      });
-    });
-
-    setParsedRows(rows);
-    setIsBatchValid(allValid && rows.length > 0);
-  };
-
-  // Handler: Save Batch Opening Stock
-  const handleSaveBatch = async () => {
-    if (!selectedBar?.id || !isBatchValid || parsedRows.length === 0) {
-      showError('Please ensure all pasted rows are valid before saving.');
-      return;
-    }
-
+  // Handler: Universal Bulk Import Add Rows
+  const handleAddBulkOpeningStock = async (rows: BulkEntryRow[]) => {
+    if (!selectedBar?.id || selectedBar.id === 'ALL_BARS') return;
     setSaving(true);
     try {
-      for (const row of parsedRows) {
-        if (row.matchedProductId && row.quantity > 0) {
-          const res = await apiPost('/api/inventory/opening-stock', {
+      for (const r of rows) {
+        if (r.matchedProductId && r.quantity > 0) {
+          await apiPost('/api/inventory/opening-stock', {
             barId: selectedBar.id,
-            productId: row.matchedProductId,
-            quantity: row.quantity,
-            tpPermitReference: row.tpNumber || undefined,
-            remarks: `Batch Excel Opening Stock - ${row.scmCode ? `SCM: ${row.scmCode}` : ''}`,
+            productId: r.matchedProductId,
+            quantity: r.quantity,
+            tpPermitReference: r.tpNumber || undefined,
+            remarks: r.remarks || 'Bulk Import Opening Stock',
           });
-
-          if (!res.success) {
-            throw new Error(res.error?.message || `Failed to save row for ${row.matchedProductName}`);
-          }
         }
       }
-
-      showSuccess(`Successfully saved batch of ${parsedRows.length} opening stock entries.`);
-      setShowPasteModal(false);
-      setPastedText('');
-      setParsedRows([]);
+      showSuccess(`Successfully saved batch of ${rows.length} opening stock entries.`);
       fetchData();
     } catch (err: any) {
       showError(err.message || 'Batch save failed.');
@@ -246,7 +136,6 @@ export const OpeningStockView: React.FC = () => {
     }
   };
 
-  // Filtered Records for Display
   const filteredRecords = useMemo(() => {
     if (!search.trim()) return records;
     const q = search.toLowerCase();
@@ -297,10 +186,10 @@ export const OpeningStockView: React.FC = () => {
 
         <button
           onClick={() => setShowPasteModal(true)}
-          className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold uppercase tracking-wider rounded-xl shadow-sm transition-all flex items-center gap-2 cursor-pointer"
+          className="px-4 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold uppercase tracking-wider rounded-xl shadow-md transition-all flex items-center gap-2 cursor-pointer"
         >
-          <FileSpreadsheet className="w-4 h-4 text-amber-400" />
-          Excel / TSV Paste Multi-Row
+          <Clipboard className="w-4 h-4" />
+          📋 Paste / Import / Excel
         </button>
       </div>
 
@@ -470,145 +359,14 @@ export const OpeningStockView: React.FC = () => {
         </div>
       </div>
 
-      {/* Excel / TSV Multi-Row Paste Modal */}
-      {showPasteModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl p-6 max-w-4xl w-full shadow-2xl border border-slate-200 space-y-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div className="flex items-center gap-2">
-                <FileSpreadsheet className="w-5 h-5 text-emerald-600" />
-                <h3 className="text-sm font-bold text-slate-900 uppercase">
-                  Paste Opening Stock from Excel / Google Sheets
-                </h3>
-              </div>
-              <button
-                onClick={() => setShowPasteModal(false)}
-                className="p-1 text-slate-400 hover:text-slate-700 rounded-lg cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-600">
-              <p className="font-bold text-slate-800 mb-1">Supported Paste Columns (Tab or Comma separated):</p>
-              <code>Date | Product/SKU | Brand | Variant | Bottle Size | Packaging | SCM | TP Number | Quantity</code>
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                Paste Raw Spreadsheet Data
-              </label>
-              <textarea
-                rows={5}
-                placeholder="Copy cells from Excel or Google Sheets and paste here..."
-                value={pastedText}
-                onChange={e => setPastedText(e.target.value)}
-                className="w-full px-3 py-2 text-xs font-mono rounded-xl border border-slate-300 focus:ring-2 focus:ring-amber-500 focus:outline-none"
-              />
-            </div>
-
-            <div className="flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={handleParsePastedText}
-                className="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded-xl transition-all cursor-pointer"
-              >
-                Parse & Validate Rows
-              </button>
-            </div>
-
-            {/* Parsed Rows Preview Table */}
-            {parsedRows.length > 0 && (
-              <div className="space-y-3 pt-2">
-                <div className="flex items-center justify-between">
-                  <h4 className="text-xs font-bold text-slate-800 uppercase">
-                    Preview & Row Validation ({parsedRows.length} rows)
-                  </h4>
-                  <span
-                    className={`text-xs px-2.5 py-0.5 rounded-full font-bold ${
-                      isBatchValid
-                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                        : 'bg-rose-50 text-rose-700 border border-rose-200'
-                    }`}
-                  >
-                    {isBatchValid ? 'All Rows Validated' : 'Contains Invalid Rows (Highlighted)'}
-                  </span>
-                </div>
-
-                <div className="overflow-x-auto border border-slate-200 rounded-xl max-h-60 overflow-y-auto">
-                  <table className="w-full text-left text-xs">
-                    <thead className="bg-slate-50 border-b border-slate-200 text-slate-700 uppercase font-bold text-[11px] sticky top-0">
-                      <tr>
-                        <th className="px-3 py-2">Row</th>
-                        <th className="px-3 py-2">Date</th>
-                        <th className="px-3 py-2">Matched Canonical Product</th>
-                        <th className="px-3 py-2 text-right">Quantity</th>
-                        <th className="px-3 py-2">TP / SCM Ref</th>
-                        <th className="px-3 py-2">Validation Status</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {parsedRows.map(row => (
-                        <tr
-                          key={row.rowId}
-                          className={
-                            row.status === 'invalid'
-                              ? 'bg-rose-50/80 text-rose-900'
-                              : 'hover:bg-slate-50/80'
-                          }
-                        >
-                          <td className="px-3 py-2 font-mono text-slate-500">{row.rowId}</td>
-                          <td className="px-3 py-2 text-slate-600">{row.date}</td>
-                          <td className="px-3 py-2 font-bold">
-                            {row.matchedProductName || (
-                              <span className="text-rose-600 italic">
-                                Unknown: "{row.skuOrName}"
-                              </span>
-                            )}
-                          </td>
-                          <td className="px-3 py-2 text-right font-mono font-bold">{row.quantity}</td>
-                          <td className="px-3 py-2 text-slate-500">
-                            {row.tpNumber || row.scmCode || '-'}
-                          </td>
-                          <td className="px-3 py-2">
-                            {row.status === 'valid' ? (
-                              <span className="text-emerald-700 font-bold flex items-center gap-1">
-                                <CheckCircle2 className="w-3.5 h-3.5" /> Valid
-                              </span>
-                            ) : (
-                              <span className="text-rose-700 font-bold flex items-center gap-1">
-                                <AlertCircle className="w-3.5 h-3.5" /> {row.errorMessage}
-                              </span>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-
-                <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
-                  <button
-                    type="button"
-                    onClick={() => setShowPasteModal(false)}
-                    className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleSaveBatch}
-                    disabled={saving || !isBatchValid}
-                    className="px-6 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-sm transition-all disabled:opacity-50 cursor-pointer flex items-center gap-2"
-                  >
-                    {saving ? 'Saving Batch...' : 'Save All Validated Rows'}
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+      {/* Universal Bulk Import Modal */}
+      <UniversalBulkEntryModal
+        isOpen={showPasteModal}
+        onClose={() => setShowPasteModal(false)}
+        module="opening-stock"
+        language="en"
+        onAddRows={(rows) => handleAddBulkOpeningStock(rows)}
+      />
     </div>
   );
 };

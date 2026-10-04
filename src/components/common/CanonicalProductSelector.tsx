@@ -120,8 +120,30 @@ export const CanonicalProductSelector: React.FC<CanonicalProductSelectorProps> =
   // 1. Available Brands for selected Product Type
   const availableBrands = useMemo(() => {
     if (!selectedType) return brands;
+    const targetType = selectedType.toLowerCase();
+
     const catIdsForType = categories
-      .filter(c => (c.product_type || '').toLowerCase() === selectedType.toLowerCase() || (c.name || '').toLowerCase().includes(selectedType.toLowerCase()))
+      .filter(c => {
+        const name = (c.name || '').toLowerCase();
+        const rawType = (c.product_type || '').toLowerCase();
+
+        if (rawType) {
+          if (targetType === 'spirit' && (rawType === 'spirit' || rawType.includes('spirit'))) return true;
+          if (targetType === 'wine' && rawType.includes('wine')) return true;
+          if (targetType === 'mild beer' && rawType.includes('mild')) return true;
+          if (targetType === 'fermented beer' && (rawType.includes('fermented') || rawType.includes('strong') || rawType === 'beer')) return true;
+        }
+
+        // Infer product type from category name
+        if (targetType === 'wine') return name.includes('wine');
+        if (targetType === 'mild beer') return name.includes('mild beer') || name === 'mild';
+        if (targetType === 'fermented beer') return name.includes('fermented') || name.includes('beer');
+        // Default Spirit includes Whisky, Rum, Vodka, Gin, Brandy, Country Liquor, MML, Liqueur, Tequila, etc.
+        if (targetType === 'spirit') {
+          return !name.includes('wine') && !name.includes('beer');
+        }
+        return true;
+      })
       .map(c => c.id);
 
     return brands.filter(b => !b.category_id || catIdsForType.includes(b.category_id));

@@ -175,9 +175,16 @@ export const UnifiedBrandSelector: React.FC<UnifiedBrandSelectorProps> = ({
     const query = searchQuery.toLowerCase().trim();
 
     const filtered = brands.filter(b => {
-      if (activeCategoryFilter !== 'ALL' && b.category_id !== activeCategoryFilter) {
-        return false;
+      if (activeCategoryFilter !== 'ALL') {
+        const cat = categories.find(c => c.id === b.category_id);
+        const matchDirect = b.category_id === activeCategoryFilter;
+        const matchCatName = cat && cat.name.toLowerCase().includes(activeCategoryFilter.toLowerCase());
+        const matchProdType = cat && (cat as any).product_type?.toLowerCase() === activeCategoryFilter.toLowerCase();
+        if (!matchDirect && !matchCatName && !matchProdType) {
+          return false;
+        }
       }
+
       if (!query) return true;
       const brandName = (b.name || '').toLowerCase();
       const catName = (

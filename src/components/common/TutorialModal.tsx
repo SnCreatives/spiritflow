@@ -14,7 +14,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { SupportedLanguage } from '../../types';
-import { Elite24Logo } from './Elite24Logo';
+import { LiquorFlowLogo } from './LiquorFlowLogo';
 
 interface TutorialModalProps {
   isOpen: boolean;
@@ -38,46 +38,102 @@ export const TutorialModal: React.FC<TutorialModalProps> = ({
   const contentByLang = {
     en: [
       {
-        title: 'Welcome to Elite24',
-        subtitle: 'Leading Real Estate Consulting Company',
+        title: 'Welcome to LiquorFlow ERP',
+        subtitle: 'Complete Inventory & Excise Management System',
         icon: Sparkles,
         color: 'text-amber-400 bg-amber-500/10 border-amber-500/30',
         route: '/dashboard',
         description:
-          'Elite24 Property Consulting Company specializes in premium residential and commercial properties across Pune. We help homebuyers and investors discover the best opportunities.',
+          'LiquorFlow is specifically engineered for bars, restaurants, and liquor retail outlets in Maharashtra. Seamlessly manage stock batches, Transport Permits (TP), and statutory Excise Registers with 100% absolute accuracy.',
         highlights: [
-          'Residential & Commercial Listings',
-          'Strategic Investment Consultation',
-          'End-to-End Documentation Support',
-          'Market Growth Analytics',
+          'Real-Time Stock Ledger',
+          'Automated Excise Forms & Registers',
+          'Batch & Transport Permit (TP) Tracking',
+          'Secure Multi-Bar Isolation',
         ],
       },
       {
-        title: 'Property Dashboard',
-        subtitle: 'Track your leads and market health',
+        title: 'Dashboard & Core Metrics',
+        subtitle: 'Instant overview of your stock and operations',
         icon: LayoutDashboard,
         color: 'text-sky-400 bg-sky-500/10 border-sky-500/30',
         route: '/dashboard',
         description:
-          'Monitor property demand, lead conversions, and location-wise property distribution across Pune high-growth areas like Baner, Balewadi, and Hinjewadi.',
+          'Track total stock valuation, category distribution (IMFL, Beer, Wine, Country Liquor), and low stock warnings dynamically in real-time, all on a single unified screen.',
         highlights: [
-          'Live market valuation insights',
-          'Lead tracking & follow-ups',
-          'Centralized operations center',
+          'Live inventory valuation insights',
+          'Automated low stock alerts',
+          'Quick operations shortcut keys',
         ],
       },
       {
-        title: 'Master Inventory Control',
-        subtitle: 'Manage property variants and projects',
+        title: 'Products & Master Config',
+        subtitle: 'Organize brands, manufacturers, and pack sizes',
         icon: Layers,
         color: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30',
         route: '/products',
         description:
-          'Organize your property portfolio by linking developers, projects, and standardized configurations (2 BHK, 3 BHK, 4 BHK, Commercial Office, Retail Shops).',
+          'Build a robust product catalog by mapping suppliers/manufacturers, brands, and standard pack sizes (750ml, 375ml, 180ml, 650ml) used in Maharashtra state excise compliance.',
         highlights: [
-          'Pre-configured property categories',
-          'Area-wise price mapping',
-          'Developer registration tracking',
+          'Standardized excise categories',
+          'Pack size & volume mapping',
+          'Brand registration registry',
+        ],
+      },
+      {
+        title: 'Opening Stock & TP Inward',
+        subtitle: 'Enter initial stock with excise permit tracking',
+        icon: FileInput,
+        color: 'text-purple-400 bg-purple-500/10 border-purple-500/30',
+        route: '/stock/opening',
+        description:
+          'Initialize your shop\'s opening stock or incoming Transport Permits (TP) with exact bottle count, batch numbers, manufacturing years, and purchase rates.',
+        highlights: [
+          'TP pass number & validation dates',
+          'Batch number & MFG year tracking',
+          'Automated ledger synchronization',
+        ],
+      },
+      {
+        title: 'Purchases & Inward Stocks',
+        subtitle: 'Receive new shipments and supplier bills',
+        icon: ArrowDownToLine,
+        color: 'text-blue-400 bg-blue-500/10 border-blue-500/30',
+        route: '/purchases',
+        description:
+          'Log supplier invoices, Transport Permits, bottle counts, and excise duties easily. This updates stock levels and recalculates weighted average costs.',
+        highlights: [
+          'Instant stock appreciation',
+          'Weighted average cost calculation',
+          'Supplier bill & permit registry',
+        ],
+      },
+      {
+        title: 'Stock Adjustments & Breakage',
+        subtitle: 'Handle physical audit differences and damages',
+        icon: SlidersHorizontal,
+        color: 'text-orange-400 bg-orange-500/10 border-orange-500/30',
+        route: '/stock/adjustments',
+        description:
+          'Reconcile physical stock with your digital ledger. Record breakages, natural evaporation, or damages with clear reasons to stay compliant.',
+        highlights: [
+          'Audit trail with excise justifications',
+          'Automated inventory correction',
+          'Separate logs for inspectors',
+        ],
+      },
+      {
+        title: 'Excise Registers & Reports',
+        subtitle: 'Inspection-ready statutory reports on demand',
+        icon: ShieldCheck,
+        color: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30',
+        route: '/excise',
+        description:
+          'Generate and download daily and monthly FLR-3 and CL-3 registers automatically in compliance with Maharashtra State Excise regulations.',
+        highlights: [
+          'Automated FLR-3 / CL-3 ledgering',
+          'Daily opening, inward, sales & closing',
+          'Export-ready PDF and Excel files',
         ],
       },
     ],
@@ -316,7 +372,7 @@ export const TutorialModal: React.FC<TutorialModalProps> = ({
         {/* Modal Header */}
         <div className="px-6 pt-6 pb-4 border-b border-slate-800 flex items-center justify-between bg-slate-900/50">
           <div className="flex items-center gap-3">
-            <Elite24Logo size="xs" showText={false} />
+            <LiquorFlowLogo size="xs" variant="full" />
             <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
               {language === 'mr' ? 'मार्गदर्शक ट्यूटोरिअल' : language === 'hi' ? 'मार्गदर्शिका ट्यूटोरियल' : 'Interactive Walkthrough'}
             </span>

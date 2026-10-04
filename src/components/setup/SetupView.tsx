@@ -3,7 +3,7 @@ import { Wine, Store, Key, ShieldCheck, CheckCircle2, AlertCircle } from 'lucide
 import { SupportedLanguage, SetupInput } from '../../types';
 import { apiPost } from '../../utils/api';
 import { translations } from '../../utils/i18n';
-import { Elite24Logo } from '../common/Elite24Logo';
+import { LiquorFlowLogo } from '../common/LiquorFlowLogo';
 
 interface SetupViewProps {
   language: SupportedLanguage;
@@ -103,13 +103,13 @@ export const SetupView: React.FC<SetupViewProps> = ({
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-center py-10 px-4 sm:px-6 lg:px-8">
       <div className="sm:mx-auto sm:w-full sm:max-w-2xl text-center mb-8">
         <div className="inline-flex items-center justify-center p-3 rounded-2xl bg-amber-500/10 border border-amber-500/30 mb-4 shadow-lg shadow-amber-500/5">
-          <Elite24Logo size="md" showText={false} />
+          <LiquorFlowLogo size="md" variant="full" />
         </div>
         <h1 className="text-3xl font-extrabold tracking-tight text-white sm:text-4xl">
-          Welcome to Elite24
+          Welcome to LiquorFlow
         </h1>
         <p className="mt-2 text-base text-slate-400 max-w-md mx-auto">
-          Set up your consulting business workspace.
+          Set up your Bar & Liquor Excise workspace.
         </p>
 
         {/* Language selector toggle on setup screen */}
@@ -315,7 +315,7 @@ export const SetupView: React.FC<SetupViewProps> = ({
                 <span>{isSubmitting ? t.settingUp : t.completeSetupButton}</span>
               </button>
               <p className="mt-2 text-center text-xs text-slate-500">
-                Setup will initialize your consulting workspace and regional settings.
+                Setup will initialize your business workspace and regional settings.
               </p>
             </div>
           </form>

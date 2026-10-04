@@ -1,6 +1,6 @@
 {
-  "name": "Elite24",
-  "description": "Elite24 Property Consulting Company - Leading real estate consulting in Pune, Maharashtra. Residential and commercial property solutions.",
+  "name": "LiquorFlow ERP",
+  "description": "LiquorFlow ERP — Excise, Bar, Stock, Sales and Compliance ERP system for Maharashtra Bar Outlets.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
