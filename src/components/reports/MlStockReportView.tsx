@@ -15,6 +15,7 @@ import { SupportedLanguage, Category, Brand, Product, PackSize } from '../../typ
 import { apiGet } from '../../utils/api';
 import { translations } from '../../utils/i18n';
 import { UnifiedBrandSelector } from '../common/UnifiedBrandSelector';
+import { CategorySelector } from '../common/MasterDataSelectors';
 import { useBar } from '../../lib/contexts/BarContext';
 
 interface MlStockReportViewProps {
@@ -246,18 +247,14 @@ export const MlStockReportView: React.FC<MlStockReportViewProps> = ({ language }
 
           <div>
             <label className="block text-[11px] font-medium text-slate-400 mb-1">Category / ML Type</label>
-            <select
+            <CategorySelector
               value={categoryId}
-              onChange={e => setCategoryId(e.target.value)}
-              className="w-full px-3 py-1.5 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs focus:outline-none focus:border-amber-400"
-            >
-              <option value="">All Categories</option>
-              {(Array.isArray(categories) ? categories : []).map(c => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
+              onChange={setCategoryId}
+              includeAllOption={true}
+              allLabel="All Categories"
+              theme="dark"
+              className="py-1.5 text-xs"
+            />
           </div>
 
           <div>

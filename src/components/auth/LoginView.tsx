@@ -143,7 +143,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
         }`}
       >
         <div className="flex items-center gap-3">
-          <LiquorFlowLogo size="xs" variant="full" />
+          <LiquorFlowLogo size="xs" variant="full" theme={isLight ? 'light' : 'white'} />
           <div
             className={`hidden sm:block font-mono text-[10px] uppercase tracking-[0.2em] font-semibold border-l pl-3 ${
               isLight ? 'border-slate-200 text-slate-500' : 'border-slate-800 text-slate-400'
@@ -225,7 +225,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
 
             {/* Official Proportional Logo Display */}
             <div className="mb-10 flex justify-center lg:justify-start">
-              <LiquorFlowLogo size="2xl" variant="full" />
+              <LiquorFlowLogo size="2xl" variant="full" theme={isLight ? 'light' : 'white'} />
             </div>
 
             <h1

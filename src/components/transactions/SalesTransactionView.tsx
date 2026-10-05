@@ -637,17 +637,17 @@ export const SalesTransactionView: React.FC = () => {
               <button
                 type="submit"
                 disabled={submitting || !selectedProduct}
-                className="px-6 py-2.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold uppercase tracking-wider rounded-xl shadow-sm transition-all disabled:opacity-50 flex items-center gap-2 cursor-pointer"
+                className="px-6 py-2.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold uppercase tracking-wider rounded-xl shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 cursor-pointer"
               >
                 {submitting ? (
                   <>
                     <RefreshCw className="w-4 h-4 animate-spin" />
-                    Saving...
+                    <span>Saving...</span>
                   </>
                 ) : (
                   <>
                     <CheckCircle2 className="w-4 h-4" />
-                    Record Sale Transaction
+                    <span>Record Sale Transaction</span>
                   </>
                 )}
               </button>
@@ -842,9 +842,16 @@ export const SalesTransactionView: React.FC = () => {
                   <button
                     onClick={handleUpdateSaleSubmit}
                     disabled={submitting}
-                    className="px-5 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-xl disabled:opacity-50"
+                    className="px-5 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-xl disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                   >
-                    {submitting ? 'Saving...' : 'Update Transaction'}
+                    {submitting ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                        <span>Saving...</span>
+                      </>
+                    ) : (
+                      <span>Update Transaction</span>
+                    )}
                   </button>
                 </div>
               </div>

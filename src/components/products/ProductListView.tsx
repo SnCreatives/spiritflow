@@ -21,7 +21,10 @@ import { translations } from '../../utils/i18n';
 import { ProductModal } from './ProductModal';
 import { BulkImportDialog } from '../common/BulkImportDialog';
 import { UnifiedBrandSelector } from '../common/UnifiedBrandSelector';
+import { CategorySelector } from '../common/MasterDataSelectors';
 import { apiGet, apiPut, apiDelete } from '../../utils/api';
+import { useToast } from '../../lib/contexts/ToastContext';
+import { ModalShell } from '../common/ModalShell';
 
 interface ProductListViewProps {
   language: SupportedLanguage;
@@ -29,6 +32,7 @@ interface ProductListViewProps {
 
 export const ProductListView: React.FC<ProductListViewProps> = ({ language }) => {
   const t = translations[language];
+  const { showToast } = useToast();
 
   // Data states
   const [products, setProducts] = useState<Product[]>([]);
@@ -148,14 +152,11 @@ export const ProductListView: React.FC<ProductListViewProps> = ({ language }) =>
       if (!data.success) {
         throw new Error(data.error?.message || 'Failed to update status');
       }
-      setActionMessage({
-        type: 'success',
-        text: `Product "${statusConfirmProduct.name}" is now ${newStatus}.`,
-      });
+      showToast(`Product "${statusConfirmProduct.name}" is now ${newStatus}.`, 'success');
       setStatusConfirmProduct(null);
       fetchProducts();
     } catch (err: any) {
-      setActionMessage({ type: 'error', text: err.message || 'Error updating product' });
+      showToast(err.message || 'Error updating product', 'error');
     } finally {
       setActionLoading(false);
     }
@@ -171,14 +172,11 @@ export const ProductListView: React.FC<ProductListViewProps> = ({ language }) =>
       if (!data.success) {
         throw new Error(data.error?.message || 'Cannot delete product referenced in transactions');
       }
-      setActionMessage({
-        type: 'success',
-        text: `Product "${deleteConfirmProduct.name}" deleted successfully.`,
-      });
+      showToast(`Product "${deleteConfirmProduct.name}" deleted successfully.`, 'success');
       setDeleteConfirmProduct(null);
       fetchProducts();
     } catch (err: any) {
-      setActionMessage({ type: 'error', text: err.message || 'Failed to delete product' });
+      showToast(err.message || 'Failed to delete product', 'error');
     } finally {
       setActionLoading(false);
     }
@@ -219,32 +217,6 @@ export const ProductListView: React.FC<ProductListViewProps> = ({ language }) =>
         </div>
       </div>
 
-      {/* Action Notification Banner */}
-      {actionMessage && (
-        <div
-          className={`p-3.5 rounded-xl text-xs flex items-center justify-between transition-all ${
-            actionMessage.type === 'success'
-              ? 'bg-emerald-950/60 border border-emerald-800 text-emerald-200'
-              : 'bg-rose-950/60 border border-rose-800 text-rose-200'
-          }`}
-        >
-          <div className="flex items-center gap-2">
-            {actionMessage.type === 'success' ? (
-              <CheckCircle className="w-4 h-4 text-emerald-400" />
-            ) : (
-              <AlertTriangle className="w-4 h-4 text-rose-400" />
-            )}
-            <span>{actionMessage.text}</span>
-          </div>
-          <button
-            onClick={() => setActionMessage(null)}
-            className="text-slate-400 hover:text-white ml-4"
-          >
-            ×
-          </button>
-        </div>
-      )}
-
       {/* Filter Toolbar */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
@@ -262,21 +234,16 @@ export const ProductListView: React.FC<ProductListViewProps> = ({ language }) =>
 
           {/* Category Filter */}
           <div>
-            <select
+            <CategorySelector
               value={selectedCategory}
-              onChange={e => {
-                setSelectedCategory(e.target.value);
+              onChange={id => {
+                setSelectedCategory(id);
                 setPage(1);
               }}
-              className="w-full px-3 py-2 bg-slate-950 border border-slate-700/80 rounded-xl text-white text-sm focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400"
-            >
-              <option value="">{t.allCategories}</option>
-              {(Array.isArray(categories) ? categories : []).map(c => (
-                <option key={c.id} value={c.id}>
-                  {c.name} ({c.code})
-                </option>
-              ))}
-            </select>
+              includeAllOption={true}
+              allLabel={t.allCategories}
+              theme="dark"
+            />
           </div>
 
           {/* Brand Filter (Category-Grouped Unified Selector) */}
@@ -537,88 +504,96 @@ export const ProductListView: React.FC<ProductListViewProps> = ({ language }) =>
       />
 
       {/* Deactivate / Status Confirmation Dialog */}
-      {statusConfirmProduct && (
-        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex items-start gap-3">
-              <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 flex-shrink-0">
-                <Power className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="text-base font-bold text-white">
-                  {statusConfirmProduct.status === 'Active' ? t.confirmDeactivateTitle : 'Activate Product?'}
-                </h3>
-                <p className="text-xs text-slate-400 mt-1">
-                  {statusConfirmProduct.status === 'Active'
-                    ? t.confirmDeactivateMsg
-                    : 'Activating this product makes it immediately available in new POS billing sessions.'}
-                </p>
-                <div className="mt-3 p-2.5 rounded-lg bg-slate-950 font-mono text-xs text-amber-400 border border-slate-800">
-                  {statusConfirmProduct.name}
-                </div>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-end gap-3 pt-2">
-              <button
-                type="button"
-                onClick={() => setStatusConfirmProduct(null)}
-                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-xl"
-              >
-                {t.cancel}
-              </button>
-              <button
-                type="button"
-                onClick={handleToggleStatus}
-                disabled={actionLoading}
-                className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-semibold rounded-xl flex items-center gap-1.5"
-              >
-                {actionLoading && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
-                <span>{statusConfirmProduct.status === 'Active' ? t.deactivate : t.activate}</span>
-              </button>
-            </div>
+      <ModalShell
+        isOpen={!!statusConfirmProduct}
+        onClose={() => setStatusConfirmProduct(null)}
+        title={statusConfirmProduct?.status === 'Active' ? t.confirmDeactivateTitle : 'Activate Product?'}
+        icon={<Power className="w-5 h-5 text-amber-400" />}
+        maxWidth="max-w-md"
+        footer={
+          <div className="flex items-center justify-end gap-3">
+            <button
+              type="button"
+              onClick={() => setStatusConfirmProduct(null)}
+              className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-xl transition-colors"
+            >
+              {t.cancel}
+            </button>
+            <button
+              type="button"
+              onClick={handleToggleStatus}
+              disabled={actionLoading}
+              className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-semibold rounded-xl flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed shadow-md transition-all"
+            >
+              {actionLoading ? (
+                <>
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  <span>Saving...</span>
+                </>
+              ) : (
+                <span>{statusConfirmProduct?.status === 'Active' ? t.deactivate : t.activate}</span>
+              )}
+            </button>
+          </div>
+        }
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-slate-400 leading-relaxed">
+            {statusConfirmProduct?.status === 'Active'
+              ? t.confirmDeactivateMsg
+              : 'Activating this product makes it immediately available in new POS billing sessions.'}
+          </p>
+          <div className="p-3.5 rounded-xl bg-slate-950 font-mono text-xs text-amber-400 border border-slate-800 flex items-center justify-between">
+            <span className="truncate">{statusConfirmProduct?.name}</span>
+            <span className="shrink-0 text-slate-600 ml-2">ID: {statusConfirmProduct?.id.substring(0, 8)}</span>
           </div>
         </div>
-      )}
+      </ModalShell>
 
       {/* Delete Confirmation Dialog */}
-      {deleteConfirmProduct && (
-        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-rose-900/60 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex items-start gap-3">
-              <div className="w-10 h-10 rounded-xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400 flex-shrink-0">
-                <Trash2 className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="text-base font-bold text-white">{t.confirmDeleteTitle}</h3>
-                <p className="text-xs text-slate-400 mt-1">{t.confirmDeleteMsg}</p>
-                <div className="mt-3 p-2.5 rounded-lg bg-slate-950 font-mono text-xs text-rose-300 border border-slate-800">
-                  {deleteConfirmProduct.name}
-                </div>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-end gap-3 pt-2">
-              <button
-                type="button"
-                onClick={() => setDeleteConfirmProduct(null)}
-                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-xl"
-              >
-                {t.cancel}
-              </button>
-              <button
-                type="button"
-                onClick={handleDeleteProduct}
-                disabled={actionLoading}
-                className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold rounded-xl flex items-center gap-1.5"
-              >
-                {actionLoading && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+      <ModalShell
+        isOpen={!!deleteConfirmProduct}
+        onClose={() => setDeleteConfirmProduct(null)}
+        title={t.confirmDeleteTitle}
+        icon={<Trash2 className="w-5 h-5 text-rose-400" />}
+        maxWidth="max-w-md"
+        footer={
+          <div className="flex items-center justify-end gap-3">
+            <button
+              type="button"
+              onClick={() => setDeleteConfirmProduct(null)}
+              className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-xl transition-colors"
+            >
+              {t.cancel}
+            </button>
+            <button
+              type="button"
+              onClick={handleDeleteProduct}
+              disabled={actionLoading}
+              className="px-4 py-2 bg-rose-600 hover:bg-rose-50 text-white text-xs font-semibold rounded-xl flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed shadow-md transition-all"
+            >
+              {actionLoading ? (
+                <>
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  <span>Saving...</span>
+                </>
+              ) : (
                 <span>{t.deleteProduct}</span>
-              </button>
-            </div>
+              )}
+            </button>
+          </div>
+        }
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-slate-400 leading-relaxed">
+            {t.confirmDeleteMsg}
+          </p>
+          <div className="p-3.5 rounded-xl bg-slate-950 font-mono text-xs text-rose-300 border border-slate-800 flex items-center justify-between">
+            <span className="truncate">{deleteConfirmProduct?.name}</span>
+            <span className="shrink-0 text-slate-600 ml-2">ID: {deleteConfirmProduct?.id.substring(0, 8)}</span>
           </div>
         </div>
-      )}
+      </ModalShell>
       <BulkImportDialog
         isOpen={isBulkModalOpen}
         onClose={() => setIsBulkModalOpen(false)}

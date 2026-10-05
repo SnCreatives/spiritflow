@@ -123,7 +123,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       <div className="flex-1 py-5 px-4 space-y-6 overflow-y-auto custom-scrollbar">
         {/* Brand Banner */}
         <div className="px-1 py-1 flex items-center justify-start">
-          <LiquorFlowLogo size="md" variant="full" />
+          <LiquorFlowLogo size="md" variant="full" theme="white" />
         </div>
 
         {/* Selected Bar Context Badge (Compact premium status component) */}

@@ -11,10 +11,16 @@ import {
   AlertCircle,
   X,
   FileSpreadsheet,
+  Download,
+  Upload,
+  FileText,
 } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import { useToast } from '../../lib/contexts/ToastContext';
 import { apiGet, apiPost } from '../../utils/api';
 import { CanonicalProductSelector, SelectedProductDetail } from '../common/CanonicalProductSelector';
+import { ScmBulkImportModal } from './ScmBulkImportModal';
+import { ModalShell } from '../common/ModalShell';
 
 export const ScmMasterView: React.FC = () => {
   const { showSuccess, showError } = useToast();
@@ -37,6 +43,9 @@ export const ScmMasterView: React.FC = () => {
   const [viewingHistoryProduct, setViewingHistoryProduct] = useState<any | null>(null);
   const [historyRecords, setHistoryRecords] = useState<any[]>([]);
   const [loadingHistory, setLoadingHistory] = useState<boolean>(false);
+
+  // Bulk Import State
+  const [showImportModal, setShowImportModal] = useState(false);
 
   const fetchScmCodes = useCallback(async () => {
     setLoading(true);
@@ -113,6 +122,44 @@ export const ScmMasterView: React.FC = () => {
     }
   };
 
+  const handleExport = (type: 'csv' | 'excel') => {
+    if (scmCodes.length === 0) {
+      showError('No data to export.');
+      return;
+    }
+
+    const data = scmCodes.map(row => ({
+      'SCM Code': row.scm_code,
+      'Product Name': row.product?.name || row.product?.product_name || '-',
+      'SKU': row.product?.sku || '-',
+      'Category': row.product?.category?.name || '-',
+      'Brand': row.product?.brand?.name || row.product?.brand?.brand_name || '-',
+      'Effective From': row.effective_from,
+      'Effective To': row.effective_to || 'Present',
+      'Status': row.is_active ? 'Active' : 'Inactive',
+      'Notes': row.description || row.source_reference || '-'
+    }));
+
+    if (type === 'csv') {
+      const ws = XLSX.utils.json_to_sheet(data);
+      const csv = XLSX.utils.sheet_to_csv(ws);
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `LiquorFlow_SCM_Export_${new Date().toISOString().split('T')[0]}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } else {
+      const ws = XLSX.utils.json_to_sheet(data);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'SCM Codes');
+      XLSX.writeFile(wb, `LiquorFlow_SCM_Export_${new Date().toISOString().split('T')[0]}.xlsx`);
+    }
+    showSuccess(`${type.toUpperCase()} Export started.`);
+  };
+
   return (
     <div className="page-container px-4 sm:px-6 lg:px-8 py-8 space-y-6">
       {/* Top Banner */}
@@ -130,13 +177,69 @@ export const ScmMasterView: React.FC = () => {
           </p>
         </div>
 
-        <button
-          onClick={() => setShowAddModal(true)}
-          className="px-4 py-2.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold uppercase tracking-wider rounded-xl shadow-sm transition-all flex items-center gap-2 cursor-pointer"
-        >
-          <PlusCircle className="w-4 h-4" />
-          Assign SCM Code
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Add SCM Code */}
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="px-4 py-2.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold uppercase tracking-wider rounded-xl shadow-sm transition-all flex items-center gap-2 cursor-pointer"
+          >
+            <PlusCircle className="w-4 h-4" />
+            + Add SCM Code
+          </button>
+
+          {/* Import Actions */}
+          <button
+            onClick={() => setShowImportModal(true)}
+            className="px-4 py-2.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold uppercase tracking-wider rounded-xl shadow-sm transition-all flex items-center gap-2 cursor-pointer"
+          >
+            <Upload className="w-4 h-4 text-emerald-600" />
+            Import CSV
+          </button>
+          <button
+            onClick={() => setShowImportModal(true)}
+            className="px-4 py-2.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold uppercase tracking-wider rounded-xl shadow-sm transition-all flex items-center gap-2 cursor-pointer"
+          >
+            <Upload className="w-4 h-4 text-emerald-600" />
+            Import Excel
+          </button>
+
+          {/* Export Actions */}
+          <button
+            onClick={() => handleExport('csv')}
+            className="px-4 py-2.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold uppercase tracking-wider rounded-xl shadow-sm transition-all flex items-center gap-2 cursor-pointer"
+          >
+            <FileText className="w-4 h-4 text-blue-600" />
+            Export CSV
+          </button>
+          <button
+            onClick={() => handleExport('excel')}
+            className="px-4 py-2.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold uppercase tracking-wider rounded-xl shadow-sm transition-all flex items-center gap-2 cursor-pointer"
+          >
+            <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+            Export Excel
+          </button>
+
+          {/* Download Template */}
+          <button
+            onClick={() => {
+              const headers = [
+                'SCM Code', 'Product Name', 'Brand', 'Variant', 'Product Type', 'Bottle Size', 'Packaging', 
+                'Effective From', 'Effective To', 'Status', 'Supplier Code', 'Notes'
+              ];
+              const data = [
+                ['SCM-MH-1001', 'Royal Stag Deluxe', 'Royal Stag', 'Deluxe', 'Spirit', '750 ml', 'Bottle', '2026-01-01', '', 'Active', 'RS750', 'Excise Approved']
+              ];
+              const ws = XLSX.utils.aoa_to_sheet([headers, ...data]);
+              const wb = XLSX.utils.book_new();
+              XLSX.utils.book_append_sheet(wb, ws, 'SCM Template');
+              XLSX.writeFile(wb, 'LiquorFlow_SCM_Template.xlsx');
+            }}
+            className="px-4 py-2.5 bg-slate-50 border border-slate-200 hover:bg-slate-100 text-slate-600 text-xs font-bold uppercase tracking-wider rounded-xl transition-all flex items-center gap-2 cursor-pointer"
+          >
+            <Download className="w-4 h-4" />
+            Download Template
+          </button>
+        </div>
       </div>
 
       {/* Filter Bar */}
@@ -258,176 +361,173 @@ export const ScmMasterView: React.FC = () => {
       </div>
 
       {/* Add SCM Code Modal */}
-      {showAddModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl p-6 max-w-2xl w-full shadow-2xl border border-slate-200 space-y-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h3 className="text-sm font-bold text-slate-900 uppercase flex items-center gap-2">
-                <ShieldCheck className="w-4 h-4 text-amber-600" />
-                Assign SCM Code to Product
-              </h3>
-              <button
-                onClick={() => setShowAddModal(false)}
-                className="p-1 text-slate-400 hover:text-slate-700 rounded-lg cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* Product Selector */}
+      <ModalShell
+        isOpen={showAddModal}
+        onClose={() => setShowAddModal(false)}
+        title="Assign SCM Code to Product"
+        icon={<ShieldCheck className="w-5 h-5" />}
+        maxWidth="max-w-2xl"
+        footer={
+          <div className="flex justify-end gap-3">
+            <button
+              type="button"
+              onClick={() => setShowAddModal(false)}
+              className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              form="scm-form"
+              type="submit"
+              disabled={submitting || !selectedProduct}
+              className="px-6 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-xl shadow-md transition-all disabled:opacity-50 cursor-pointer flex items-center gap-2"
+            >
+              {submitting ? (
+                <>
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  <span>Saving...</span>
+                </>
+              ) : (
+                <span>Save SCM Mapping</span>
+              )}
+            </button>
+          </div>
+        }
+      >
+        <div className="space-y-6">
+          {/* Product Selector */}
+          <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
             <CanonicalProductSelector
               onSelectProduct={prod => setSelectedProduct(prod)}
               selectedProductId={selectedProduct?.productId}
             />
-
-            <form onSubmit={handleCreateScm} className="space-y-4 pt-2">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                    Official SCM Code *
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. SCM-MH-1004"
-                    value={newScmCode}
-                    onChange={e => setNewScmCode(e.target.value)}
-                    required
-                    className="w-full px-3 py-2 text-xs font-mono font-bold rounded-lg border border-slate-300 focus:ring-2 focus:ring-amber-500 focus:outline-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                    Effective From Date *
-                  </label>
-                  <input
-                    type="date"
-                    value={effectiveFrom}
-                    onChange={e => setEffectiveFrom(e.target.value)}
-                    required
-                    className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 focus:ring-2 focus:ring-amber-500 focus:outline-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                    Effective To Date (Optional)
-                  </label>
-                  <input
-                    type="date"
-                    value={effectiveTo}
-                    onChange={e => setEffectiveTo(e.target.value)}
-                    className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 focus:ring-2 focus:ring-amber-500 focus:outline-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                    Regulatory Reference / Note
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Maharashtra Gazette 2026 Notification"
-                    value={description}
-                    onChange={e => setDescription(e.target.value)}
-                    className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 focus:ring-2 focus:ring-amber-500 focus:outline-none"
-                  />
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={() => setShowAddModal(false)}
-                  className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={submitting || !selectedProduct}
-                  className="px-5 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-xl shadow-sm transition-all disabled:opacity-50 cursor-pointer flex items-center gap-1.5"
-                >
-                  {submitting ? 'Saving...' : 'Save SCM Mapping'}
-                </button>
-              </div>
-            </form>
           </div>
+
+          <form id="scm-form" onSubmit={handleCreateScm} className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1.5">
+                  Official SCM Code *
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. SCM-MH-1004"
+                  value={newScmCode}
+                  onChange={e => setNewScmCode(e.target.value)}
+                  required
+                  className="w-full px-3.5 py-2 text-xs font-mono font-bold rounded-xl border border-slate-300 focus:ring-2 focus:ring-amber-500 focus:outline-none transition-all"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1.5">
+                  Effective From Date *
+                </label>
+                <input
+                  type="date"
+                  value={effectiveFrom}
+                  onChange={e => setEffectiveFrom(e.target.value)}
+                  required
+                  className="w-full px-3.5 py-2 text-xs rounded-xl border border-slate-300 focus:ring-2 focus:ring-amber-500 focus:outline-none transition-all"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1.5">
+                  Effective To Date (Optional)
+                </label>
+                <input
+                  type="date"
+                  value={effectiveTo}
+                  onChange={e => setEffectiveTo(e.target.value)}
+                  className="w-full px-3.5 py-2 text-xs rounded-xl border border-slate-300 focus:ring-2 focus:ring-amber-500 focus:outline-none transition-all"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1.5">
+                  Regulatory Reference / Note
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Maharashtra Gazette 2026 Notification"
+                  value={description}
+                  onChange={e => setDescription(e.target.value)}
+                  className="w-full px-3.5 py-2 text-xs rounded-xl border border-slate-300 focus:ring-2 focus:ring-amber-500 focus:outline-none transition-all"
+                />
+              </div>
+            </div>
+          </form>
         </div>
-      )}
+      </ModalShell>
 
       {/* History Modal */}
-      {viewingHistoryProduct && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl p-6 max-w-xl w-full shadow-2xl border border-slate-200 space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div>
-                <h3 className="text-sm font-bold text-slate-900 uppercase">
-                  SCM Code Audit History
-                </h3>
-                <p className="text-xs text-slate-600">
-                  Product: {viewingHistoryProduct.name || viewingHistoryProduct.product_name}
-                </p>
-              </div>
-              <button
-                onClick={() => setViewingHistoryProduct(null)}
-                className="p-1 text-slate-400 hover:text-slate-700 rounded-lg cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="divide-y divide-slate-100 max-h-80 overflow-y-auto">
-              {loadingHistory ? (
-                <div className="py-8 text-center text-slate-400">
-                  <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-amber-500" />
-                  Loading historical audit records...
-                </div>
-              ) : historyRecords.length === 0 ? (
-                <div className="py-8 text-center text-slate-400 text-xs">
-                  No historical SCM versions recorded for this product.
-                </div>
-              ) : (
-                historyRecords.map(h => (
-                  <div key={h.id} className="py-3 flex items-center justify-between">
-                    <div>
-                      <span className="text-sm font-mono font-bold text-amber-800">
-                        {h.scm_code}
-                      </span>
-                      <span className="text-xs text-slate-500 block">
-                        {h.description || 'Regulatory SCM assignment'}
-                      </span>
-                    </div>
-                    <div className="text-right">
-                      <span className="text-[11px] font-mono text-slate-600 block">
-                        {h.effective_from || 'Start'} → {h.effective_to || 'Present'}
-                      </span>
-                      <span
-                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                          h.is_active
-                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                            : 'bg-slate-100 text-slate-500'
-                        }`}
-                      >
-                        {h.is_active ? 'Active' : 'Superceded'}
-                      </span>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-
-            <div className="flex justify-end pt-3 border-t border-slate-100">
-              <button
-                onClick={() => setViewingHistoryProduct(null)}
-                className="px-4 py-2 bg-slate-800 text-white text-xs font-bold rounded-xl cursor-pointer"
-              >
-                Close
-              </button>
-            </div>
+      <ModalShell
+        isOpen={!!viewingHistoryProduct}
+        onClose={() => setViewingHistoryProduct(null)}
+        title="SCM Code Audit History"
+        subtitle={viewingHistoryProduct ? `Product: ${viewingHistoryProduct.name || viewingHistoryProduct.product_name}` : ''}
+        icon={<History className="w-5 h-5" />}
+        maxWidth="max-w-xl"
+        footer={
+          <div className="flex justify-end">
+            <button
+              onClick={() => setViewingHistoryProduct(null)}
+              className="px-6 py-2 bg-slate-900 text-white text-xs font-bold rounded-xl hover:bg-slate-800 transition-colors cursor-pointer"
+            >
+              Close
+            </button>
           </div>
+        }
+      >
+        <div className="divide-y divide-slate-100">
+          {loadingHistory ? (
+            <div className="py-12 text-center text-slate-400">
+              <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-3 text-amber-500" />
+              <p className="text-sm font-medium">Loading historical audit records...</p>
+            </div>
+          ) : historyRecords.length === 0 ? (
+            <div className="py-12 text-center text-slate-400">
+              <AlertCircle className="w-8 h-8 mx-auto mb-3 opacity-20" />
+              <p className="text-sm">No historical SCM versions recorded for this product.</p>
+            </div>
+          ) : (
+            historyRecords.map(h => (
+              <div key={h.id} className="py-4 flex items-center justify-between group">
+                <div>
+                  <span className="text-sm font-mono font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-100">
+                    {h.scm_code}
+                  </span>
+                  <span className="text-xs text-slate-500 block mt-1.5 font-medium">
+                    {h.description || 'Regulatory SCM assignment'}
+                  </span>
+                </div>
+                <div className="text-right">
+                  <span className="text-[11px] font-mono text-slate-600 block mb-1">
+                    {h.effective_from || 'Start'} → {h.effective_to || 'Present'}
+                  </span>
+                  <span
+                    className={`text-[10px] font-bold px-2.5 py-1 rounded-full border ${
+                      h.is_active
+                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                        : 'bg-slate-50 text-slate-400 border-slate-200'
+                    }`}
+                  >
+                    {h.is_active ? 'Active' : 'Superceded'}
+                  </span>
+                </div>
+              </div>
+            ))
+          )}
         </div>
-      )}
+      </ModalShell>
+
+      {/* Bulk Import Modal */}
+      <ScmBulkImportModal
+        isOpen={showImportModal}
+        onClose={() => setShowImportModal(false)}
+        onSuccess={fetchScmCodes}
+      />
     </div>
   );
 };

@@ -957,6 +957,32 @@ apiApp.post('/api/scm-codes', requireAuth, async (req: Request, res: Response) =
 });
 
 /**
+ * SCM Bulk Import & Export Endpoints
+ */
+apiApp.post('/api/scm/import-preview', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const { rows } = req.body;
+    if (!Array.isArray(rows)) return sendError(res, 'INVALID_PAYLOAD', 'Rows array required', 400);
+    const result = await ScmService.validateScmImport(rows);
+    return sendSuccess(res, result);
+  } catch (err: any) {
+    return sendError(res, 'IMPORT_PREVIEW_FAILED', err?.message || 'Failed to preview SCM import', 400);
+  }
+});
+
+apiApp.post('/api/scm/import-execute', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const { rows } = req.body;
+    const barId = (req as any).barId;
+    if (!Array.isArray(rows)) return sendError(res, 'INVALID_PAYLOAD', 'Rows array required', 400);
+    const result = await ScmService.bulkCreateScmCodes(rows, { barId });
+    return sendSuccess(res, result);
+  } catch (err: any) {
+    return sendError(res, 'IMPORT_EXECUTE_FAILED', err?.message || 'Failed to execute SCM import', 400);
+  }
+});
+
+/**
  * Excel Import Preview / Validation Foundation (Section 19)
  */
 apiApp.post('/api/products/import-preview', requireAuth, async (req: Request, res: Response) => {
@@ -1289,6 +1315,46 @@ apiApp.post('/api/backup/restore', requireAuth, async (req: Request, res: Respon
     return sendSuccess(res, result);
   } catch (err: any) {
     return sendError(res, 'BACKUP_RESTORE_FAILED', err?.message || 'Failed to restore backup', 400);
+  }
+});
+
+/**
+ * Canonical Masters Endpoints
+ */
+apiApp.get('/api/masters/brands', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const { categoryId, search, limit, page, activeOnly } = req.query;
+    if (activeOnly === 'true') {
+      const brands = await MasterService.getActiveBrands(categoryId as string);
+      return sendSuccess(res, { items: brands, total: brands.length });
+    }
+    const result = await MasterService.getBrands({
+      categoryId: categoryId as string,
+      search: search as string,
+      page: page ? parseInt(page as string, 10) : 1,
+      limit: limit ? parseInt(limit as string, 10) : 500,
+    });
+    return sendSuccess(res, result);
+  } catch (err: any) {
+    return sendError(res, 'MASTERS_BRANDS_FAILED', err?.message || 'Failed to fetch master brands', 500);
+  }
+});
+
+apiApp.get('/api/masters/variants', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const { brandId, categoryId } = req.query;
+    const cascade = await ProductMasterService.getCascadingData({
+      brandId: brandId as string,
+      categoryId: categoryId as string,
+    });
+    return sendSuccess(res, {
+      variants: cascade.variants,
+      products: cascade.products,
+      totalVariants: cascade.variants.length,
+      totalProducts: cascade.products.length,
+    });
+  } catch (err: any) {
+    return sendError(res, 'MASTERS_VARIANTS_FAILED', err?.message || 'Failed to fetch master variants', 500);
   }
 });
 

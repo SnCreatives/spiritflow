@@ -17,6 +17,7 @@ import { SupportedLanguage } from '../../types';
 import { translations } from '../../utils/i18n';
 import { parseCsv, parseExcel, parsePaste, ColumnMapping, autoMapColumns } from '../../utils/importUtils';
 import { apiGet } from '../../utils/api';
+import { ModalShell } from './ModalShell';
 
 export interface BulkEntryRow {
   rowId: string;
@@ -263,229 +264,207 @@ export const UniversalBulkEntryModal: React.FC<UniversalBulkEntryModalProps> = (
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fadeIn">
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-slate-950/50">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20">
-              <FileSpreadsheet className="w-5 h-5" />
-            </div>
-            <div>
-              <h3 className="text-lg font-semibold text-slate-100">
-                Universal Bulk Import / Paste — {module.toUpperCase()}
-              </h3>
-              <p className="text-xs text-slate-400">
-                Copy from Excel / Google Sheets or upload CSV/XLSX with automatic canonical product resolution.
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={onClose}
-            className="p-2 rounded-xl text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        {/* Tabs & Toolbar */}
-        <div className="flex items-center justify-between px-6 py-3 border-b border-slate-800 bg-slate-900/80">
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setActiveTab('paste')}
-              className={`px-4 py-2 rounded-xl text-xs font-medium transition-all flex items-center gap-2 ${
-                activeTab === 'paste'
-                  ? 'bg-amber-500 text-slate-950 shadow-lg shadow-amber-500/20 font-semibold'
-                  : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-              }`}
-            >
-              <Clipboard className="w-4 h-4" />
-              Clipboard Paste
-            </button>
-            <button
-              onClick={() => setActiveTab('upload')}
-              className={`px-4 py-2 rounded-xl text-xs font-medium transition-all flex items-center gap-2 ${
-                activeTab === 'upload'
-                  ? 'bg-amber-500 text-slate-950 shadow-lg shadow-amber-500/20 font-semibold'
-                  : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-              }`}
-            >
-              <Upload className="w-4 h-4" />
-              Upload Excel / CSV
-            </button>
-            <button
-              onClick={() => {
-                setActiveTab('template');
-                handleDownloadTemplate();
-              }}
-              className="px-4 py-2 rounded-xl text-xs font-medium bg-slate-800 text-slate-300 hover:bg-slate-700 transition-all flex items-center gap-2"
-            >
-              <Download className="w-4 h-4" />
-              Download Template
-            </button>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <label className="text-xs text-slate-400 flex items-center gap-1.5 font-medium">
-              Mode:
-              <select
-                value={importMode}
-                onChange={(e) => setImportMode(e.target.value as any)}
-                className="bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-slate-200 focus:outline-none focus:border-amber-500"
-              >
-                <option value="append">Append Rows</option>
-                <option value="replace">Replace Existing</option>
-              </select>
-            </label>
-          </div>
-        </div>
-
-        {/* Content Area */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-6">
-          {error && (
-            <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/20 flex items-start gap-3 text-rose-300 text-xs">
-              <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
-              <span>{error}</span>
-            </div>
-          )}
-
-          {activeTab === 'paste' && (
-            <div className="space-y-4">
-              <div>
-                <label className="block text-xs font-medium text-slate-300 mb-2">
-                  Paste cells directly from Excel, Google Sheets, or LibreOffice (Tab-separated with headers):
-                </label>
-                <textarea
-                  rows={6}
-                  value={pastedText}
-                  onChange={(e) => setPastedText(e.target.value)}
-                  placeholder="TP Number&#9;SCM Code&#9;Brand&#9;Variant&#9;Size&#9;Packaging&#9;MRP&#9;Quantity&#9;TP Price&#9;Batch&#9;Remarks&#10;TP001&#9;SCM101&#9;Royal Stag&#9;Deluxe&#9;750&#9;Bottle&#9;1200&#9;10&#9;950&#9;B1&#9;OK"
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-slate-200 font-mono focus:outline-none focus:border-amber-500"
-                />
-              </div>
-              <div className="flex justify-end">
-                <button
-                  onClick={handleParsePaste}
-                  className="px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-semibold text-xs transition-all flex items-center gap-2 shadow-lg shadow-amber-500/20"
-                >
-                  <Clipboard className="w-4 h-4" />
-                  Parse & Preview
-                </button>
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'upload' && (
-            <div className="space-y-4 py-8 text-center border-2 border-dashed border-slate-800 rounded-2xl bg-slate-950/40">
-              <input
-                type="file"
-                ref={fileInputRef}
-                onChange={handleFileUpload}
-                accept=".csv, .xlsx, .xls"
-                className="hidden"
-              />
-              <div className="mx-auto w-12 h-12 rounded-full bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 mb-3">
-                <Upload className="w-6 h-6" />
-              </div>
-              <h4 className="text-sm font-medium text-slate-200">Upload Spreadsheet or CSV file</h4>
-              <p className="text-xs text-slate-400 max-w-sm mx-auto">
-                Supports .xlsx, .xls, and .csv files. Columns will be automatically mapped to canonical master fields.
-              </p>
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                className="mt-4 px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium border border-slate-700 transition-all inline-flex items-center gap-2"
-              >
-                Browse File...
-              </button>
-            </div>
-          )}
-
-          {/* Preview Section */}
-          {parsedRows.length > 0 && (
-            <div className="space-y-4 pt-4 border-t border-slate-800">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h4 className="text-sm font-semibold text-slate-100 flex items-center gap-2">
-                    Paste / Import Preview
-                  </h4>
-                  <p className="text-xs text-slate-400">
-                    Detected {parsedRows.length} rows ({validCount} valid, {invalidCount} invalid)
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-400 text-[11px] font-medium border border-emerald-500/20">
-                    {validCount} Valid
-                  </span>
-                  {invalidCount > 0 && (
-                    <span className="px-2.5 py-1 rounded-full bg-rose-500/10 text-rose-400 text-[11px] font-medium border border-rose-500/20">
-                      {invalidCount} Invalid
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              <div className="border border-slate-800 rounded-xl overflow-hidden max-h-64 overflow-y-auto">
-                <table className="w-full text-left border-collapse text-xs">
-                  <thead className="bg-slate-950 text-slate-400 font-mono uppercase text-[10px] sticky top-0 border-b border-slate-800">
-                    <tr>
-                      <th className="p-3">Status</th>
-                      <th className="p-3">TP / Ref</th>
-                      <th className="p-3">Brand & Variant</th>
-                      <th className="p-3">Size</th>
-                      <th className="p-3">MRP</th>
-                      <th className="p-3">Qty</th>
-                      <th className="p-3">Issue / Notes</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800/60">
-                    {parsedRows.map((r, i) => (
-                      <tr key={r.rowId} className={r.status === 'valid' ? 'hover:bg-slate-800/30' : 'bg-rose-500/5 hover:bg-rose-500/10'}>
-                        <td className="p-3">
-                          {r.status === 'valid' ? (
-                            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                          ) : (
-                            <AlertCircle className="w-4 h-4 text-rose-400" />
-                          )}
-                        </td>
-                        <td className="p-3 font-mono text-slate-300">{r.tpNumber || '—'}</td>
-                        <td className="p-3 text-slate-200 font-medium">
-                          {r.brandName} {r.variant}
-                        </td>
-                        <td className="p-3 text-slate-300">{r.bottleSize ? `${r.bottleSize} ml` : '—'}</td>
-                        <td className="p-3 font-mono text-slate-300">₹{r.mrp}</td>
-                        <td className="p-3 font-mono text-amber-400 font-semibold">{r.quantity}</td>
-                        <td className="p-3 text-rose-300 text-[11px]">{r.errorMessage || 'Ready'}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Footer */}
-        <div className="flex items-center justify-between px-6 py-4 border-t border-slate-800 bg-slate-950/50">
-          <span className="text-xs text-slate-400">
-            {loadingCatalog ? 'Loading master catalog...' : 'Master catalog synchronized.'}
+    <ModalShell
+      isOpen={isOpen}
+      onClose={onClose}
+      title={`Universal Bulk Import / Paste — ${module.toUpperCase()}`}
+      subtitle="Copy from Excel / Google Sheets or upload CSV/XLSX with automatic canonical product resolution."
+      icon={<FileSpreadsheet className="w-5 h-5" />}
+      maxWidth="max-w-4xl"
+      footer={
+        <div className="flex items-center justify-between w-full">
+          <span className="text-[10px] text-slate-500 uppercase tracking-widest font-bold">
+            {loadingCatalog ? 'Syncing catalog...' : 'Catalog synchronized'}
           </span>
           <div className="flex items-center gap-3">
             <button
               onClick={onClose}
-              className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition-all"
+              className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-colors"
             >
               Cancel
             </button>
             <button
               onClick={handleConfirmAdd}
               disabled={validCount === 0}
-              className="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-slate-950 font-semibold text-xs transition-all shadow-lg shadow-amber-500/20 flex items-center gap-2"
+              className="px-6 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-slate-950 font-bold text-xs transition-all shadow-md flex items-center gap-2"
             >
-              Add {validCount} Valid Rows to Form
+              Add {validCount} Valid Rows
             </button>
           </div>
         </div>
+      }
+    >
+      <div className="space-y-6">
+        {/* Tabs & Mode Selector */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-950/50 p-4 rounded-2xl border border-slate-800">
+          <div className="flex items-center gap-1.5 p-1 bg-slate-900 rounded-xl border border-slate-800 w-fit">
+            {[
+              { id: 'paste', label: 'Paste', icon: Clipboard },
+              { id: 'upload', label: 'Upload', icon: Upload },
+              { id: 'template', label: 'Template', icon: Download },
+            ].map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => tab.id === 'template' ? handleDownloadTemplate() : setActiveTab(tab.id as any)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                  activeTab === tab.id
+                    ? 'bg-amber-500 text-slate-950 shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+                }`}
+              >
+                <tab.icon className="w-3.5 h-3.5" />
+                <span>{tab.label}</span>
+              </button>
+            ))}
+          </div>
+
+          <div className="flex items-center gap-2 text-xs">
+            <span className="text-slate-500 font-bold uppercase tracking-wider text-[10px]">Import Mode:</span>
+            <select
+              value={importMode}
+              onChange={(e) => setImportMode(e.target.value as any)}
+              className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:ring-1 focus:ring-amber-500 transition-all font-semibold"
+            >
+              <option value="append">Append Rows</option>
+              <option value="replace">Replace Existing</option>
+            </select>
+          </div>
+        </div>
+
+        {error && (
+          <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/20 flex items-start gap-3 text-rose-300 text-xs animate-in slide-in-from-top-2">
+            <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+            <span>{error}</span>
+          </div>
+        )}
+
+        <div className="space-y-6">
+          {activeTab === 'paste' && (
+            <div className="space-y-4 animate-in fade-in duration-300">
+              <div className="space-y-2">
+                <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">
+                  Paste Data (Excel / Sheets / TSV)
+                </label>
+                <textarea
+                  rows={6}
+                  value={pastedText}
+                  onChange={(e) => setPastedText(e.target.value)}
+                  placeholder="TP Number&#9;SCM Code&#9;Brand&#9;Variant&#9;Size&#10;TP101&#9;SCM01&#9;Royal Stag&#9;Deluxe&#9;750"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-2xl p-4 text-xs text-slate-200 font-mono focus:outline-none focus:ring-1 focus:ring-amber-500 transition-all placeholder-slate-700"
+                />
+              </div>
+              <div className="flex justify-end">
+                <button
+                  onClick={handleParsePaste}
+                  className="px-6 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs transition-all flex items-center gap-2 border border-slate-700 shadow-sm"
+                >
+                  <Clipboard className="w-4 h-4 text-amber-500" />
+                  Parse Clipboard Data
+                </button>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'upload' && (
+            <div className="animate-in fade-in duration-300">
+              <div className="py-10 text-center border-2 border-dashed border-slate-800 rounded-3xl bg-slate-950/40 hover:border-amber-500/40 transition-colors group">
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={handleFileUpload}
+                  accept=".csv, .xlsx, .xls"
+                  className="hidden"
+                />
+                <div className="mx-auto w-14 h-14 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-500 mb-4 group-hover:scale-110 transition-transform">
+                  <Upload className="w-7 h-7" />
+                </div>
+                <h4 className="text-sm font-bold text-slate-200">Upload Spreadsheet or CSV</h4>
+                <p className="text-xs text-slate-500 max-w-xs mx-auto mt-2 leading-relaxed">
+                  Columns will be automatically mapped to canonical master fields based on recognized aliases.
+                </p>
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="mt-6 px-6 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold border border-slate-700 transition-all inline-flex items-center gap-2 shadow-sm"
+                >
+                  Select File...
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Preview Section */}
+          {parsedRows.length > 0 && (
+            <div className="space-y-4 pt-4 border-t border-slate-800 animate-in slide-in-from-bottom-4 duration-500">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest">
+                    Data Preview & Validation
+                  </h4>
+                  <p className="text-[10px] text-slate-500 mt-1">
+                    Detected {parsedRows.length} rows ({validCount} valid, {invalidCount} invalid)
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="flex -space-x-2">
+                    <span className="px-3 py-1 rounded-l-lg bg-emerald-500/10 text-emerald-400 text-[10px] font-black border border-emerald-500/20">
+                      {validCount} VALID
+                    </span>
+                    {invalidCount > 0 && (
+                      <span className="px-3 py-1 rounded-r-lg bg-rose-500/10 text-rose-400 text-[10px] font-black border border-rose-500/20">
+                        {invalidCount} ERROR
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="border border-slate-800 rounded-2xl overflow-hidden bg-slate-950/80 shadow-inner">
+                <div className="overflow-x-auto max-h-72">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead className="bg-slate-900/90 text-slate-500 font-mono uppercase text-[9px] sticky top-0 border-b border-slate-800 backdrop-blur-sm z-10">
+                      <tr>
+                        <th className="p-3 w-10">#</th>
+                        <th className="p-3">TP / Ref</th>
+                        <th className="p-3">Product Identity</th>
+                        <th className="p-3 text-right">Qty</th>
+                        <th className="p-3">Validation Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800/40">
+                      {parsedRows.map((r, i) => (
+                        <tr key={r.rowId} className={`transition-colors ${r.status === 'valid' ? 'hover:bg-slate-800/40' : 'bg-rose-950/10 hover:bg-rose-950/20'}`}>
+                          <td className="p-3 text-slate-600 font-mono text-[10px]">{i + 1}</td>
+                          <td className="p-3 font-mono text-slate-400">{r.tpNumber || '—'}</td>
+                          <td className="p-3">
+                            <div className="font-bold text-slate-200">{r.brandName} {r.variant}</div>
+                            <div className="text-[10px] text-slate-500 mt-0.5">{r.bottleSize ? `${r.bottleSize} ml` : ''} {r.scmCode ? `• SCM: ${r.scmCode}` : ''}</div>
+                          </td>
+                          <td className="p-3 font-mono text-amber-400 font-black text-right text-sm">
+                            {r.quantity}
+                          </td>
+                          <td className="p-3">
+                            {r.status === 'valid' ? (
+                              <div className="flex items-center gap-1.5 text-emerald-500 font-bold uppercase text-[9px]">
+                                <CheckCircle2 className="w-3.5 h-3.5" />
+                                <span>Verified</span>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-1.5 text-rose-400 font-bold uppercase text-[9px]">
+                                <AlertCircle className="w-3.5 h-3.5" />
+                                <span className="truncate max-w-[150px]">{r.errorMessage}</span>
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
-    </div>
+    </ModalShell>
   );
 };

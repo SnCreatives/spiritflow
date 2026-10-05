@@ -134,6 +134,7 @@ export interface TranslationDictionary {
 
   // Common
   save: string;
+  saving: string;
   cancel: string;
   close: string;
   loading: string;
@@ -274,6 +275,7 @@ export const translations: Record<SupportedLanguage, TranslationDictionary> = {
 
     // Common
     save: 'जतन करा',
+    saving: 'जतन होत आहे...',
     cancel: 'रद्द करा',
     close: 'बंद करा',
     loading: 'लोड होत आहे...',
@@ -413,6 +415,7 @@ export const translations: Record<SupportedLanguage, TranslationDictionary> = {
 
     // Common
     save: 'सहेजें',
+    saving: 'सहेजा जा रहा है...',
     cancel: 'रद्द करें',
     close: 'बंद करें',
     loading: 'लोड हो रहा है...',
@@ -552,6 +555,7 @@ export const translations: Record<SupportedLanguage, TranslationDictionary> = {
 
     // Common
     save: 'Save',
+    saving: 'Saving...',
     cancel: 'Cancel',
     close: 'Close',
     loading: 'Loading...',

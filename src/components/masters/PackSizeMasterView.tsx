@@ -19,6 +19,10 @@ import { PackSize, Category, SupportedLanguage, PaginationMeta } from '../../typ
 import { apiGet, apiPost, apiPut, apiDelete } from '../../utils/api';
 import { translations } from '../../utils/i18n';
 import { BulkImportDialog } from '../common/BulkImportDialog';
+import { useToast } from '../../lib/contexts/ToastContext';
+import { useFormMutation } from '../../hooks/useFormMutation';
+import { ModalShell } from '../common/ModalShell';
+import { CategorySelector } from '../common/MasterDataSelectors';
 
 interface PackSizeMasterViewProps {
   language: SupportedLanguage;
@@ -26,6 +30,7 @@ interface PackSizeMasterViewProps {
 
 export const PackSizeMasterView: React.FC<PackSizeMasterViewProps> = ({ language }) => {
   const t = translations[language];
+  const { showToast } = useToast();
 
   const [packSizes, setPackSizes] = useState<PackSize[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -47,9 +52,7 @@ export const PackSizeMasterView: React.FC<PackSizeMasterViewProps> = ({ language
   const [volumeMl, setVolumeMl] = useState<number | ''>('');
   const [packType, setPackType] = useState('Bottle');
   const [active, setActive] = useState(true);
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [modalError, setModalError] = useState<string | null>(null);
-  const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   // Load Categories
   useEffect(() => {
@@ -119,6 +122,19 @@ export const PackSizeMasterView: React.FC<PackSizeMasterViewProps> = ({ language
     setIsModalOpen(true);
   };
 
+  const { mutate: submitPackSize, isSaving: isSubmitting } = useFormMutation(
+    async (payload: any) => {
+      const url = packToEdit ? `/api/pack-sizes/${packToEdit.id}` : '/api/pack-sizes';
+      return packToEdit ? apiPut(url, payload) : apiPost(url, payload);
+    },
+    {
+      successMessage: () => packToEdit ? `Pack Size "${name}" updated successfully!` : `Pack Size "${name}" added successfully!`,
+      invalidateQueries: fetchPackSizes,
+      closeModal: () => setIsModalOpen(false),
+      onError: (err) => setModalError(err.message),
+    }
+  );
+
   const validatePackInput = (): boolean => {
     const vol = Number(volumeMl);
     if (!name.trim()) {
@@ -147,52 +163,30 @@ export const PackSizeMasterView: React.FC<PackSizeMasterViewProps> = ({ language
     e.preventDefault();
     if (!validatePackInput()) return;
 
-    setIsSubmitting(true);
     setModalError(null);
-
-    try {
-      const payload = {
-        name: name.trim(),
-        categoryId,
-        volumeMl: Number(volumeMl),
-        packType,
-        active,
-      };
-
-      const url = packToEdit ? `/api/pack-sizes/${packToEdit.id}` : '/api/pack-sizes';
-      const data = packToEdit 
-        ? await apiPut(url, payload)
-        : await apiPost(url, payload);
-
-      if (!data.success) {
-        throw new Error(data.error?.message || 'Failed to save pack size');
-      }
-
-      setIsModalOpen(false);
-      setFeedback({ type: 'success', text: `Pack Size "${name}" saved successfully!` });
-      fetchPackSizes();
-    } catch (err: any) {
-      setModalError(err.message || 'Error saving pack size');
-    } finally {
-      setIsSubmitting(false);
-    }
+    submitPackSize({
+      name: name.trim(),
+      categoryId,
+      volumeMl: Number(volumeMl),
+      packType,
+      active,
+    });
   };
+
+  const { mutate: executeDelete } = useFormMutation(
+    async (pack: PackSize) => apiDelete(`/api/pack-sizes/${pack.id}`),
+    {
+      successMessage: (data, pack) => `Pack Size "${pack.name}" deleted.`,
+      invalidateQueries: fetchPackSizes,
+    }
+  );
 
   const handleDelete = async (pack: PackSize) => {
     if (!confirm(`Are you sure you want to delete pack size "${pack.name}"? If products reference it, deletion will be rejected.`)) {
       return;
     }
 
-    try {
-      const data = await apiDelete(`/api/pack-sizes/${pack.id}`);
-      if (!data.success) {
-        throw new Error(data.error?.message || 'Cannot delete pack size referenced by products');
-      }
-      setFeedback({ type: 'success', text: `Pack Size "${pack.name}" deleted.` });
-      fetchPackSizes();
-    } catch (err: any) {
-      setFeedback({ type: 'error', text: err.message || 'Failed to delete pack size' });
-    }
+    executeDelete(pack);
   };
 
   return (
@@ -227,24 +221,6 @@ export const PackSizeMasterView: React.FC<PackSizeMasterViewProps> = ({ language
         </div>
       </div>
 
-      {feedback && (
-        <div
-          className={`p-3.5 rounded-xl text-xs flex items-center justify-between ${
-            feedback.type === 'success'
-              ? 'bg-emerald-950/60 border border-emerald-800 text-emerald-200'
-              : 'bg-rose-950/60 border border-rose-800 text-rose-200'
-          }`}
-        >
-          <div className="flex items-center gap-2">
-            {feedback.type === 'success' ? <CheckCircle className="w-4 h-4 text-emerald-400" /> : <AlertCircle className="w-4 h-4 text-rose-400" />}
-            <span>{feedback.text}</span>
-          </div>
-          <button onClick={() => setFeedback(null)} className="text-slate-400 hover:text-white ml-4">
-            ×
-          </button>
-        </div>
-      )}
-
       {/* Filter Bar */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -263,21 +239,16 @@ export const PackSizeMasterView: React.FC<PackSizeMasterViewProps> = ({ language
           </div>
 
           <div>
-            <select
+            <CategorySelector
               value={selectedCategory}
-              onChange={e => {
-                setSelectedCategory(e.target.value);
+              onChange={id => {
+                setSelectedCategory(id);
                 setPage(1);
               }}
-              className="w-full px-3 py-2 bg-slate-950 border border-slate-700/80 rounded-xl text-white text-sm focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400"
-            >
-              <option value="">{t.allCategories}</option>
-              {(Array.isArray(categories) ? categories : []).map(c => (
-                <option key={c.id} value={c.id}>
-                  {c.name} ({c.code})
-                </option>
-              ))}
-            </select>
+              includeAllOption={true}
+              allLabel={t.allCategories}
+              theme="dark"
+            />
           </div>
         </div>
       </div>
@@ -393,134 +364,128 @@ export const PackSizeMasterView: React.FC<PackSizeMasterViewProps> = ({ language
       </div>
 
       {/* Modal */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-            <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between">
-              <h2 className="text-lg font-bold text-white tracking-tight flex items-center gap-2">
-                <Layers className="w-5 h-5 text-amber-400" />
-                <span>{packToEdit ? t.editPackSize : t.addPackSize}</span>
-              </h2>
-              <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-white">
-                <X className="w-5 h-5" />
-              </button>
+      <ModalShell
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        title={packToEdit ? t.editPackSize : t.addPackSize}
+        icon={<Layers className="w-5 h-5" />}
+        footer={
+          <div className="flex justify-end gap-3">
+            <button
+              type="button"
+              onClick={() => setIsModalOpen(false)}
+              className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-xl transition-colors"
+            >
+              {t.cancel}
+            </button>
+            <button
+              form="pack-size-form"
+              type="submit"
+              disabled={isSubmitting}
+              className="px-5 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-semibold rounded-xl flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed shadow-md transition-all"
+            >
+              {isSubmitting ? (
+                <>
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  <span>Saving...</span>
+                </>
+              ) : (
+                <span>{packToEdit ? t.save : t.addPackSize}</span>
+              )}
+            </button>
+          </div>
+        }
+      >
+        <form id="pack-size-form" onSubmit={handleSubmit} className="space-y-4">
+          {modalError && (
+            <div className="p-3 bg-rose-950/50 border border-rose-800 rounded-xl text-rose-200 text-xs flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 text-rose-400 flex-shrink-0 mt-0.5" />
+              <span>{modalError}</span>
+            </div>
+          )}
+
+          <div>
+            <label className="block text-xs font-medium text-slate-300 mb-1.5">
+              {t.category} <span className="text-amber-400">*</span>
+            </label>
+            <CategorySelector
+              value={categoryId}
+              onChange={setCategoryId}
+              required={true}
+              placeholder="-- Select Category --"
+              theme="dark"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-slate-300 mb-1.5">
+              {t.packSizeName} <span className="text-amber-400">*</span>
+            </label>
+            <input
+              type="text"
+              required
+              value={name}
+              onChange={e => setName(e.target.value)}
+              placeholder="e.g. Quart (750 ml) or Can (500 ml)"
+              className="w-full px-3.5 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400 transition-colors"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-slate-300 mb-1.5">
+                {t.volumeMl} <span className="text-amber-400">*</span>
+              </label>
+              <input
+                type="number"
+                min="1"
+                required
+                value={volumeMl}
+                onChange={e => setVolumeMl(e.target.value === '' ? '' : parseInt(e.target.value, 10))}
+                placeholder="750"
+                className="w-full px-3.5 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white font-mono text-sm focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400 transition-colors"
+              />
             </div>
 
-            <form onSubmit={handleSubmit} className="p-6 space-y-4">
-              {modalError && (
-                <div className="p-3 bg-rose-950/50 border border-rose-800 rounded-xl text-rose-200 text-xs flex items-start gap-2">
-                  <AlertCircle className="w-4 h-4 text-rose-400 flex-shrink-0 mt-0.5" />
-                  <span>{modalError}</span>
-                </div>
-              )}
-
-              <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1.5">
-                  {t.category} <span className="text-amber-400">*</span>
-                </label>
-                <select
-                  value={categoryId}
-                  onChange={e => setCategoryId(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-amber-400"
-                >
-                  <option value="">-- Select Category --</option>
-                  {categories.map(c => (
-                    <option key={c.id} value={c.id}>
-                      {c.name} ({c.code})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1.5">
-                  {t.packSizeName} <span className="text-amber-400">*</span>
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={name}
-                  onChange={e => setName(e.target.value)}
-                  placeholder="e.g. Quart (750 ml) or Can (500 ml)"
-                  className="w-full px-3.5 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-amber-400"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-1.5">
-                    {t.volumeMl} <span className="text-amber-400">*</span>
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    required
-                    value={volumeMl}
-                    onChange={e => setVolumeMl(e.target.value === '' ? '' : parseInt(e.target.value, 10))}
-                    placeholder="750"
-                    className="w-full px-3.5 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white font-mono text-sm focus:outline-none focus:border-amber-400"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-1.5">
-                    {t.packType}
-                  </label>
-                  <select
-                    value={packType}
-                    onChange={e => setPackType(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-amber-400"
-                  >
-                    <option value="Bottle">Bottle</option>
-                    <option value="Can">Can</option>
-                    <option value="Pint">Pint (330ml / 375ml)</option>
-                    <option value="Nip">Nip (180ml)</option>
-                    <option value="Keg">Keg (Draught)</option>
-                  </select>
-                </div>
-              </div>
-
-              {Number(volumeMl) === 500 && packType.toLowerCase() === 'pint' && (
-                <div className="p-2.5 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-300 text-xs flex items-center gap-2">
-                  <AlertTriangle className="w-4 h-4 text-amber-400 flex-shrink-0" />
-                  <span>Reminder: 500 ml must be designated as 'Can' or 'Bottle', never 'Pint'.</span>
-                </div>
-              )}
-
-              <div className="pt-2 flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  id="packActive"
-                  checked={active}
-                  onChange={e => setActive(e.target.checked)}
-                  className="rounded border-slate-700 bg-slate-950 text-amber-500 focus:ring-amber-400"
-                />
-                <label htmlFor="packActive" className="text-xs text-slate-300">
-                  {t.active} (Available for product registration)
-                </label>
-              </div>
-
-              <div className="pt-4 border-t border-slate-800 flex justify-end gap-3">
-                <button
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-xl"
-                >
-                  {t.cancel}
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="px-5 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-semibold rounded-xl flex items-center gap-1.5"
-                >
-                  {isSubmitting && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
-                  <span>{packToEdit ? t.save : t.addPackSize}</span>
-                </button>
-              </div>
-            </form>
+            <div>
+              <label className="block text-xs font-medium text-slate-300 mb-1.5">
+                {t.packType}
+              </label>
+              <select
+                value={packType}
+                onChange={e => setPackType(e.target.value)}
+                className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400 transition-colors"
+              >
+                <option value="Bottle">Bottle</option>
+                <option value="Can">Can</option>
+                <option value="Pint">Pint (330ml / 375ml)</option>
+                <option value="Nip">Nip (180ml)</option>
+                <option value="Keg">Keg (Draught)</option>
+              </select>
+            </div>
           </div>
-        </div>
-      )}
+
+          {Number(volumeMl) === 500 && packType.toLowerCase() === 'pint' && (
+            <div className="p-2.5 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-300 text-xs flex items-center gap-2 animate-pulse">
+              <AlertTriangle className="w-4 h-4 text-amber-400 flex-shrink-0" />
+              <span>Reminder: 500 ml must be designated as 'Can' or 'Bottle', never 'Pint'.</span>
+            </div>
+          )}
+
+          <div className="pt-2 flex items-center gap-2.5">
+            <input
+              type="checkbox"
+              id="packActive"
+              checked={active}
+              onChange={e => setActive(e.target.checked)}
+              className="w-4 h-4 rounded border-slate-700 bg-slate-950 text-amber-500 focus:ring-amber-400 transition-colors"
+            />
+            <label htmlFor="packActive" className="text-xs text-slate-300 font-medium cursor-pointer">
+              {t.active} (Available for product registration)
+            </label>
+          </div>
+        </form>
+      </ModalShell>
 
       <BulkImportDialog
         isOpen={isBulkModalOpen}
@@ -529,10 +494,7 @@ export const PackSizeMasterView: React.FC<PackSizeMasterViewProps> = ({ language
         language={language}
         onSuccess={() => {
           fetchPackSizes();
-          setFeedback({
-            type: 'success',
-            text: 'Bulk pack sizes processed and linked to audit trail.',
-          });
+          showToast('Bulk pack sizes processed and linked to audit trail.', 'success');
         }}
       />
     </div>

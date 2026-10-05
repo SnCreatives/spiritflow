@@ -7,7 +7,12 @@ export async function apiFetch<T = any>(
   url: string,
   options: RequestInit = {}
 ): Promise<{ success: boolean; data?: T; error?: { code: string; message: string } }> {
-  const storedToken = sessionStorage.getItem('liquorflow_session_token') || localStorage.getItem('liquorflow_session_token');
+  const storedToken =
+    typeof sessionStorage !== 'undefined'
+      ? sessionStorage.getItem('liquorflow_session_token') || (typeof localStorage !== 'undefined' ? localStorage.getItem('liquorflow_session_token') : null)
+      : typeof localStorage !== 'undefined'
+      ? localStorage.getItem('liquorflow_session_token')
+      : null;
   
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -18,7 +23,7 @@ export async function apiFetch<T = any>(
     headers['x-session-token'] = storedToken;
   }
 
-  const storedBarId = localStorage.getItem('liquorflow_selected_bar_id');
+  const storedBarId = typeof localStorage !== 'undefined' ? localStorage.getItem('liquorflow_selected_bar_id') : null;
   if (storedBarId) {
     headers['x-bar-id'] = storedBarId;
   }
@@ -34,7 +39,7 @@ export async function apiFetch<T = any>(
     
     // Robust 401 handling
     if (res.status === 401) {
-      const currentRoute = window.location.pathname;
+      const currentRoute = typeof window !== 'undefined' ? window.location.pathname : '';
       const isAuthPage = currentRoute.includes('/login') || currentRoute.includes('/setup');
       
       if (!isAuthPage) {

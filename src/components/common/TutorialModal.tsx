@@ -372,7 +372,7 @@ export const TutorialModal: React.FC<TutorialModalProps> = ({
         {/* Modal Header */}
         <div className="px-6 pt-6 pb-4 border-b border-slate-800 flex items-center justify-between bg-slate-900/50">
           <div className="flex items-center gap-3">
-            <LiquorFlowLogo size="xs" variant="full" />
+            <LiquorFlowLogo size="xs" variant="full" theme="white" />
             <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
               {language === 'mr' ? 'मार्गदर्शक ट्यूटोरिअल' : language === 'hi' ? 'मार्गदर्शिका ट्यूटोरियल' : 'Interactive Walkthrough'}
             </span>

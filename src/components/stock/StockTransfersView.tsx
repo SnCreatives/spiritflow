@@ -2,10 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { ArrowUpRight, ArrowDownLeft, Plus, RefreshCw, AlertCircle, CheckCircle2, X, Store, Package } from 'lucide-react';
 import { apiGet, apiPost } from '../../utils/api';
 import { useBar } from '../../lib/contexts/BarContext';
+import { useToast } from '../../lib/contexts/ToastContext';
 import { ProductPackSizeSelector } from '../common/ProductPackSizeSelector';
 
 export const StockTransfersView: React.FC = () => {
   const { selectedBar, availableBars } = useBar();
+  const { showToast } = useToast();
   const [transfers, setTransfers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -73,14 +75,14 @@ export const StockTransfersView: React.FC = () => {
       });
 
       if (res.success) {
-        setFeedback({ type: 'success', message: 'Stock transfer completed successfully' });
+        showToast('Stock transfer completed successfully', 'success');
         setShowModal(false);
         fetchTransfers();
       } else {
         throw new Error(res.error?.message || 'Transfer failed');
       }
     } catch (err: any) {
-      setFeedback({ type: 'error', message: err.message });
+      showToast(err.message, 'error');
     } finally {
       setSubmitting(false);
     }
@@ -119,20 +121,6 @@ export const StockTransfersView: React.FC = () => {
           <span>New Transfer</span>
         </button>
       </div>
-
-      {feedback && (
-        <div className={`p-4 rounded-xl border flex items-center justify-between ${
-          feedback.type === 'success' ? 'bg-emerald-950/40 border-emerald-800 text-emerald-300' : 'bg-rose-950/40 border-rose-800 text-rose-300'
-        }`}>
-          <div className="flex items-center gap-2">
-            {feedback.type === 'success' ? <CheckCircle2 className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
-            <span className="text-sm font-medium">{feedback.message}</span>
-          </div>
-          <button onClick={() => setFeedback(null)} className="text-slate-400 hover:text-white">
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-      )}
 
       <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
         <div className="p-4 border-b border-slate-800 flex items-center justify-between">
@@ -248,7 +236,6 @@ export const StockTransfersView: React.FC = () => {
 
               <div className="space-y-1">
                 <ProductPackSizeSelector
-                  products={products}
                   value={formData.productId}
                   onChange={pid => setFormData({ ...formData, productId: pid })}
                   required
@@ -290,11 +277,16 @@ export const StockTransfersView: React.FC = () => {
                   className="w-full py-3 bg-amber-500 hover:bg-amber-400 disabled:opacity-50 disabled:cursor-not-allowed text-slate-950 font-bold rounded-xl transition-all shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2"
                 >
                   {submitting ? (
-                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      <span>Saving...</span>
+                    </>
                   ) : (
-                    <ArrowUpRight className="w-4 h-4" />
+                    <>
+                      <ArrowUpRight className="w-4 h-4" />
+                      <span>Execute Transfer</span>
+                    </>
                   )}
-                  <span>Execute Transfer</span>
                 </button>
               </div>
             </form>

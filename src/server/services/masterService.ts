@@ -1,5 +1,6 @@
 import { BarStoreService } from './barStoreService.js';
 import { getSupabaseServiceClient } from '../../lib/supabase/client.js';
+import { ProductMasterService } from './productMasterService.js';
 import {
   Category,
   PackSize,
@@ -26,21 +27,10 @@ import {
 
 export class MasterService {
   // ==========================================
-  // CATEGORIES
+  // CATEGORIES - SINGLE CANONICAL MASTER
   // ==========================================
   static async getCategories(): Promise<Category[]> {
-    const supabase = getSupabaseServiceClient();
-    const { data, error } = await supabase
-      .from('categories')
-      .select('id, name, code, active, created_at')
-      .eq('active', true)
-      .order('name', { ascending: true });
-
-    if (error) {
-      throw new Error(`Failed to fetch categories: ${error.message}`);
-    }
-
-    return (data as Category[]) || [];
+    return (await ProductMasterService.getCategories()) as Category[];
   }
 
   // ==========================================

@@ -798,16 +798,24 @@ export const PurchasesView: React.FC = () => {
               <div className="flex justify-end gap-2">
                 <button
                   onClick={() => setEditingPurchase(null)}
-                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl"
+                  disabled={saving}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl disabled:opacity-50"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleUpdate}
                   disabled={saving}
-                  className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-xl"
+                  className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-xl flex items-center gap-2 disabled:opacity-50"
                 >
-                  Save Changes
+                  {saving ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      <span>Saving...</span>
+                    </>
+                  ) : (
+                    <span>Save Changes</span>
+                  )}
                 </button>
               </div>
             </div>

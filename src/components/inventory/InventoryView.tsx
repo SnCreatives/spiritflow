@@ -19,6 +19,7 @@ import { SupportedLanguage, InventoryRecord, StockLedgerRecord } from '../../typ
 import { apiGet, apiPost } from '../../utils/api';
 import { translations } from '../../utils/i18n';
 import { useBar } from '../../lib/contexts/BarContext';
+import { useToast } from '../../lib/contexts/ToastContext';
 import { BulkImportDialog } from '../common/BulkImportDialog';
 import { ProductPackSizeSelector } from '../common/ProductPackSizeSelector';
 
@@ -28,6 +29,7 @@ interface InventoryViewProps {
 
 export const InventoryView: React.FC<InventoryViewProps> = ({ language }) => {
   const t = translations[language];
+  const { showToast } = useToast();
   const { selectedBar } = useBar();
   const [activeTab, setActiveTab] = useState<'inventory' | 'ledger' | 'schema'>('inventory');
   const [items, setItems] = useState<InventoryRecord[]>([]);
@@ -168,12 +170,12 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ language }) => {
       if (!data.success) {
         throw new Error(data.error?.message || 'Inward purchase failed');
       }
-      setFeedback({ type: 'success', message: `Inward Purchase #${data.data.purchaseNumber} recorded into stock & ledger successfully!` });
+      showToast(`Inward Purchase #${data.data.purchaseNumber} recorded into stock & ledger successfully!`, 'success');
       setShowInwardModal(false);
       fetchInventory();
       fetchLedger();
     } catch (err: any) {
-      setFeedback({ type: 'error', message: err.message });
+      showToast(err.message, 'error');
     } finally {
       setSubmitting(false);
     }
@@ -195,12 +197,12 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ language }) => {
       if (!data.success) {
         throw new Error(data.error?.message || 'Stock adjustment failed');
       }
-      setFeedback({ type: 'success', message: `Adjustment #${data.data.adjustmentNumber} applied. New stock: ${data.data.newStock}` });
+      showToast(`Adjustment #${data.data.adjustmentNumber} applied. New stock: ${data.data.newStock}`, 'success');
       setShowAdjustmentModal(false);
       fetchInventory();
       fetchLedger();
     } catch (err: any) {
-      setFeedback({ type: 'error', message: err.message });
+      showToast(err.message, 'error');
     } finally {
       setSubmitting(false);
     }
@@ -221,12 +223,12 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ language }) => {
       if (!data.success) {
         throw new Error(data.error?.message || 'Opening stock failed');
       }
-      setFeedback({ type: 'success', message: `Opening stock recorded! Current stock: ${data.data.currentStock}` });
+      showToast(`Opening stock recorded! Current stock: ${data.data.currentStock}`, 'success');
       setShowOpeningModal(false);
       fetchInventory();
       fetchLedger();
     } catch (err: any) {
-      setFeedback({ type: 'error', message: err.message });
+      showToast(err.message, 'error');
     } finally {
       setSubmitting(false);
     }
@@ -298,24 +300,6 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ language }) => {
           </button>
         </div>
       </div>
-
-      {feedback && (
-        <div
-          className={`p-4 rounded-xl border text-sm flex items-center justify-between ${
-            feedback.type === 'success'
-              ? 'bg-emerald-950/40 border-emerald-800 text-emerald-300'
-              : 'bg-rose-950/40 border-rose-800 text-rose-300'
-          }`}
-        >
-          <div className="flex items-center gap-2">
-            {feedback.type === 'success' ? <CheckCircle2 className="w-4 h-4 text-emerald-400" /> : <AlertCircle className="w-4 h-4 text-rose-400" />}
-            <span>{feedback.message}</span>
-          </div>
-          <button type="button" onClick={() => setFeedback(null)} className="text-slate-400 hover:text-white">
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-      )}
 
       {/* Tabs */}
       <div className="flex items-center gap-2 border-b border-slate-800 pb-2">
@@ -703,7 +687,6 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ language }) => {
 
               <div className="sm:col-span-2">
                 <ProductPackSizeSelector
-                  products={productsList}
                   value={inwardForm.productId}
                   onChange={productId => setInwardForm({ ...inwardForm, productId })}
                   required
@@ -758,9 +741,16 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ language }) => {
               <button
                 type="submit"
                 disabled={submitting}
-                className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs transition-colors"
+                className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
               >
-                {submitting ? 'Recording...' : 'Record Inward Stock'}
+                {submitting ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>{t.saving}</span>
+                  </>
+                ) : (
+                  <span>Record Inward Stock</span>
+                )}
               </button>
             </div>
           </form>
@@ -784,7 +774,6 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ language }) => {
             <div className="space-y-3 text-xs">
               <div>
                 <ProductPackSizeSelector
-                  products={productsList}
                   value={adjForm.productId}
                   onChange={productId => setAdjForm({ ...adjForm, productId })}
                   required
@@ -843,9 +832,16 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ language }) => {
               <button
                 type="submit"
                 disabled={submitting}
-                className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs transition-colors"
+                className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
               >
-                {submitting ? 'Applying...' : 'Apply Adjustment'}
+                {submitting ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>{t.saving}</span>
+                  </>
+                ) : (
+                  <span>Apply Adjustment</span>
+                )}
               </button>
             </div>
           </form>
@@ -869,7 +865,6 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ language }) => {
             <div className="space-y-3 text-xs">
               <div>
                 <ProductPackSizeSelector
-                  products={productsList}
                   value={openingForm.productId}
                   onChange={productId => setOpeningForm({ ...openingForm, productId })}
                   required
@@ -923,9 +918,16 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ language }) => {
               <button
                 type="submit"
                 disabled={submitting}
-                className="px-4 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-semibold text-xs transition-colors"
+                className="px-4 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-semibold text-xs transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
               >
-                {submitting ? 'Saving...' : 'Set Opening Stock'}
+                {submitting ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>{t.saving}</span>
+                  </>
+                ) : (
+                  <span>Set Opening Stock</span>
+                )}
               </button>
             </div>
           </form>
@@ -939,10 +941,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ language }) => {
         language={language}
         onSuccess={() => {
           fetchInventory();
-          setFeedback({
-            type: 'success',
-            message: 'Bulk opening stock processed and verified successfully.',
-          });
+          showToast('Bulk opening stock processed and verified successfully.', 'success');
         }}
       />
     </div>

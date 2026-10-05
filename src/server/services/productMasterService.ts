@@ -252,22 +252,34 @@ export class ProductMasterService {
       const ps = p.pack_size;
       const pType = cat?.product_type || this.resolveProductType(cat?.name || '');
       const variant = p.variant || p.product_name || p.name || 'Standard';
+      const vol = ps?.volume_ml ? Number(ps.volume_ml) : undefined;
+      const pTypePkg = p.pack_type || 'Bottle';
+      const mrpValue = Number(p.mrp_reference || p.mrp || 0);
+      const tpPrice = Number(p.purchase_tp_price || 0);
 
       return {
         id: p.id,
         name: p.name,
         productName: p.product_name || p.name,
+        product_name: p.product_name || p.name,
         variant,
         brandId: p.brand_id,
+        brand_id: p.brand_id,
         brandName: b?.brand_name || b?.name || '',
         categoryId: p.category_id,
+        category_id: p.category_id,
         categoryName: cat?.name || '',
         productType: pType,
         packSizeId: p.pack_size_id,
-        volumeMl: ps?.volume_ml ? Number(ps.volume_ml) : undefined,
-        packType: p.pack_type || 'Bottle',
-        mrp: Number(p.mrp_reference || 0),
-        purchasePrice: Number(p.purchase_tp_price || 0),
+        pack_size_id: p.pack_size_id,
+        volumeMl: vol,
+        volume_ml: vol,
+        packType: pTypePkg,
+        pack_type: pTypePkg,
+        mrp: mrpValue,
+        mrp_reference: mrpValue,
+        purchasePrice: tpPrice,
+        purchase_tp_price: tpPrice,
         sku: p.sku,
         status: p.status || 'Active',
       };
@@ -294,7 +306,7 @@ export class ProductMasterService {
     return {
       productTypes: CANONICAL_PRODUCT_TYPES,
       categories: filteredCategories.map(c => ({ id: c.id, name: c.name, productType: c.product_type, code: c.code })),
-      brands: brands.map(b => ({ id: b.id, name: b.name, categoryId: b.category_id })),
+      brands: brands.map(b => ({ id: b.id, name: b.name, categoryId: b.category_id, category_id: b.category_id })),
       variants: Array.from(variantSet).sort(),
       packSizes: Array.from(packSizeMap.values()).sort((a, b) => a.volumeMl - b.volumeMl),
       packagingTypes: Array.from(packagingSet).sort(),

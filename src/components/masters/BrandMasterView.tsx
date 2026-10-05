@@ -12,10 +12,16 @@ import {
   Upload,
 } from 'lucide-react';
 import { Brand, Category, SupportedLanguage } from '../../types';
+import { validateBrandsSchemaAndMapping } from '../../utils/brandValidation';
 import { translations } from '../../utils/i18n';
 import { BulkImportDialog } from '../common/BulkImportDialog';
 import { apiGet, apiPost, apiPut, apiDelete } from '../../utils/api';
 import { compareCanonicalBrands } from '../../utils/canonicalBrands';
+import { useToast } from '../../lib/contexts/ToastContext';
+import { useFormMutation } from '../../hooks/useFormMutation';
+import { ModalShell } from '../common/ModalShell';
+import { CategorySelector, BrandSelector } from '../common/MasterDataSelectors';
+import { useCategories } from '../../hooks/useMasterData';
 
 interface BrandMasterViewProps {
   language: SupportedLanguage;
@@ -48,16 +54,24 @@ const CATEGORY_ICONS: Record<string, string> = {
 
 export const BrandMasterView: React.FC<BrandMasterViewProps> = ({ language }) => {
   const t = translations[language];
+  const { showToast } = useToast();
 
   // Data states
   const [brands, setBrands] = useState<Brand[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
+  const { categories } = useCategories();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   // Filters
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
+  const [selectedBrandId, setSelectedBrandId] = useState('');
+
+  // Bulk Selection & Batch Action States
+  const [selectedBrandIds, setSelectedBrandIds] = useState<Set<string>>(new Set());
+  const [isBatchCategoryModalOpen, setIsBatchCategoryModalOpen] = useState(false);
+  const [targetBatchCategoryId, setTargetBatchCategoryId] = useState('');
+  const [isBatchActionRunning, setIsBatchActionRunning] = useState(false);
 
   // Modal states
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -68,31 +82,93 @@ export const BrandMasterView: React.FC<BrandMasterViewProps> = ({ language }) =>
   const [maharashtraStatus, setMaharashtraStatus] = useState('Approved');
   const [registrationRef, setRegistrationRef] = useState('');
   const [active, setActive] = useState(true);
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [modalError, setModalError] = useState<string | null>(null);
 
-  // Action feedback
-  const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-
-  // Load Categories
-  useEffect(() => {
-    async function loadAuxData() {
-      try {
-        const catData = await apiGet('/api/categories');
-        if (catData.success && catData.data) {
-          const list = Array.isArray(catData.data)
-            ? catData.data
-            : catData.data.categories || catData.data.items || [];
-          setCategories(Array.isArray(list) ? list : []);
-        }
-      } catch (err) {
-        console.error('Failed to load auxiliary data for brands:', err);
-      }
+  const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.checked) {
+      const allIds = new Set<string>();
+      brands.forEach(b => allIds.add(b.id));
+      setSelectedBrandIds(allIds);
+    } else {
+      setSelectedBrandIds(new Set());
     }
-    loadAuxData();
-  }, []);
+  };
 
-  // Fetch Brands
+  const handleToggleSelectBrand = (id: string) => {
+    const next = new Set(selectedBrandIds);
+    if (next.has(id)) {
+      next.delete(id);
+    } else {
+      next.add(id);
+    }
+    setSelectedBrandIds(next);
+  };
+
+  const handleBatchDelete = async () => {
+    if (selectedBrandIds.size === 0) return;
+    if (!confirm(`Are you sure you want to delete ${selectedBrandIds.size} selected brand(s)?`)) return;
+
+    setIsBatchActionRunning(true);
+    try {
+      let successCount = 0;
+      for (const id of Array.from(selectedBrandIds)) {
+        try {
+          await apiDelete(`/api/brands/${id}`);
+          successCount++;
+        } catch (e) {
+          console.error(`Failed to delete brand ${id}:`, e);
+        }
+      }
+      showToast(`Successfully deleted ${successCount} brand(s).`, 'success');
+      setSelectedBrandIds(new Set());
+      fetchBrands();
+    } catch (err: any) {
+      showToast(err.message || 'Batch delete failed', 'error');
+    } finally {
+      setIsBatchActionRunning(false);
+    }
+  };
+
+  const handleBatchReassignCategory = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!targetBatchCategoryId || selectedBrandIds.size === 0) {
+      showToast('Please select a target category.', 'error');
+      return;
+    }
+
+    setIsBatchActionRunning(true);
+    try {
+      let successCount = 0;
+      for (const id of Array.from(selectedBrandIds)) {
+        const brandObj = brands.find(b => b.id === id);
+        if (brandObj) {
+          try {
+            await apiPut(`/api/brands/${id}`, {
+              name: brandObj.name,
+              categoryId: targetBatchCategoryId,
+              maharashtraStatus: brandObj.maharashtra_status || 'Approved',
+              registrationRef: brandObj.registration_ref || null,
+              active: brandObj.active,
+            });
+            successCount++;
+          } catch (e) {
+            console.error(`Failed to reassign brand ${id}:`, e);
+          }
+        }
+      }
+      showToast(`Successfully reassigned ${successCount} brand(s) to new category.`, 'success');
+      setSelectedBrandIds(new Set());
+      setIsBatchCategoryModalOpen(false);
+      setTargetBatchCategoryId('');
+      fetchBrands();
+    } catch (err: any) {
+      showToast(err.message || 'Batch category reassignment failed', 'error');
+    } finally {
+      setIsBatchActionRunning(false);
+    }
+  };
+
+  // Fetch Brands with global error handling and schema validation
   const fetchBrands = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -110,13 +186,27 @@ export const BrandMasterView: React.FC<BrandMasterViewProps> = ({ language }) =>
         throw new Error(data.error?.message || 'Failed to fetch brands');
       }
 
-      setBrands(data.data.items || []);
+      const items = data.data.items || [];
+      
+      // Validate schema and category_id mapping
+      const validation = validateBrandsSchemaAndMapping(items, selectedCategory || undefined);
+      if (!validation.isValid && validation.errors.length > 0) {
+        console.warn('⚠️ [BrandMasterView Schema Warning]:', validation.errors);
+      }
+
+      if (items.length === 0 && selectedCategory) {
+        showToast('No existing brand records found for this category.', 'info');
+      }
+
+      setBrands(items);
     } catch (err: any) {
-      setError(err.message || 'Error fetching brands');
+      const errorMsg = err.message || 'Error fetching brands';
+      setError(errorMsg);
+      showToast(errorMsg, 'error');
     } finally {
       setLoading(false);
     }
-  }, [searchTerm, selectedCategory]);
+  }, [searchTerm, selectedCategory, showToast]);
 
   useEffect(() => {
     fetchBrands();
@@ -144,9 +234,13 @@ export const BrandMasterView: React.FC<BrandMasterViewProps> = ({ language }) =>
     }> = [];
 
     sortedCategories.forEach(cat => {
-      const catBrands = brands
+      let catBrands = brands
         .filter(b => b.category_id === cat.id)
         .sort((a, b) => compareCanonicalBrands(a.name, b.name));
+
+      if (selectedBrandId) {
+        catBrands = catBrands.filter(b => b.id === selectedBrandId);
+      }
 
       if (catBrands.length > 0) {
         const lower = cat.name.toLowerCase();
@@ -164,6 +258,7 @@ export const BrandMasterView: React.FC<BrandMasterViewProps> = ({ language }) =>
     if (groups.length === 0 && brands.length > 0) {
       const mapByCat = new Map<string, { name: string; list: Brand[] }>();
       brands.forEach(b => {
+        if (selectedBrandId && b.id !== selectedBrandId) return;
         const cId = b.category_id || 'other';
         const cName = b.category?.name || 'Brands';
         if (!mapByCat.has(cId)) {
@@ -185,7 +280,7 @@ export const BrandMasterView: React.FC<BrandMasterViewProps> = ({ language }) =>
     }
 
     return groups;
-  }, [brands, sortedCategories]);
+  }, [brands, sortedCategories, selectedBrandId]);
 
   const handleOpenAdd = () => {
     setBrandToEdit(null);
@@ -209,6 +304,19 @@ export const BrandMasterView: React.FC<BrandMasterViewProps> = ({ language }) =>
     setIsModalOpen(true);
   };
 
+  const { mutate: submitBrand, isSaving: isSubmitting } = useFormMutation(
+    async (payload: any) => {
+      const url = brandToEdit ? `/api/brands/${brandToEdit.id}` : '/api/brands';
+      return brandToEdit ? apiPut(url, payload) : apiPost(url, payload);
+    },
+    {
+      successMessage: () => brandToEdit ? `Brand "${name}" updated successfully!` : `Brand "${name}" added successfully!`,
+      invalidateQueries: fetchBrands,
+      closeModal: () => setIsModalOpen(false),
+      onError: (err) => setModalError(err.message),
+    }
+  );
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim() || !categoryId) {
@@ -216,37 +324,23 @@ export const BrandMasterView: React.FC<BrandMasterViewProps> = ({ language }) =>
       return;
     }
 
-    setIsSubmitting(true);
     setModalError(null);
-
-    try {
-      const payload = {
-        name: name.trim(),
-        categoryId,
-        maharashtraStatus,
-        registrationRef: registrationRef.trim() || null,
-        active,
-      };
-
-      const url = brandToEdit ? `/api/brands/${brandToEdit.id}` : '/api/brands';
-
-      const data = brandToEdit
-        ? await apiPut(url, payload)
-        : await apiPost(url, payload);
-
-      if (!data.success) {
-        throw new Error(data.error?.message || 'Failed to save brand');
-      }
-
-      setIsModalOpen(false);
-      setFeedback({ type: 'success', text: `Brand "${name}" saved successfully!` });
-      fetchBrands();
-    } catch (err: any) {
-      setModalError(err.message || 'Error saving brand');
-    } finally {
-      setIsSubmitting(false);
-    }
+    submitBrand({
+      name: name.trim(),
+      categoryId,
+      maharashtraStatus,
+      registrationRef: registrationRef.trim() || null,
+      active,
+    });
   };
+
+  const { mutate: executeDelete } = useFormMutation(
+    async (brand: Brand) => apiDelete(`/api/brands/${brand.id}`),
+    {
+      successMessage: (data, brand) => `Brand "${brand.name}" deleted.`,
+      invalidateQueries: fetchBrands,
+    }
+  );
 
   const handleDelete = async (brand: Brand) => {
     if (
@@ -257,16 +351,7 @@ export const BrandMasterView: React.FC<BrandMasterViewProps> = ({ language }) =>
       return;
     }
 
-    try {
-      const data = await apiDelete(`/api/brands/${brand.id}`);
-      if (!data.success) {
-        throw new Error(data.error?.message || 'Cannot delete brand referenced by products');
-      }
-      setFeedback({ type: 'success', text: `Brand "${brand.name}" deleted.` });
-      fetchBrands();
-    } catch (err: any) {
-      setFeedback({ type: 'error', text: err.message || 'Failed to delete brand' });
-    }
+    executeDelete(brand);
   };
 
   return (
@@ -301,31 +386,9 @@ export const BrandMasterView: React.FC<BrandMasterViewProps> = ({ language }) =>
         </div>
       </div>
 
-      {feedback && (
-        <div
-          className={`p-3.5 rounded-xl text-xs flex items-center justify-between ${
-            feedback.type === 'success'
-              ? 'bg-emerald-950/60 border border-emerald-800 text-emerald-200'
-              : 'bg-rose-950/60 border border-rose-800 text-rose-200'
-          }`}
-        >
-          <div className="flex items-center gap-2">
-            {feedback.type === 'success' ? (
-              <CheckCircle className="w-4 h-4 text-emerald-400" />
-            ) : (
-              <AlertCircle className="w-4 h-4 text-rose-400" />
-            )}
-            <span>{feedback.text}</span>
-          </div>
-          <button onClick={() => setFeedback(null)} className="text-slate-400 hover:text-white ml-4">
-            ×
-          </button>
-        </div>
-      )}
-
       {/* Filter Bar */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div className="relative">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
@@ -338,18 +401,27 @@ export const BrandMasterView: React.FC<BrandMasterViewProps> = ({ language }) =>
           </div>
 
           <div>
-            <select
+            <CategorySelector
               value={selectedCategory}
-              onChange={e => setSelectedCategory(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-950 border border-slate-700/80 rounded-xl text-white text-sm focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400"
-            >
-              <option value="">{t.allCategories}</option>
-              {sortedCategories.map(c => (
-                <option key={c.id} value={c.id}>
-                  {c.name} ({c.code})
-                </option>
-              ))}
-            </select>
+              onChange={catId => {
+                setSelectedCategory(catId);
+                setSelectedBrandId('');
+              }}
+              includeAllOption={true}
+              allLabel={t.allCategories}
+              theme="dark"
+            />
+          </div>
+
+          <div>
+            <BrandSelector
+              categoryId={selectedCategory || undefined}
+              value={selectedBrandId}
+              onChange={setSelectedBrandId}
+              includeAllOption={true}
+              allLabel="All Brands"
+              theme="dark"
+            />
           </div>
         </div>
 
@@ -358,7 +430,10 @@ export const BrandMasterView: React.FC<BrandMasterViewProps> = ({ language }) =>
           <div className="flex items-center gap-2 flex-wrap pt-1">
             <button
               type="button"
-              onClick={() => setSelectedCategory('')}
+              onClick={() => {
+                setSelectedCategory('');
+                setSelectedBrandId('');
+              }}
               className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
                 selectedCategory === ''
                   ? 'bg-amber-500 text-slate-950'
@@ -371,7 +446,10 @@ export const BrandMasterView: React.FC<BrandMasterViewProps> = ({ language }) =>
               <button
                 key={cat.id}
                 type="button"
-                onClick={() => setSelectedCategory(cat.id)}
+                onClick={() => {
+                  setSelectedCategory(cat.id);
+                  setSelectedBrandId('');
+                }}
                 className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
                   selectedCategory === cat.id
                     ? 'bg-amber-500 text-slate-950'
@@ -391,6 +469,15 @@ export const BrandMasterView: React.FC<BrandMasterViewProps> = ({ language }) =>
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="border-b border-slate-800 bg-slate-950/60 text-slate-400 text-xs uppercase tracking-wider font-semibold">
+                <th className="py-3.5 px-3 w-10 text-center">
+                  <input
+                    type="checkbox"
+                    checked={brands.length > 0 && selectedBrandIds.size === brands.length}
+                    onChange={handleSelectAll}
+                    className="rounded border-slate-700 bg-slate-950 text-amber-500 focus:ring-amber-400 cursor-pointer"
+                    title="Select All Brands"
+                  />
+                </th>
                 <th className="py-3.5 px-4">{t.brandName}</th>
                 <th className="py-3.5 px-3">{t.category}</th>
                 <th className="py-3.5 px-3">{t.maharashtraStatus}</th>
@@ -401,21 +488,21 @@ export const BrandMasterView: React.FC<BrandMasterViewProps> = ({ language }) =>
             <tbody className="divide-y divide-slate-800 text-sm">
               {loading ? (
                 <tr>
-                  <td colSpan={5} className="py-12 text-center text-slate-400">
+                  <td colSpan={6} className="py-12 text-center text-slate-400">
                     <RefreshCw className="w-6 h-6 animate-spin text-amber-500 mx-auto mb-2" />
                     <span>{t.loading}</span>
                   </td>
                 </tr>
               ) : error ? (
                 <tr>
-                  <td colSpan={5} className="py-12 text-center text-rose-400">
+                  <td colSpan={6} className="py-12 text-center text-rose-400">
                     <AlertCircle className="w-6 h-6 mx-auto mb-2" />
                     <span>{error}</span>
                   </td>
                 </tr>
               ) : groupedBrands.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="py-12 text-center text-slate-400">
+                  <td colSpan={6} className="py-12 text-center text-slate-400">
                     <Tag className="w-8 h-8 mx-auto mb-2 text-slate-600" />
                     <p className="font-medium text-slate-300">{t.noDataFound}</p>
                   </td>
@@ -426,7 +513,7 @@ export const BrandMasterView: React.FC<BrandMasterViewProps> = ({ language }) =>
                     {/* Distinct Category Group Header Row */}
                     <tr className="bg-slate-950/90 border-y border-slate-800">
                       <td
-                        colSpan={5}
+                        colSpan={6}
                         className="py-2.5 px-4 text-xs font-bold tracking-widest uppercase text-amber-400"
                       >
                         <div className="flex items-center justify-between">
@@ -444,7 +531,15 @@ export const BrandMasterView: React.FC<BrandMasterViewProps> = ({ language }) =>
                     {/* Brands in this Category */}
                     {group.brands.map(brand => (
                       <tr key={brand.id} className="hover:bg-slate-800/40 transition-colors">
-                        <td className="py-3 px-4 pl-7 font-semibold text-white">
+                        <td className="py-3 px-3 text-center">
+                          <input
+                            type="checkbox"
+                            checked={selectedBrandIds.has(brand.id)}
+                            onChange={() => handleToggleSelectBrand(brand.id)}
+                            className="rounded border-slate-700 bg-slate-950 text-amber-500 focus:ring-amber-400 cursor-pointer"
+                          />
+                        </td>
+                        <td className="py-3 px-4 font-semibold text-white">
                           {brand.name}
                           {brand.registration_ref && (
                             <div className="text-xs text-slate-500 font-mono mt-0.5">
@@ -477,14 +572,14 @@ export const BrandMasterView: React.FC<BrandMasterViewProps> = ({ language }) =>
                           <div className="flex items-center justify-end gap-2">
                             <button
                               onClick={() => handleOpenEdit(brand)}
-                              className="p-1.5 text-slate-400 hover:text-amber-400 hover:bg-slate-800 rounded-lg transition-colors"
+                              className="p-1.5 text-slate-400 hover:text-amber-400 hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
                               title={t.editBrand}
                             >
                               <Edit2 className="w-4 h-4" />
                             </button>
                             <button
                               onClick={() => handleDelete(brand)}
-                              className="p-1.5 text-slate-500 hover:text-rose-400 hover:bg-slate-800 rounded-lg transition-colors"
+                              className="p-1.5 text-slate-500 hover:text-rose-400 hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
                               title={t.close}
                             >
                               <Trash2 className="w-4 h-4" />
@@ -509,123 +604,117 @@ export const BrandMasterView: React.FC<BrandMasterViewProps> = ({ language }) =>
       </div>
 
       {/* Add / Edit Modal */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-            <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between">
-              <h2 className="text-lg font-bold text-white tracking-tight flex items-center gap-2">
-                <Tag className="w-5 h-5 text-amber-400" />
-                <span>{brandToEdit ? t.editBrand : t.addBrand}</span>
-              </h2>
-              <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-white">
-                <X className="w-5 h-5" />
-              </button>
+      <ModalShell
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        title={brandToEdit ? t.editBrand : t.addBrand}
+        icon={<Tag className="w-5 h-5" />}
+        footer={
+          <div className="flex justify-end gap-3">
+            <button
+              type="button"
+              onClick={() => setIsModalOpen(false)}
+              className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-xl"
+            >
+              {t.cancel}
+            </button>
+            <button
+              form="brand-form"
+              type="submit"
+              disabled={isSubmitting}
+              className="px-5 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-semibold rounded-xl flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isSubmitting ? (
+                <>
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  <span>Saving...</span>
+                </>
+              ) : (
+                <span>{brandToEdit ? t.save : t.addBrand}</span>
+              )}
+            </button>
+          </div>
+        }
+      >
+        <form id="brand-form" onSubmit={handleSubmit} className="space-y-4">
+          {modalError && (
+            <div className="p-3 bg-rose-950/50 border border-rose-800 rounded-xl text-rose-200 text-xs flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-rose-400 flex-shrink-0" />
+              <span>{modalError}</span>
+            </div>
+          )}
+
+          <div>
+            <label className="block text-xs font-medium text-slate-300 mb-1.5">
+              {t.brandName} <span className="text-amber-400">*</span>
+            </label>
+            <input
+              type="text"
+              required
+              value={name}
+              onChange={e => setName(e.target.value)}
+              placeholder="e.g. Royal Stag"
+              className="w-full px-3.5 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-amber-400"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-slate-300 mb-1.5">
+              {t.category} <span className="text-amber-400">*</span>
+            </label>
+            <CategorySelector
+              value={categoryId}
+              onChange={setCategoryId}
+              required={true}
+              placeholder="-- Select Category --"
+              theme="dark"
+            />
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-slate-300 mb-1.5">
+                {t.maharashtraStatus}
+              </label>
+              <select
+                value={maharashtraStatus}
+                onChange={e => setMaharashtraStatus(e.target.value)}
+                className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-amber-400"
+              >
+                <option value="Approved">Approved</option>
+                <option value="Registered">Registered</option>
+                <option value="Pending">Pending</option>
+              </select>
             </div>
 
-            <form onSubmit={handleSubmit} className="p-6 space-y-4">
-              {modalError && (
-                <div className="p-3 bg-rose-950/50 border border-rose-800 rounded-xl text-rose-200 text-xs flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 text-rose-400 flex-shrink-0" />
-                  <span>{modalError}</span>
-                </div>
-              )}
-
-              <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1.5">
-                  {t.brandName} <span className="text-amber-400">*</span>
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={name}
-                  onChange={e => setName(e.target.value)}
-                  placeholder="e.g. Royal Stag"
-                  className="w-full px-3.5 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-amber-400"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1.5">
-                  {t.category} <span className="text-amber-400">*</span>
-                </label>
-                <select
-                  value={categoryId}
-                  onChange={e => setCategoryId(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-amber-400"
-                >
-                  <option value="">-- Select Category --</option>
-                  {sortedCategories.map(c => (
-                    <option key={c.id} value={c.id}>
-                      {c.name} ({c.code})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-1.5">
-                    {t.maharashtraStatus}
-                  </label>
-                  <select
-                    value={maharashtraStatus}
-                    onChange={e => setMaharashtraStatus(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-amber-400"
-                  >
-                    <option value="Approved">Approved</option>
-                    <option value="Registered">Registered</option>
-                    <option value="Pending">Pending</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-1.5">
-                    {t.regReference}
-                  </label>
-                  <input
-                    type="text"
-                    value={registrationRef}
-                    onChange={e => setRegistrationRef(e.target.value)}
-                    placeholder="e.g. MH-BR-2026"
-                    className="w-full px-3.5 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-amber-400"
-                  />
-                </div>
-              </div>
-
-              <div className="pt-2 flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  id="brandActive"
-                  checked={active}
-                  onChange={e => setActive(e.target.checked)}
-                  className="rounded border-slate-700 bg-slate-950 text-amber-500 focus:ring-amber-400"
-                />
-                <label htmlFor="brandActive" className="text-xs text-slate-300">
-                  {t.active} (Available for product registration)
-                </label>
-              </div>
-
-              <div className="pt-4 border-t border-slate-800 flex justify-end gap-3">
-                <button
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-xl"
-                >
-                  {t.cancel}
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="px-5 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-semibold rounded-xl flex items-center gap-1.5"
-                >
-                  {isSubmitting && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
-                  <span>{brandToEdit ? t.save : t.addBrand}</span>
-                </button>
-              </div>
-            </form>
+            <div>
+              <label className="block text-xs font-medium text-slate-300 mb-1.5">
+                {t.regReference}
+              </label>
+              <input
+                type="text"
+                value={registrationRef}
+                onChange={e => setRegistrationRef(e.target.value)}
+                placeholder="e.g. MH-BR-2026"
+                className="w-full px-3.5 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-amber-400"
+              />
+            </div>
           </div>
-        </div>
-      )}
+
+          <div className="pt-2 flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="brandActive"
+              checked={active}
+              onChange={e => setActive(e.target.checked)}
+              className="rounded border-slate-700 bg-slate-950 text-amber-500 focus:ring-amber-400"
+            />
+            <label htmlFor="brandActive" className="text-xs text-slate-300">
+              {t.active} (Available for product registration)
+            </label>
+          </div>
+        </form>
+      </ModalShell>
 
       <BulkImportDialog
         isOpen={isBulkModalOpen}
@@ -634,10 +723,7 @@ export const BrandMasterView: React.FC<BrandMasterViewProps> = ({ language }) =>
         language={language}
         onSuccess={() => {
           fetchBrands();
-          setFeedback({
-            type: 'success',
-            text: 'Bulk brands processed and linked to audit trail.',
-          });
+          showToast('Bulk brands processed and linked to audit trail.', 'success');
         }}
       />
     </div>

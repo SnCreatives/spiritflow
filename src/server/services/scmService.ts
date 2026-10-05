@@ -1,4 +1,5 @@
 import { getSupabaseServiceClient } from '../../lib/supabase/client.js';
+import { ProductMasterService } from './productMasterService.js';
 
 export interface ScmCodeRecord {
   id: string;
@@ -243,5 +244,201 @@ export class ScmService {
       items = items.filter(i => i.scm_code.toLowerCase().includes(q) || (i.variant || '').toLowerCase().includes(q));
     }
     return items.slice(0, limit);
+  }
+
+  /**
+   * Validate a batch of SCM code imports without saving.
+   */
+  static async validateScmImport(rows: any[]): Promise<{
+    summary: { total: number; valid: number; invalid: number; duplicate: number };
+    validatedRows: any[];
+  }> {
+    const supabase = getSupabaseServiceClient();
+
+    // 1. Fetch all master data for resolution
+    const [categories, brands, packSizes, products, existingScm] = await Promise.all([
+      ProductMasterService.getCategories(),
+      ProductMasterService.getBrands(),
+      supabase.from('pack_sizes').select('id, name, volume_ml, pack_type'),
+      supabase.from('products').select('id, name, product_name, sku, brand_id, category_id, pack_size_id'),
+      supabase.from('scm_codes').select('scm_code, product_id, is_active').eq('is_active', true),
+    ]);
+
+    const existingScmMap = new Map();
+    if (existingScm.data) {
+      existingScm.data.forEach(s => existingScmMap.set(s.scm_code.toUpperCase(), s));
+    }
+
+    const prodData = products.data || [];
+    const psData = packSizes.data || [];
+
+    const summary = { total: rows.length, valid: 0, invalid: 0, duplicate: 0 };
+    const validatedRows: any[] = [];
+
+    // Local file duplicate detection
+    const fileCodes = new Set<string>();
+
+    for (let i = 0; i < rows.length; i++) {
+      const raw = rows[i];
+      const row: any = { ...raw, rowIndex: i, status: 'VALID', errors: [] };
+
+      // Normalize SCM Code
+      const scmCode = (raw.scm_code || raw.scm || raw.scm_no || raw.scm_number || '').toString().trim().toUpperCase();
+      row.scm_code = scmCode;
+
+      if (!scmCode) {
+        row.status = 'INVALID';
+        row.errors.push('SCM Code is required.');
+      }
+
+      // Check for duplicates within the file
+      if (scmCode && fileCodes.has(scmCode)) {
+        row.status = 'DUPLICATE';
+        row.errors.push('Duplicate SCM Code in import file.');
+      }
+      if (scmCode) fileCodes.add(scmCode);
+
+      // Check for duplicates in DB
+      if (scmCode && existingScmMap.has(scmCode)) {
+        row.status = 'DUPLICATE';
+        row.errors.push(`SCM Code "${scmCode}" already exists in database.`);
+      }
+
+      // Resolve Product
+      // Logic: If Product ID is provided, use it. Otherwise try to resolve by SKU or Name/Brand/Size.
+      let product: any = null;
+      const productId = raw.product_id || raw.product_id;
+      const sku = (raw.sku || '').toString().trim();
+      const productName = (raw.product || raw.product_name || '').toString().trim();
+      const brandName = (raw.brand || raw.brand_name || '').toString().trim();
+      const sizeName = (raw.bottle_size || raw.size || raw.pack_size || '').toString().trim();
+
+      if (productId) {
+        product = prodData.find(p => p.id === productId);
+      } else if (sku) {
+        product = prodData.find(p => p.sku === sku);
+      } else if (productName) {
+        // Find product by name, brand, and size
+        product = prodData.find(p => {
+          const pName = (p.product_name || p.name || '').toLowerCase();
+          const matchesName = pName === productName.toLowerCase();
+          
+          if (!matchesName) return false;
+
+          if (brandName) {
+            const brand = brands.find(b => b.id === p.brand_id);
+            const matchesBrand = brand && (brand.brand_name || brand.name || '').toLowerCase() === brandName.toLowerCase();
+            if (!matchesBrand) return false;
+          }
+
+          if (sizeName) {
+            const ps = psData.find(s => s.id === p.pack_size_id);
+            const matchesSize = ps && (ps.name.toLowerCase() === sizeName.toLowerCase() || ps.volume_ml.toString() === sizeName);
+            if (!matchesSize) return false;
+          }
+
+          return true;
+        });
+      }
+
+      if (product) {
+        row.product_id = product.id;
+        row.product_display = product.product_name || product.name;
+        
+        // Product Type Verification
+        if (raw.product_type) {
+          const pType = product.productType || ProductMasterService.resolveProductType(categories.find(c => c.id === product.category_id)?.name || '');
+          if (pType.toLowerCase() !== raw.product_type.toLowerCase()) {
+            row.status = 'WARNING';
+            row.errors.push(`Product Type mismatch. File says "${raw.product_type}", System says "${pType}". System value will be used.`);
+          }
+        }
+
+        // Resolve derived fields if not provided
+        if (!row.variant) row.variant = product.product_name || product.name;
+        if (!row.bottle_size) {
+           const ps = psData.find(s => s.id === product.pack_size_id);
+           row.bottle_size = ps ? ps.name : null;
+        }
+        if (!row.packaging_type) row.packaging_type = product.pack_type || 'Bottle';
+      } else {
+        row.status = 'INVALID';
+        row.errors.push('Could not resolve product. Please check Product Name, Brand, or SKU.');
+      }
+
+      // Dates
+      const effectiveFrom = raw.effective_from || raw.effective_date || new Date().toISOString().split('T')[0];
+      row.effective_from = effectiveFrom;
+      if (isNaN(Date.parse(effectiveFrom))) {
+        row.status = 'INVALID';
+        row.errors.push('Invalid Effective From date.');
+      }
+
+      if (raw.effective_to && isNaN(Date.parse(raw.effective_to))) {
+        row.status = 'INVALID';
+        row.errors.push('Invalid Effective To date.');
+      }
+
+      // Status / Active
+      if (raw.status) {
+        const s = raw.status.toLowerCase();
+        row.is_active = !(s === 'inactive' || s === 'false' || s === '0' || s === 'disabled');
+      } else {
+        row.is_active = true;
+      }
+
+      if (row.status === 'VALID' || row.status === 'WARNING') {
+        if (row.status === 'VALID') summary.valid++;
+      } else if (row.status === 'DUPLICATE') {
+        summary.duplicate++;
+      } else {
+        summary.invalid++;
+      }
+
+      validatedRows.push(row);
+    }
+
+    return { summary, validatedRows };
+  }
+
+  /**
+   * Bulk insert SCM codes after validation.
+   */
+  static async bulkCreateScmCodes(rows: any[], options: { barId?: string } = {}): Promise<{ count: number }> {
+    const supabase = getSupabaseServiceClient();
+    
+    // We process sequentially or in chunks to ensure the "terminate previous" logic in createScmCode works.
+    // Or we do a more optimized batch update.
+    // For safety and reuse of logic, let's use the existing createScmCode but in a loop.
+    // In a real production app, we'd use a single transaction.
+    
+    let count = 0;
+    for (const row of rows) {
+      if (row.status === 'VALID' || row.status === 'WARNING') {
+        const record = await this.createScmCode({
+          scmCode: row.scm_code,
+          productId: row.product_id,
+          variant: row.variant,
+          bottleSize: row.bottle_size,
+          packagingType: row.packaging_type,
+          effectiveFrom: row.effective_from,
+          supplierItemCode: row.supplier_item_code,
+          exciseReference: row.excise_reference,
+          sourceReference: row.source_reference || 'Bulk Import',
+        });
+
+        // If specific effective_to or inactive status was provided, update it
+        if (row.effective_to || row.is_active === false) {
+           const supabase = getSupabaseServiceClient();
+           await supabase.from('scm_codes').update({
+             effective_to: row.effective_to || record.effective_to,
+             is_active: row.is_active !== undefined ? row.is_active : record.is_active
+           }).eq('id', record.id);
+        }
+        count++;
+      }
+    }
+
+    return { count };
   }
 }

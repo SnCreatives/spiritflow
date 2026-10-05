@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Wine, Store, Key, ShieldCheck, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Wine, Store, Key, ShieldCheck, CheckCircle2, AlertCircle, RefreshCw } from 'lucide-react';
 import { SupportedLanguage, SetupInput } from '../../types';
 import { apiPost } from '../../utils/api';
 import { translations } from '../../utils/i18n';
@@ -103,7 +103,7 @@ export const SetupView: React.FC<SetupViewProps> = ({
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-center py-10 px-4 sm:px-6 lg:px-8">
       <div className="sm:mx-auto sm:w-full sm:max-w-2xl text-center mb-8">
         <div className="inline-flex items-center justify-center p-3 rounded-2xl bg-amber-500/10 border border-amber-500/30 mb-4 shadow-lg shadow-amber-500/5">
-          <LiquorFlowLogo size="md" variant="full" />
+          <LiquorFlowLogo size="md" variant="full" theme="white" />
         </div>
         <h1 className="text-3xl font-extrabold tracking-tight text-white sm:text-4xl">
           Welcome to LiquorFlow
@@ -309,10 +309,19 @@ export const SetupView: React.FC<SetupViewProps> = ({
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-sm tracking-wide transition-all shadow-lg shadow-amber-500/10 disabled:opacity-50 cursor-pointer"
+                className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-sm tracking-wide transition-all shadow-lg shadow-amber-500/10 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
               >
-                <ShieldCheck className="w-4 h-4" />
-                <span>{isSubmitting ? t.settingUp : t.completeSetupButton}</span>
+                {isSubmitting ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    <span>{t.saving}</span>
+                  </>
+                ) : (
+                  <>
+                    <ShieldCheck className="w-4 h-4" />
+                    <span>{t.completeSetupButton}</span>
+                  </>
+                )}
               </button>
               <p className="mt-2 text-center text-xs text-slate-500">
                 Setup will initialize your business workspace and regional settings.

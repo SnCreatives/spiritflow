@@ -118,11 +118,7 @@ export const StockAdjustmentsView: React.FC<StockAdjustmentsViewProps> = ({ lang
         throw new Error(result.error?.message || 'Failed to record stock adjustment');
       }
 
-      setFeedback({
-        type: 'success',
-        message: `Stock adjustment #${formData.adjustmentNumber} processed! New stock: ${result.data?.newStock} units.`,
-      });
-      showSuccess(`Stock adjustment #${formData.adjustmentNumber} processed successfully!`);
+      showSuccess(`Stock adjustment #${formData.adjustmentNumber} processed successfully! New stock: ${result.data?.newStock} units.`);
       setFormData(prev => ({
         ...prev,
         adjustmentNumber: `ADJ-${new Date().getFullYear()}-${Date.now().toString().slice(-5)}`,
@@ -133,7 +129,6 @@ export const StockAdjustmentsView: React.FC<StockAdjustmentsViewProps> = ({ lang
       }));
       fetchData();
     } catch (err: any) {
-      setFeedback({ type: 'error', message: err.message });
       showError(err.message || 'Failed to record stock adjustment');
     } finally {
       setSaving(false);
@@ -218,23 +213,6 @@ export const StockAdjustmentsView: React.FC<StockAdjustmentsViewProps> = ({ lang
         </div>
       </div>
 
-      {feedback && (
-        <div
-          className={`p-4 rounded-xl text-sm flex items-center gap-2.5 ${
-            feedback.type === 'success'
-              ? 'bg-emerald-950/40 border border-emerald-800 text-emerald-300'
-              : 'bg-rose-950/40 border border-rose-800 text-rose-300'
-          }`}
-        >
-          {feedback.type === 'success' ? (
-            <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
-          ) : (
-            <AlertCircle className="w-5 h-5 text-rose-400 shrink-0" />
-          )}
-          <span>{feedback.message}</span>
-        </div>
-      )}
-
       {/* Adjustment Form */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-sm">
         <h2 className="text-base font-bold text-white mb-4 flex items-center gap-2">
@@ -275,7 +253,6 @@ export const StockAdjustmentsView: React.FC<StockAdjustmentsViewProps> = ({ lang
             {/* Product & Pack Size Selector */}
             <div className="col-span-1 sm:col-span-2">
               <ProductPackSizeSelector
-                products={products}
                 value={formData.productId}
                 onChange={productId => setFormData({ ...formData, productId })}
                 required
@@ -363,10 +340,19 @@ export const StockAdjustmentsView: React.FC<StockAdjustmentsViewProps> = ({ lang
             <button
               type="submit"
               disabled={saving}
-              className="px-6 py-2 rounded-xl bg-indigo-500 hover:bg-indigo-400 text-white font-bold text-xs transition-colors disabled:opacity-50 flex items-center gap-2 cursor-pointer shadow-sm"
+              className="px-6 py-2 rounded-xl bg-indigo-500 hover:bg-indigo-400 text-white font-bold text-xs transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 cursor-pointer shadow-sm"
             >
-              {saving ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <ShieldCheck className="w-3.5 h-3.5" />}
-              <span>{saving ? 'Processing...' : 'Apply Stock Adjustment'}</span>
+              {saving ? (
+                <>
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  <span>Saving...</span>
+                </>
+              ) : (
+                <>
+                  <ShieldCheck className="w-3.5 h-3.5" />
+                  <span>Apply Stock Adjustment</span>
+                </>
+              )}
             </button>
           </div>
         </form>
@@ -492,10 +478,7 @@ export const StockAdjustmentsView: React.FC<StockAdjustmentsViewProps> = ({ lang
         language={language}
         onSuccess={() => {
           fetchData();
-          setFeedback({
-            type: 'success',
-            message: 'Bulk adjustments processed and linked to audit trail.',
-          });
+          showSuccess('Bulk adjustments processed and linked to audit trail.');
         }}
       />
     </div>

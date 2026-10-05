@@ -43,7 +43,7 @@ export const Header: React.FC<HeaderProps> = ({
               className="flex items-center gap-2.5 focus:outline-none group cursor-pointer shrink-0"
               aria-label="LiquorFlow ERP Dashboard"
             >
-              <LiquorFlowLogo size="sm" variant="full" />
+              <LiquorFlowLogo size="sm" variant="full" theme="light" />
 
               <span className="hidden xl:inline-block text-[10px] font-bold text-emerald-800 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200/50 ml-1 uppercase tracking-wider">
                 Excise & Bar Stock ERP

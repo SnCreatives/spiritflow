@@ -19,6 +19,9 @@ import { BarOutlet, SupportedLanguage } from '../../types';
 import { apiGet, apiPost, apiPut, apiPatch, apiDelete } from '../../utils/api';
 import { translations } from '../../utils/i18n';
 import { useBar } from '../../lib/contexts/BarContext';
+import { useToast } from '../../lib/contexts/ToastContext';
+import { useFormMutation } from '../../hooks/useFormMutation';
+import { ModalShell } from '../common/ModalShell';
 
 interface BarMasterViewProps {
   language: SupportedLanguage;
@@ -26,40 +29,29 @@ interface BarMasterViewProps {
 
 export const BarMasterView: React.FC<BarMasterViewProps> = ({ language }) => {
   const t = translations[language];
+  const { showToast } = useToast();
   const { selectedBar, setSelectedBar, availableBars, isLoading: loading, refreshBars } = useBar();
   const [search, setSearch] = useState('');
-  const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   // Modal State
   const [showModal, setShowModal] = useState(false);
   const [editingBar, setEditingBar] = useState<BarOutlet | null>(null);
-  const [submitting, setSubmitting] = useState(false);
 
   // Delete Modal State
   const [deletingBar, setDeletingBar] = useState<BarOutlet | null>(null);
-  const [deleting, setDeleting] = useState(false);
+
+  const { mutate: deleteBar, isSaving: deleting } = useFormMutation<any, BarOutlet>(
+    async (bar) => apiDelete(`/api/bars/${bar.id}`),
+    {
+      successMessage: (data, bar) => data?.message || `Bar outlet "${bar.name}" processed successfully.`,
+      onSuccess: () => setDeletingBar(null),
+      invalidateQueries: refreshBars,
+    }
+  );
 
   const confirmDeleteBar = async () => {
     if (!deletingBar) return;
-    setDeleting(true);
-    setFeedback(null);
-    try {
-      const res = await apiDelete(`/api/bars/${deletingBar.id}`);
-      if (!res.success) {
-        throw new Error(res.error?.message || 'Failed to delete bar outlet');
-      }
-      setFeedback({
-        type: 'success',
-        message: res.data?.message || `Bar outlet "${deletingBar.name}" processed successfully.`,
-      });
-      setDeletingBar(null);
-      await refreshBars();
-    } catch (err: any) {
-      setFeedback({ type: 'error', message: err.message });
-      setDeletingBar(null);
-    } finally {
-      setDeleting(false);
-    }
+    deleteBar(deletingBar);
   };
 
   // Form State
@@ -113,41 +105,34 @@ export const BarMasterView: React.FC<BarMasterViewProps> = ({ language }) => {
     setShowModal(true);
   };
 
+  const { mutate: submitBar, isSaving: submitting } = useFormMutation(
+    async (payload: any) => {
+      if (editingBar) {
+        return apiPut(`/api/bars/${editingBar.id}`, payload);
+      } else {
+        return apiPost('/api/bars', payload);
+      }
+    },
+    {
+      successMessage: () => `Bar outlet "${formData.name}" ${editingBar ? 'updated' : 'created'} successfully!`,
+      onSuccess: (data) => {
+        if (data) {
+          setSelectedBar(data);
+        }
+        setShowModal(false);
+      },
+      invalidateQueries: refreshBars,
+    }
+  );
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.name.trim()) {
-      setFeedback({ type: 'error', message: 'Bar name is required.' });
+      showToast('Bar name is required.', 'error');
       return;
     }
 
-    setSubmitting(true);
-    setFeedback(null);
-
-    try {
-      if (editingBar) {
-        const res = await apiPut(`/api/bars/${editingBar.id}`, formData);
-        if (!res.success) throw new Error(res.error?.message || 'Failed to update bar');
-        setFeedback({ type: 'success', message: `Bar outlet "${formData.name}" updated successfully!` });
-        await refreshBars();
-        if (selectedBar?.id === editingBar.id && res.data) {
-          setSelectedBar(res.data);
-        }
-      } else {
-        const res = await apiPost('/api/bars', formData);
-        if (!res.success) throw new Error(res.error?.message || 'Failed to create bar');
-        const newBar = res.data;
-        setFeedback({ type: 'success', message: `Bar outlet "${formData.name}" created with generated ID: ${newBar?.id}!` });
-        await refreshBars();
-        if (newBar) {
-          setSelectedBar(newBar);
-        }
-      }
-      setShowModal(false);
-    } catch (err: any) {
-      setFeedback({ type: 'error', message: err.message });
-    } finally {
-      setSubmitting(false);
-    }
+    submitBar(formData);
   };
 
   const handleToggleStatus = async (bar: BarOutlet) => {
@@ -155,10 +140,10 @@ export const BarMasterView: React.FC<BarMasterViewProps> = ({ language }) => {
     try {
       const res = await apiPatch(`/api/bars/${bar.id}/status`, { status: newStatus });
       if (!res.success) throw new Error(res.error?.message || 'Failed to toggle status');
-      setFeedback({ type: 'success', message: `Bar "${bar.name}" marked as ${newStatus}.` });
+      showToast(`Bar "${bar.name}" marked as ${newStatus}.`, 'success');
       await refreshBars();
     } catch (err: any) {
-      setFeedback({ type: 'error', message: err.message });
+      showToast(err.message, 'error');
     }
   };
 
@@ -206,28 +191,6 @@ export const BarMasterView: React.FC<BarMasterViewProps> = ({ language }) => {
           </button>
         </div>
       </div>
-
-      {feedback && (
-        <div
-          className={`p-4 rounded-xl border flex items-center justify-between text-xs sm:text-sm ${
-            feedback.type === 'success'
-              ? 'bg-emerald-950/40 border-emerald-800 text-emerald-300'
-              : 'bg-rose-950/40 border-rose-800 text-rose-300'
-          }`}
-        >
-          <div className="flex items-center gap-2">
-            {feedback.type === 'success' ? (
-              <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
-            ) : (
-              <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
-            )}
-            <span>{feedback.message}</span>
-          </div>
-          <button onClick={() => setFeedback(null)} className="text-slate-400 hover:text-white">
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-      )}
 
       {/* Filter / Search Bar */}
       <div className="flex items-center justify-between gap-4 bg-slate-900 border border-slate-800 p-4 rounded-xl">
@@ -376,169 +339,187 @@ export const BarMasterView: React.FC<BarMasterViewProps> = ({ language }) => {
       </div>
 
       {/* Create / Edit Modal */}
-      {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-5">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <h3 className="text-base font-bold text-white flex items-center gap-2">
-                <Store className="w-5 h-5 text-amber-400" />
-                <span>{editingBar ? 'Edit Bar Outlet' : 'Register New Bar Outlet'}</span>
-              </h3>
-              <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-white">
-                <X className="w-4 h-4" />
-              </button>
+      <ModalShell
+        isOpen={showModal}
+        onClose={() => setShowModal(false)}
+        title={editingBar ? 'Edit Bar Outlet' : 'Register New Bar Outlet'}
+        icon={<Store className="w-5 h-5" />}
+        footer={
+          <div className="flex justify-end gap-3">
+            <button
+              type="button"
+              onClick={() => setShowModal(false)}
+              className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl transition-colors font-medium text-xs"
+            >
+              Cancel
+            </button>
+            <button
+              form="bar-form"
+              type="submit"
+              disabled={submitting}
+              className="px-6 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl shadow-md transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 text-xs"
+            >
+              {submitting ? (
+                <>
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  <span>Saving...</span>
+                </>
+              ) : (
+                <span>{editingBar ? 'Update Bar' : 'Create Bar'}</span>
+              )}
+            </button>
+          </div>
+        }
+      >
+        <form id="bar-form" onSubmit={handleSubmit} className="space-y-6 text-xs">
+          <div className="space-y-2">
+            <label className="text-slate-300 font-semibold block">
+              Bar Outlet Name <span className="text-amber-400">*</span>
+            </label>
+            <input
+              required
+              type="text"
+              value={formData.name}
+              onChange={e => setFormData({ ...formData, name: e.target.value })}
+              placeholder="e.g. Main Bar / Rooftop Lounge"
+              className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400 transition-all text-sm"
+            />
+            {!editingBar ? (
+              <p className="text-[10px] text-amber-400/80 font-medium italic">
+                ✓ Canonical Bar ID will be automatically generated. Owner authorization is auto-provisioned.
+              </p>
+            ) : (
+              <p className="text-[10px] text-slate-400 font-mono">
+                Bar ID: {editingBar.id}
+              </p>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <label className="text-slate-300 font-semibold block">Excise Licence Reference</label>
+              <input
+                type="text"
+                value={formData.license_number}
+                onChange={e => setFormData({ ...formData, license_number: e.target.value })}
+                placeholder="e.g. FL-II / CL-III 2026"
+                className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400 transition-all text-sm"
+              />
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-4 text-xs">
-              <div className="space-y-1">
-                <label className="text-slate-300 font-medium">
-                  Bar Outlet Name <span className="text-amber-400">*</span>
-                </label>
-                <input
-                  required
-                  type="text"
-                  value={formData.name}
-                  onChange={e => setFormData({ ...formData, name: e.target.value })}
-                  placeholder="e.g. Main Bar / Rooftop Lounge"
-                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-400"
-                />
-                {!editingBar ? (
-                  <p className="text-[10px] text-amber-400/80 mt-1">
-                    ✓ Canonical Bar ID will be automatically generated by the database. Owner authorization is auto-provisioned.
-                  </p>
-                ) : (
-                  <p className="text-[10px] text-slate-400 font-mono mt-1">
-                    Bar ID: {editingBar.id}
-                  </p>
-                )}
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="text-slate-300 font-medium">Excise Licence Reference</label>
-                  <input
-                    type="text"
-                    value={formData.license_number}
-                    onChange={e => setFormData({ ...formData, license_number: e.target.value })}
-                    placeholder="e.g. FL-II / CL-III 2026"
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-400"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-slate-300 font-medium">City</label>
-                  <input
-                    type="text"
-                    value={formData.city}
-                    onChange={e => setFormData({ ...formData, city: e.target.value })}
-                    placeholder="e.g. Mumbai / Pune"
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-400"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="text-slate-300 font-medium">Contact Person</label>
-                  <input
-                    type="text"
-                    value={formData.contact_person}
-                    onChange={e => setFormData({ ...formData, contact_person: e.target.value })}
-                    placeholder="Manager / Owner name"
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-400"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-slate-300 font-medium">Phone Number</label>
-                  <input
-                    type="tel"
-                    value={formData.phone}
-                    onChange={e => setFormData({ ...formData, phone: e.target.value })}
-                    placeholder="e.g. 9876543210"
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-400"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-slate-300 font-medium">Address</label>
-                <textarea
-                  rows={2}
-                  value={formData.address}
-                  onChange={e => setFormData({ ...formData, address: e.target.value })}
-                  placeholder="Street address, locality..."
-                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-400 resize-none"
-                />
-              </div>
-
-              <div className="flex justify-end gap-2 pt-3 border-t border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => setShowModal(false)}
-                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="px-5 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl shadow-lg shadow-amber-500/20 transition-all disabled:opacity-50"
-                >
-                  {submitting ? 'Saving...' : editingBar ? 'Update Bar' : 'Create Bar'}
-                </button>
-              </div>
-            </form>
+            <div className="space-y-2">
+              <label className="text-slate-300 font-semibold block">City</label>
+              <input
+                type="text"
+                value={formData.city}
+                onChange={e => setFormData({ ...formData, city: e.target.value })}
+                placeholder="e.g. Mumbai / Pune"
+                className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400 transition-all text-sm"
+              />
+            </div>
           </div>
-        </div>
-      )}
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <label className="text-slate-300 font-semibold block">Contact Person</label>
+              <input
+                type="text"
+                value={formData.contact_person}
+                onChange={e => setFormData({ ...formData, contact_person: e.target.value })}
+                placeholder="Manager / Owner name"
+                className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400 transition-all text-sm"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-slate-300 font-semibold block">Phone Number</label>
+              <input
+                type="tel"
+                value={formData.phone}
+                onChange={e => setFormData({ ...formData, phone: e.target.value })}
+                placeholder="e.g. 9876543210"
+                className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400 transition-all text-sm font-mono"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-slate-300 font-semibold block">Address</label>
+            <textarea
+              rows={3}
+              value={formData.address}
+              onChange={e => setFormData({ ...formData, address: e.target.value })}
+              placeholder="Street address, locality..."
+              className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400 transition-all text-sm resize-none"
+            />
+          </div>
+        </form>
+      </ModalShell>
 
       {/* Safe Delete Confirmation Modal */}
-      {deletingBar && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
-            <div className="flex items-center gap-3 text-rose-400">
-              <div className="p-2 rounded-xl bg-rose-950/60 border border-rose-800 shrink-0">
-                <Trash2 className="w-6 h-6" />
-              </div>
-              <div>
-                <h3 className="text-base font-bold text-white">Delete Bar Outlet</h3>
-                <p className="text-xs text-slate-400 font-mono">{deletingBar.name} ({deletingBar.code})</p>
-              </div>
+      <ModalShell
+        isOpen={!!deletingBar}
+        onClose={() => setDeletingBar(null)}
+        title="Delete Bar Outlet"
+        icon={<Trash2 className="w-5 h-5 text-rose-400" />}
+        maxWidth="max-w-md"
+        footer={
+          <div className="flex items-center justify-end gap-3">
+            <button
+              type="button"
+              onClick={() => setDeletingBar(null)}
+              disabled={deleting}
+              className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-semibold transition-colors cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={confirmDeleteBar}
+              disabled={deleting}
+              className="px-6 py-2 bg-rose-600 hover:bg-rose-50 text-white rounded-xl text-xs font-bold transition-all shadow-md disabled:opacity-50 flex items-center gap-2"
+            >
+              {deleting ? (
+                <>
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  <span>Processing...</span>
+                </>
+              ) : (
+                <span>Confirm Delete / Deactivate</span>
+              )}
+            </button>
+          </div>
+        }
+      >
+        <div className="space-y-4">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-500">
+              <Store className="w-5 h-5" />
             </div>
-
-            <div className="p-3.5 bg-slate-950 border border-slate-800 rounded-xl space-y-2 text-xs text-slate-300">
-              <p className="font-semibold text-amber-400 flex items-center gap-1.5">
-                <AlertCircle className="w-4 h-4 shrink-0" />
-                <span>Safe Deletion Rule:</span>
-              </p>
-              <ul className="list-disc pl-5 space-y-1 text-slate-400">
-                <li>If this outlet has <strong>no transactional records</strong>, it will be permanently deleted.</li>
-                <li>If it contains <strong>historical transactions</strong> (inventory, purchases, sales, or stock ledger), it will be <strong>deactivated</strong> to protect compliance and audit records.</li>
-              </ul>
-            </div>
-
-            <div className="flex items-center justify-end gap-3 pt-2">
-              <button
-                type="button"
-                onClick={() => setDeletingBar(null)}
-                disabled={deleting}
-                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-semibold transition-colors cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={confirmDeleteBar}
-                disabled={deleting}
-                className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-bold transition-all shadow-lg shadow-rose-600/20 cursor-pointer disabled:opacity-50 flex items-center gap-2"
-              >
-                {deleting ? 'Processing...' : 'Confirm Delete / Deactivate'}
-              </button>
+            <div>
+              <p className="text-sm font-bold text-white">{deletingBar?.name}</p>
+              <p className="text-[10px] text-slate-500 font-mono mt-0.5">Code: {deletingBar?.code || 'N/A'}</p>
             </div>
           </div>
+
+          <div className="p-4 bg-slate-950 border border-slate-800 rounded-xl space-y-3">
+            <div className="flex items-center gap-2 text-amber-400 text-xs font-bold uppercase tracking-wider">
+              <AlertCircle className="w-4 h-4" />
+              <span>Safe Deletion Rule</span>
+            </div>
+            <ul className="space-y-2">
+              <li className="flex items-start gap-2.5 text-xs text-slate-400">
+                <div className="w-1.5 h-1.5 rounded-full bg-slate-700 mt-1.5 shrink-0" />
+                <span>If this outlet has <strong>no transactional records</strong>, it will be permanently deleted.</span>
+              </li>
+              <li className="flex items-start gap-2.5 text-xs text-slate-400">
+                <div className="w-1.5 h-1.5 rounded-full bg-slate-700 mt-1.5 shrink-0" />
+                <span>If it contains <strong>historical transactions</strong> (inventory, purchases, etc.), it will be <strong>deactivated</strong> to protect compliance records.</span>
+              </li>
+            </ul>
+          </div>
         </div>
-      )}
+      </ModalShell>
     </div>
   );
 };

@@ -213,7 +213,6 @@ export const BatchesView: React.FC<BatchesViewProps> = ({ language, selectedBarI
             {/* Product & Pack Size Selector */}
             <div className="col-span-1 sm:col-span-2">
               <ProductPackSizeSelector
-                products={products}
                 value={formData.productId}
                 onChange={productId => setFormData({ ...formData, productId })}
                 required
