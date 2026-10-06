@@ -149,6 +149,32 @@ async function requireAuth(req: Request, res: Response, next: NextFunction) {
   }
 }
 
+async function optionalAuth(req: Request, _res: Response, next: NextFunction) {
+  const tokenFromHeader = (req.headers['x-session-token'] as string) || null;
+  const tokenFromBearer = req.headers.authorization && req.headers.authorization.startsWith('Bearer ')
+    ? req.headers.authorization.substring(7).trim()
+    : null;
+  const cookieHeader = req.headers.cookie || '';
+  const tokenFromCookie = extractSessionTokenFromCookie(cookieHeader);
+  const token = tokenFromHeader || tokenFromBearer || tokenFromCookie;
+
+  if (token) {
+    try {
+      const user = await AuthService.validateSession(token);
+      if (user) {
+        (req as any).user = user;
+        const barId = (req.headers['x-bar-id'] as string) || (req.query.barId as string) || (req.body.barId as string);
+        if (barId && typeof barId === 'string' && barId.trim().length > 0 && barId !== 'ALL_BARS') {
+          (req as any).barId = barId.trim();
+        }
+      }
+    } catch {
+      // Optional auth: swallow token error for catalog read
+    }
+  }
+  next();
+}
+
 /**
  * 1. Health Check Endpoint
  * Requirement 29: Verifies application availability and database connectivity.
@@ -734,9 +760,9 @@ apiApp.get('/api/search', requireAuth, async (req: Request, res: Response) => {
 });
 
 /**
- * 11. Categories List (Protected)
+ * 11. Categories List (Master Reference)
  */
-apiApp.get('/api/categories', requireAuth, async (_req: Request, res: Response) => {
+apiApp.get('/api/categories', optionalAuth, async (_req: Request, res: Response) => {
   try {
     const categories = await MasterService.getCategories();
     return sendSuccess(res, categories);
@@ -782,12 +808,56 @@ apiApp.post('/api/validate/category-pack-size', requireAuth, async (req: Request
 /**
  * 13. Products CRUD Endpoints (Protected)
  */
-apiApp.get('/api/products/selection', requireAuth, async (req: Request, res: Response) => {
+apiApp.get('/api/products/selection', optionalAuth, async (req: Request, res: Response) => {
   try {
     const items = await ProductService.getActiveProductsForSelection();
     return sendSuccess(res, { items });
   } catch (err: any) {
     return sendError(res, 'PRODUCTS_SELECTION_FAILED', err?.message || 'Failed to fetch product selection list', 500);
+  }
+});
+
+/**
+ * Canonical Cascading Dropdown API (Section 17)
+ * Flow: Product Type -> Brand -> Variant -> Bottle Size -> Packaging -> Product -> MRP / SCM Code
+ */
+apiApp.get('/api/products/cascading', optionalAuth, async (req: Request, res: Response) => {
+  try {
+    const { productType, categoryId, brandId, variant, packSizeId, packagingType } = req.query;
+    const data = await ProductMasterService.getCascadingData({
+      productType: productType as string,
+      categoryId: categoryId as string,
+      brandId: brandId as string,
+      variant: variant as string,
+      packSizeId: packSizeId as string,
+      packagingType: packagingType as string,
+    });
+    return sendSuccess(res, data);
+  } catch (err: any) {
+    return sendError(res, 'CASCADE_FETCH_FAILED', err?.message || 'Failed to fetch cascading data', 500);
+  }
+});
+
+/**
+ * Filter Validation API (Section 18)
+ * Validates combinations against canonical business rules
+ */
+apiApp.post('/api/products/validate-combination', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const { categoryId, brandId, packSizeId, variant, packType } = req.body;
+    const validation = await ProductMasterService.validateCombination({
+      categoryId,
+      brandId,
+      packSizeId,
+      variant,
+      packType,
+    });
+    if (!validation.isValid) {
+      return sendError(res, 'INVALID_COMBINATION', validation.error || 'Invalid product combination', 400);
+    }
+    return sendSuccess(res, { isValid: true });
+  } catch (err: any) {
+    return sendError(res, 'VALIDATION_FAILED', err?.message || 'Validation error', 400);
   }
 });
 
@@ -861,60 +931,16 @@ apiApp.delete('/api/products/:id', requireAuth, async (req: Request, res: Respon
 });
 
 /**
- * Canonical Cascading Dropdown API (Section 17)
- * Flow: Product Type -> Brand -> Variant -> Bottle Size -> Packaging -> Product -> MRP / SCM Code
- */
-apiApp.get('/api/products/cascading', requireAuth, async (req: Request, res: Response) => {
-  try {
-    const { productType, categoryId, brandId, variant, packSizeId, packagingType } = req.query;
-    const data = await ProductMasterService.getCascadingData({
-      productType: productType as string,
-      categoryId: categoryId as string,
-      brandId: brandId as string,
-      variant: variant as string,
-      packSizeId: packSizeId as string,
-      packagingType: packagingType as string,
-    });
-    return sendSuccess(res, data);
-  } catch (err: any) {
-    return sendError(res, 'CASCADE_FETCH_FAILED', err?.message || 'Failed to fetch cascading data', 500);
-  }
-});
-
-/**
- * Filter Validation API (Section 18)
- * Validates combinations against canonical business rules
- */
-apiApp.post('/api/products/validate-combination', requireAuth, async (req: Request, res: Response) => {
-  try {
-    const { categoryId, brandId, packSizeId, variant, packType } = req.body;
-    const validation = await ProductMasterService.validateCombination({
-      categoryId,
-      brandId,
-      packSizeId,
-      variant,
-      packType,
-    });
-    if (!validation.isValid) {
-      return sendError(res, 'INVALID_COMBINATION', validation.error || 'Invalid product combination', 400);
-    }
-    return sendSuccess(res, { isValid: true });
-  } catch (err: any) {
-    return sendError(res, 'VALIDATION_FAILED', err?.message || 'Validation error', 400);
-  }
-});
-
-/**
  * Packaging Types Master
  */
-apiApp.get('/api/packaging-types', requireAuth, async (_req: Request, res: Response) => {
+apiApp.get('/api/packaging-types', optionalAuth, async (_req: Request, res: Response) => {
   return sendSuccess(res, { packagingTypes: ALLOWED_PACKAGING_TYPES });
 });
 
 /**
  * SCM / Maharashtra Excise Regulatory Code Endpoints (Section 10 & 11)
  */
-apiApp.get('/api/scm-codes', requireAuth, async (req: Request, res: Response) => {
+apiApp.get('/api/scm-codes', optionalAuth, async (req: Request, res: Response) => {
   try {
     const { search, productId, activeOnly, limit } = req.query;
     const codes = await ScmService.getScmCodes({
@@ -1321,12 +1347,12 @@ apiApp.post('/api/backup/restore', requireAuth, async (req: Request, res: Respon
 /**
  * Canonical Masters Endpoints
  */
-apiApp.get('/api/masters/brands', requireAuth, async (req: Request, res: Response) => {
+apiApp.get('/api/masters/brands', optionalAuth, async (req: Request, res: Response) => {
   try {
     const { categoryId, search, limit, page, activeOnly } = req.query;
-    if (activeOnly === 'true') {
+    if (activeOnly === 'true' || !page) {
       const brands = await MasterService.getActiveBrands(categoryId as string);
-      return sendSuccess(res, { items: brands, total: brands.length });
+      return sendSuccess(res, { items: brands, brands, total: brands.length });
     }
     const result = await MasterService.getBrands({
       categoryId: categoryId as string,
@@ -1334,13 +1360,32 @@ apiApp.get('/api/masters/brands', requireAuth, async (req: Request, res: Respons
       page: page ? parseInt(page as string, 10) : 1,
       limit: limit ? parseInt(limit as string, 10) : 500,
     });
-    return sendSuccess(res, result);
+    return sendSuccess(res, { ...result, brands: result.items });
   } catch (err: any) {
     return sendError(res, 'MASTERS_BRANDS_FAILED', err?.message || 'Failed to fetch master brands', 500);
   }
 });
 
-apiApp.get('/api/masters/variants', requireAuth, async (req: Request, res: Response) => {
+apiApp.get('/api/master/brands', optionalAuth, async (req: Request, res: Response) => {
+  try {
+    const { categoryId, search, limit, page, activeOnly } = req.query;
+    if (activeOnly === 'true' || !page) {
+      const brands = await MasterService.getActiveBrands(categoryId as string);
+      return sendSuccess(res, { items: brands, brands, total: brands.length });
+    }
+    const result = await MasterService.getBrands({
+      categoryId: categoryId as string,
+      search: search as string,
+      page: page ? parseInt(page as string, 10) : 1,
+      limit: limit ? parseInt(limit as string, 10) : 500,
+    });
+    return sendSuccess(res, { ...result, brands: result.items });
+  } catch (err: any) {
+    return sendError(res, 'MASTERS_BRANDS_FAILED', err?.message || 'Failed to fetch master brands', 500);
+  }
+});
+
+apiApp.get('/api/masters/variants', optionalAuth, async (req: Request, res: Response) => {
   try {
     const { brandId, categoryId } = req.query;
     const cascade = await ProductMasterService.getCascadingData({
@@ -1350,6 +1395,26 @@ apiApp.get('/api/masters/variants', requireAuth, async (req: Request, res: Respo
     return sendSuccess(res, {
       variants: cascade.variants,
       products: cascade.products,
+      items: cascade.variants,
+      totalVariants: cascade.variants.length,
+      totalProducts: cascade.products.length,
+    });
+  } catch (err: any) {
+    return sendError(res, 'MASTERS_VARIANTS_FAILED', err?.message || 'Failed to fetch master variants', 500);
+  }
+});
+
+apiApp.get('/api/master/variants', optionalAuth, async (req: Request, res: Response) => {
+  try {
+    const { brandId, categoryId } = req.query;
+    const cascade = await ProductMasterService.getCascadingData({
+      brandId: brandId as string,
+      categoryId: categoryId as string,
+    });
+    return sendSuccess(res, {
+      variants: cascade.variants,
+      products: cascade.products,
+      items: cascade.variants,
       totalVariants: cascade.variants.length,
       totalProducts: cascade.products.length,
     });
@@ -1359,15 +1424,15 @@ apiApp.get('/api/masters/variants', requireAuth, async (req: Request, res: Respo
 });
 
 /**
- * 14. Brands CRUD Endpoints (Protected)
+ * 14. Brands CRUD Endpoints (Protected for writes, Optional for read)
  */
-apiApp.get('/api/brands', requireAuth, async (req: Request, res: Response) => {
+apiApp.get('/api/brands', optionalAuth, async (req: Request, res: Response) => {
   try {
     const { search, categoryId, status, page, limit, activeOnly } = req.query;
     
-    if (activeOnly === 'true') {
+    if (activeOnly === 'true' || !page) {
       const brands = await MasterService.getActiveBrands(categoryId as string);
-      return sendSuccess(res, { items: brands });
+      return sendSuccess(res, { items: brands, brands, total: brands.length });
     }
 
     const result = await MasterService.getBrands({
@@ -1377,7 +1442,7 @@ apiApp.get('/api/brands', requireAuth, async (req: Request, res: Response) => {
       page: page ? parseInt(page as string, 10) : 1,
       limit: limit ? parseInt(limit as string, 10) : 500,
     });
-    return sendSuccess(res, result);
+    return sendSuccess(res, { ...result, brands: result.items });
   } catch (err: any) {
     return sendError(res, 'BRANDS_FETCH_FAILED', err?.message || 'Failed to fetch brands', 500);
   }
@@ -1412,9 +1477,9 @@ apiApp.patch('/api/brands/:id/status', requireAuth, async (req: Request, res: Re
 });
 
 /**
- * 15. Pack Sizes CRUD Endpoints (Protected)
+ * 15. Pack Sizes CRUD Endpoints (Protected for writes, Optional for read)
  */
-apiApp.get('/api/pack-sizes', requireAuth, async (req: Request, res: Response) => {
+apiApp.get('/api/pack-sizes', optionalAuth, async (req: Request, res: Response) => {
   try {
     const { search, categoryId, status, page, limit } = req.query;
     const result = await MasterService.getPackSizes({
@@ -1422,9 +1487,9 @@ apiApp.get('/api/pack-sizes', requireAuth, async (req: Request, res: Response) =
       categoryId: categoryId as string,
       status: status as any,
       page: page ? parseInt(page as string, 10) : 1,
-      limit: limit ? parseInt(limit as string, 10) : 20,
+      limit: limit ? parseInt(limit as string, 10) : 500,
     });
-    return sendSuccess(res, result);
+    return sendSuccess(res, { ...result, packSizes: result.items });
   } catch (err: any) {
     return sendError(res, 'PACK_SIZES_FETCH_FAILED', err?.message || 'Failed to fetch pack sizes', 500);
   }

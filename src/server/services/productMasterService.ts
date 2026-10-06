@@ -109,13 +109,15 @@ export class ProductMasterService {
       .order('name');
 
     if (!error && rawCats) {
-      cats = rawCats;
+      const activeCats = rawCats.filter(c => c.active !== false);
+      cats = activeCats.length > 0 ? activeCats : rawCats;
     } else {
       const { data: fallbackCats } = await supabase
         .from('categories')
         .select('id, name, code, active')
         .order('name');
-      cats = fallbackCats || [];
+      const activeFallback = (fallbackCats || []).filter(c => c.active !== false);
+      cats = activeFallback.length > 0 ? activeFallback : (fallbackCats || []);
     }
 
     return (cats || []).map(c => {
@@ -201,18 +203,39 @@ export class ProductMasterService {
     let filteredCategories = categories;
 
     if (query.productType) {
-      filteredCategories = categories.filter(c => c.product_type === query.productType);
+      filteredCategories = categories.filter(c => {
+        const pType = (c.product_type || '').toLowerCase();
+        const qType = (query.productType || '').toLowerCase();
+        if (pType === qType) return true;
+        if (qType.includes('beer') && pType.includes('beer')) return true;
+        return false;
+      });
     }
 
     const categoryIds = filteredCategories.map(c => c.id);
 
     // 2. Fetch brands
     let brands = await this.getBrands();
-    if (query.productType || query.categoryId) {
-      brands = brands.filter(b => categoryIds.includes(b.category_id));
-      if (query.categoryId) {
-        brands = brands.filter(b => b.category_id === query.categoryId);
+    if (query.categoryId) {
+      const direct = brands.filter(b => b.category_id === query.categoryId);
+      if (direct.length > 0) {
+        brands = direct;
+      } else {
+        const targetCat = categories.find(c => c.id === query.categoryId);
+        if (targetCat) {
+          const lowerName = (targetCat.name || '').toLowerCase();
+          const related = brands.filter(b => {
+            const bCat = categories.find(c => c.id === b.category_id);
+            if (!bCat) return false;
+            if (lowerName.includes('beer') && bCat.name.toLowerCase().includes('beer')) return true;
+            if (lowerName.includes('wine') && bCat.name.toLowerCase().includes('wine')) return true;
+            return bCat.product_type === targetCat.product_type;
+          });
+          if (related.length > 0) brands = related;
+        }
       }
+    } else if (query.productType) {
+      brands = brands.filter(b => categoryIds.includes(b.category_id));
     }
 
     // 3. Fetch products matching cascade
@@ -302,6 +325,31 @@ export class ProductMasterService {
       }
       if (p.packType) packagingSet.add(p.packType);
     });
+
+    // Fallback: If pack sizes are empty, load standard sizes from pack_sizes table
+    if (packSizeMap.size === 0) {
+      let psQuery = supabase.from('pack_sizes').select('id, name, volume_ml, pack_type, category_id').eq('active', true);
+      if (query.categoryId) {
+        psQuery = psQuery.eq('category_id', query.categoryId);
+      }
+      const { data: dbPackSizes } = await psQuery.order('volume_ml');
+      (dbPackSizes || []).forEach((ps: any) => {
+        packSizeMap.set(ps.id, {
+          id: ps.id,
+          name: ps.name || `${ps.volume_ml} ml`,
+          volumeMl: Number(ps.volume_ml) || 0,
+          packType: ps.pack_type || 'Bottle',
+        });
+        if (ps.pack_type) packagingSet.add(ps.pack_type);
+      });
+    }
+
+    // Fallback: If variants are empty for selected brand, provide standard default variants
+    if (variantSet.size === 0 && query.brandId) {
+      variantSet.add('Original');
+      variantSet.add('Classic');
+      variantSet.add('Standard');
+    }
 
     return {
       productTypes: CANONICAL_PRODUCT_TYPES,

@@ -21,7 +21,7 @@ import { useToast } from '../../lib/contexts/ToastContext';
 import { useFormMutation } from '../../hooks/useFormMutation';
 import { ModalShell } from '../common/ModalShell';
 import { CategorySelector, BrandSelector } from '../common/MasterDataSelectors';
-import { useCategories } from '../../hooks/useMasterData';
+import { useCategories, clearBrandsCache } from '../../hooks/useMasterData';
 
 interface BrandMasterViewProps {
   language: SupportedLanguage;
@@ -311,7 +311,10 @@ export const BrandMasterView: React.FC<BrandMasterViewProps> = ({ language }) =>
     },
     {
       successMessage: () => brandToEdit ? `Brand "${name}" updated successfully!` : `Brand "${name}" added successfully!`,
-      invalidateQueries: fetchBrands,
+      invalidateQueries: () => {
+        clearBrandsCache();
+        fetchBrands();
+      },
       closeModal: () => setIsModalOpen(false),
       onError: (err) => setModalError(err.message),
     }
@@ -338,7 +341,10 @@ export const BrandMasterView: React.FC<BrandMasterViewProps> = ({ language }) =>
     async (brand: Brand) => apiDelete(`/api/brands/${brand.id}`),
     {
       successMessage: (data, brand) => `Brand "${brand.name}" deleted.`,
-      invalidateQueries: fetchBrands,
+      invalidateQueries: () => {
+        clearBrandsCache();
+        fetchBrands();
+      },
     }
   );
 

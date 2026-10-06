@@ -15,7 +15,15 @@ import {
 } from 'lucide-react';
 import { SupportedLanguage } from '../../types';
 import { translations } from '../../utils/i18n';
-import { parseCsv, parseExcel, parsePaste, ColumnMapping, autoMapColumns } from '../../utils/importUtils';
+import {
+  parseCsv,
+  parseExcel,
+  parsePaste,
+  ColumnMapping,
+  autoMapColumns,
+  resolveCanonicalProduct,
+  parseVolumeMl,
+} from '../../utils/importUtils';
 import { apiGet } from '../../utils/api';
 import { ModalShell } from './ModalShell';
 
@@ -33,10 +41,27 @@ export interface BulkEntryRow {
   purchaseTpPrice?: number;
   batchNumber?: string;
   remarks?: string;
+  
+  // Resolved Canonical IDs
   matchedProductId?: string;
   matchedProductName?: string;
+  brandId?: string;
+  variantId?: string;
+  categoryId?: string;
+  packSizeId?: string;
+  categoryName?: string;
+  
   status: 'valid' | 'invalid';
   errorMessage?: string;
+  // Preserved invoice fields
+  itemName?: string;
+  qtyCases?: number;
+  qtyBottles?: number;
+  totalBottles?: number;
+  autoBatch?: string;
+  mfgMonth?: string;
+  bulkLitres?: number;
+  strengthVv?: number;
 }
 
 interface UniversalBulkEntryModalProps {
@@ -44,7 +69,7 @@ interface UniversalBulkEntryModalProps {
   onClose: () => void;
   module: 'purchases' | 'opening-stock' | 'adjustments' | 'sales';
   language: SupportedLanguage;
-  onAddRows: (rows: BulkEntryRow[], replace: boolean) => void;
+  onAddRows: (rows: BulkEntryRow[], replace: boolean, metadata?: any) => void;
 }
 
 export const UniversalBulkEntryModal: React.FC<UniversalBulkEntryModalProps> = ({
@@ -58,6 +83,7 @@ export const UniversalBulkEntryModal: React.FC<UniversalBulkEntryModalProps> = (
   const [activeTab, setActiveTab] = useState<'paste' | 'upload' | 'template'>('paste');
   const [pastedText, setPastedText] = useState<string>('');
   const [parsedRows, setParsedRows] = useState<BulkEntryRow[]>([]);
+  const [parsedMetadata, setParsedMetadata] = useState<any>(null);
   const [importMode, setImportMode] = useState<'append' | 'replace'>('append');
   const [catalogProducts, setCatalogProducts] = useState<any[]>([]);
   const [loadingCatalog, setLoadingCatalog] = useState<boolean>(false);
@@ -104,57 +130,87 @@ export const UniversalBulkEntryModal: React.FC<UniversalBulkEntryModalProps> = (
     };
 
     return rawRows.map((row, idx) => {
-      const tpNumber = findValue(row, ['tp number', 'tp no', 'tp', 'invoice number', 'invoice', 'purchase number']);
-      const scmCode = findValue(row, ['scm', 'scm code', 'excise code', 'sku']);
-      const brandName = findValue(row, ['brand', 'brand name']);
-      const variant = findValue(row, ['variant', 'variant name', 'product', 'product name', 'item']);
-      const sizeStr = findValue(row, ['size', 'bottle size', 'pack size', 'volume']);
-      const packaging = findValue(row, ['packaging', 'pack type', 'type']) || 'Bottle';
-      const mrpStr = findValue(row, ['mrp', 'max retail price']);
+      const tpNumber = findValue(row, ['tp number', 'tp no', 'tp', 'invoice number', 'invoice', 'purchase number', 'purchase no', 'ref no']);
+      let scmCode = findValue(row, ['scm code', 'scm', 'scmcode', 'excise code', 'sku', 'product code']);
+      let brandName = findValue(row, ['brand', 'brand name', 'brandname']);
+      let itemName = findValue(row, ['itemname', 'item name', 'item', 'product name', 'product', 'variant', 'variant name', 'description', 'name']);
+      const sizeStr = findValue(row, ['size', 'bottle size', 'pack size', 'volume', 'packsize']);
+      let packaging = findValue(row, ['packaging', 'pack type', 'type']) || 'Bottle';
+      const mrpStr = findValue(row, ['mrp', 'max retail price', 'maximum retail price', 'price']);
+      const qtyCasesStr = findValue(row, ['qty (cases)', 'qty cases', 'cases', 'cases qty']);
+      const qtyBottlesStr = findValue(row, ['qty (bottles)', 'qty bottles', 'bottles', 'bottles qty']);
+      const totBottStr = findValue(row, ['tot. bott.', 'tot. bott', 'tot bott', 'total bottles', 'tot.bott.', 'tot.bott', 'total qty']);
       const qtyStr = findValue(row, ['qty', 'quantity', 'opening qty', 'units']);
       const tpPriceStr = findValue(row, ['tp price', 'purchase price', 'cost', 'purchase_tp_price']);
-      const batchNo = findValue(row, ['batch', 'batch number', 'lot']);
+      const batchNo = findValue(row, ['batch no', 'batch no.', 'batch', 'batch number', 'lot']);
+      const autoBatch = findValue(row, ['auto batch', 'autobatch']);
+      const mfgMonth = findValue(row, ['mfg. month', 'mfg month', 'mfg date', 'manufacturing month']);
+      const blStr = findValue(row, ['b.l.', 'b.l', 'bl', 'bulk litres', 'bulk litre']);
+      const vvStr = findValue(row, ['v/v (%)', 'v/v%', 'v/v', 'strength', 'abv']);
       const remarks = findValue(row, ['remarks', 'notes', 'comments']);
 
-      const quantity = Number(qtyStr) || 1;
-      const bottleSize = Number(sizeStr) || 0;
+      // Check if SCM code is embedded in itemName
+      if (!scmCode && itemName) {
+        const scmMatch = itemName.match(/(?:scm\s*code\s*[:\-\s]?\s*|scm\s*[:\-\s]?\s*)([a-z0-9_\-]+)/i);
+        if (scmMatch) {
+          scmCode = scmMatch[1];
+          itemName = itemName.replace(/(?:scm\s*code\s*[:\-\s]?\s*|scm\s*[:\-\s]?\s*)[a-z0-9_\-]+/i, '').trim();
+        }
+      }
+
+      const bottleSize = parseVolumeMl(sizeStr);
+      const qtyCases = Number(qtyCasesStr) || 0;
+      const qtyBottles = Number(qtyBottlesStr) || 0;
+      const totalBottles = Number(totBottStr) || 0;
+      // If cases are explicitly entered, prioritize cases for purchases/inward quantity
+      const quantity = qtyCases > 0 ? qtyCases : (totalBottles > 0 ? totalBottles : (Number(qtyStr) || 1));
       const mrp = Number(mrpStr) || 0;
       const purchaseTpPrice = Number(tpPriceStr) || 0;
+      const bulkLitres = Number(blStr) || 0;
+      const strengthVv = Number(vvStr) || 0;
 
       let matchedProductId = '';
       let matchedProductName = '';
+      let brandId = '';
+      let categoryId = '';
+      let packSizeId = '';
+      let categoryName = '';
       let status: 'valid' | 'invalid' = 'valid';
       let errorMessage = '';
 
-      // Match against catalog products
-      if (catalogProducts.length > 0) {
-        const matched = catalogProducts.find(p => {
-          const pBrand = (p.brand?.name || p.brand_name || '').toLowerCase();
-          const pVariant = (p.variant || p.product_name || p.name || '').toLowerCase();
-          const pSize = Number(p.volume_ml || p.pack_size?.volume_ml || 0);
+      // Hierarchical Canonical Resolution Chain:
+      // 1. SCM Code lookup when available
+      // 2. Product lookup
+      // 3. Brand -> Variant -> Bottle Size -> Packaging
+      const canonicalMatch = resolveCanonicalProduct({
+        itemName,
+        scmCode,
+        brandName,
+        size: bottleSize,
+        packaging,
+        catalogProducts,
+      });
 
-          const matchBrand = brandName ? pBrand.includes(brandName.toLowerCase()) : true;
-          const matchVariant = variant ? pVariant.includes(variant.toLowerCase()) : false;
-          const matchSize = bottleSize ? pSize === bottleSize : true;
-
-          return matchVariant && matchBrand && matchSize;
-        });
-
-        if (matched) {
-          matchedProductId = matched.id;
-          matchedProductName = matched.product_name || matched.name;
-        } else if (scmCode) {
-          const byScm = catalogProducts.find(p => p.sku?.toLowerCase() === scmCode.toLowerCase());
-          if (byScm) {
-            matchedProductId = byScm.id;
-            matchedProductName = byScm.product_name || byScm.name;
-          }
-        }
-
-        if (!matchedProductId) {
+      if (canonicalMatch) {
+        matchedProductId = canonicalMatch.productId;
+        matchedProductName = canonicalMatch.productName;
+        brandName = canonicalMatch.brandName;
+        brandId = canonicalMatch.brandId;
+        categoryId = canonicalMatch.categoryId;
+        packSizeId = canonicalMatch.packSizeId;
+        categoryName = canonicalMatch.categoryName;
+        scmCode = canonicalMatch.sku || scmCode;
+        packaging = canonicalMatch.packType || packaging;
+        
+        if (canonicalMatch.isAmbiguous) {
           status = 'invalid';
-          errorMessage = variant ? `Product '${variant}' (${brandName || 'Any Brand'}, ${bottleSize}ml) not found in master catalog.` : 'Missing product / variant name.';
+          errorMessage = `Ambiguous match. Potential choices: ${canonicalMatch.potentialMatches?.map(m => m.productName).join(', ')}`;
         }
+      } else {
+        status = 'invalid';
+        errorMessage = itemName
+          ? `Product '${itemName}' (${brandName || 'Any Brand'}, ${bottleSize}ml) not found in master catalog.`
+          : 'Missing product / variant name.';
       }
 
       if (quantity <= 0) {
@@ -167,18 +223,30 @@ export const UniversalBulkEntryModal: React.FC<UniversalBulkEntryModalProps> = (
         tpNumber,
         scmCode,
         brandName,
-        variant: variant || matchedProductName,
-        bottleSize,
-        packaging,
-        mrp,
+        variant: canonicalMatch?.variant || matchedProductName || itemName,
+        bottleSize: canonicalMatch?.volumeMl || bottleSize,
+        packaging: canonicalMatch?.packType || packaging,
+        mrp: canonicalMatch?.mrp || mrp,
         quantity,
-        purchaseTpPrice,
+        purchaseTpPrice: canonicalMatch?.purchasePrice || purchaseTpPrice,
         batchNumber: batchNo,
         remarks,
         matchedProductId,
         matchedProductName,
+        brandId,
+        categoryId,
+        packSizeId,
+        categoryName,
         status,
         errorMessage,
+        itemName,
+        qtyCases,
+        qtyBottles,
+        totalBottles,
+        autoBatch,
+        mfgMonth,
+        bulkLitres,
+        strengthVv,
       };
     });
   };
@@ -191,6 +259,7 @@ export const UniversalBulkEntryModal: React.FC<UniversalBulkEntryModalProps> = (
     setError(null);
     try {
       const parsed = parsePaste(pastedText);
+      setParsedMetadata(parsed.metadata || null);
       const rows = validateAndMapRows(parsed.data, parsed.headers);
       setParsedRows(rows);
     } catch (err: any) {
@@ -259,7 +328,7 @@ export const UniversalBulkEntryModal: React.FC<UniversalBulkEntryModalProps> = (
       setError('No valid rows to add. Please correct errors before importing.');
       return;
     }
-    onAddRows(validRows, importMode === 'replace');
+    onAddRows(validRows, importMode === 'replace', parsedMetadata);
     onClose();
   };
 

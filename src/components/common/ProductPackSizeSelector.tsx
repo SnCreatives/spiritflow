@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Layers, Tag, Package, Box, Loader2 } from 'lucide-react';
 import { useMasterData } from '../../hooks/useMasterData';
 import { CategorySelector } from './MasterDataSelectors';
+import { apiGet } from '../../utils/api';
 
 interface ProductPackSizeSelectorProps {
   value: string; // product_id
@@ -41,23 +42,50 @@ export const ProductPackSizeSelector: React.FC<ProductPackSizeSelectorProps> = (
   // Sync state when external value changes (edit mode or initial load)
   useEffect(() => {
     if (currentProduct) {
-      setSelectedCategoryId(currentProduct.category_id || '');
-      setSelectedBrandId(currentProduct.brand_id || '');
+      setSelectedCategoryId(currentProduct.category_id || (currentProduct as any).categoryId || '');
+      setSelectedBrandId(currentProduct.brand_id || (currentProduct as any).brandId || '');
       setSelectedVariant(currentProduct.variant || '');
+    } else if (value && !selectedBrandId) {
+      // Direct lookup if value is set externally
+      apiGet(`/api/products/${value}`).then((res: any) => {
+        if (res.success && res.data) {
+          const p = res.data;
+          setSelectedCategoryId(p.category_id || p.categoryId || '');
+          setSelectedBrandId(p.brand_id || p.brandId || '');
+          setSelectedVariant(p.variant || '');
+        }
+      }).catch(() => {});
     }
-  }, [currentProduct]);
+  }, [currentProduct, value, selectedBrandId]);
 
-  const handleCategoryChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setSelectedCategoryId(e.target.value);
+  // Auto-select variant if only 1 exists
+  useEffect(() => {
+    if (variants.length === 1 && !selectedVariant) {
+      setSelectedVariant(variants[0]);
+    }
+  }, [variants, selectedVariant]);
+
+  const handleCategoryChange = (catId: string) => {
+    setSelectedCategoryId(catId);
     setSelectedBrandId('');
     setSelectedVariant('');
     onChange('');
   };
 
   const handleBrandChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setSelectedBrandId(e.target.value);
+    const bId = e.target.value;
+    setSelectedBrandId(bId);
     setSelectedVariant('');
     onChange('');
+
+    // If category was not selected, auto-resolve category from brand
+    if (bId && !selectedCategoryId) {
+      const matchBrand = brands.find(b => b.id === bId);
+      const bCatId = matchBrand?.category_id || (matchBrand as any)?.categoryId;
+      if (bCatId) {
+        setSelectedCategoryId(bCatId);
+      }
+    }
   };
 
   const handleVariantChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -68,6 +96,15 @@ export const ProductPackSizeSelector: React.FC<ProductPackSizeSelectorProps> = (
   const handleProductChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     onChange(e.target.value);
   };
+
+  // Products to display in Tier 4
+  const displayProducts = useMemo(() => {
+    if (selectedVariant) {
+      const filtered = products.filter(p => (p.variant || (p as any).product_name || p.name) === selectedVariant);
+      if (filtered.length > 0) return filtered;
+    }
+    return products;
+  }, [products, selectedVariant]);
 
   return (
     <div className={`space-y-3 ${className}`}>
@@ -87,12 +124,7 @@ export const ProductPackSizeSelector: React.FC<ProductPackSizeSelectorProps> = (
           </label>
           <CategorySelector
             value={selectedCategoryId}
-            onChange={(catId) => {
-              setSelectedCategoryId(catId);
-              setSelectedBrandId('');
-              setSelectedVariant('');
-              onChange('');
-            }}
+            onChange={handleCategoryChange}
             disabled={disabled}
             placeholder="Select Category..."
             theme="dark"
@@ -109,13 +141,13 @@ export const ProductPackSizeSelector: React.FC<ProductPackSizeSelectorProps> = (
           <select
             value={selectedBrandId}
             onChange={handleBrandChange}
-            disabled={disabled || !selectedCategoryId}
+            disabled={disabled}
             className="w-full px-2.5 py-2 bg-slate-900 border border-slate-700/80 rounded-xl text-white text-xs focus:outline-none focus:border-amber-400 disabled:opacity-50"
           >
-            <option value="">{!selectedCategoryId ? 'Select Category first' : 'Select Brand...'}</option>
+            <option value="">{brands.length === 0 ? 'Loading Brands...' : '-- Select Brand --'}</option>
             {brands.map(b => (
               <option key={b.id} value={b.id}>
-                {b.name}
+                {b.name || (b as any).brand_name}
               </option>
             ))}
           </select>
@@ -133,7 +165,7 @@ export const ProductPackSizeSelector: React.FC<ProductPackSizeSelectorProps> = (
             disabled={disabled || !selectedBrandId}
             className="w-full px-2.5 py-2 bg-slate-900 border border-slate-700/80 rounded-xl text-white text-xs focus:outline-none focus:border-amber-400 disabled:opacity-50"
           >
-            <option value="">{!selectedBrandId ? 'Select Brand first' : 'Select Variant...'}</option>
+            <option value="">{!selectedBrandId ? 'Select Brand first' : variants.length === 0 ? '-- Standard --' : '-- All Variants --'}</option>
             {variants.map(v => (
               <option key={v} value={v}>
                 {v}
@@ -151,13 +183,19 @@ export const ProductPackSizeSelector: React.FC<ProductPackSizeSelectorProps> = (
           <select
             value={value}
             onChange={handleProductChange}
-            disabled={disabled || !selectedVariant}
+            disabled={disabled || !selectedBrandId}
             className="w-full px-2.5 py-2 bg-slate-900 border border-slate-700/80 rounded-xl text-white text-xs focus:outline-none focus:border-amber-400 disabled:opacity-50 font-medium text-amber-300"
           >
-            <option value="">{!selectedVariant ? 'Select Variant first' : 'Select Pack Size...'}</option>
-            {products.map(p => (
+            <option value="">
+              {!selectedBrandId
+                ? 'Select Brand first'
+                : displayProducts.length === 0
+                ? 'No products found'
+                : '-- Select Pack Size / SKU --'}
+            </option>
+            {displayProducts.map(p => (
               <option key={p.id} value={p.id}>
-                {p.name || p.variant} {p.mrp ? `• MRP ₹${p.mrp}` : ''}
+                {p.name || (p as any).product_name || p.variant} {p.mrp ? `• MRP ₹${p.mrp}` : ''}
               </option>
             ))}
           </select>

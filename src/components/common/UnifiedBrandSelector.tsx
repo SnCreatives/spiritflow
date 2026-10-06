@@ -174,22 +174,26 @@ export const UnifiedBrandSelector: React.FC<UnifiedBrandSelectorProps> = ({
   const groupedBrands = useMemo(() => {
     const query = searchQuery.toLowerCase().trim();
 
+    const targetCat = activeCategoryFilter !== 'ALL' ? categories.find(c => c.id === activeCategoryFilter) : null;
+
     const filtered = brands.filter(b => {
+      const bCatId = b.category_id || (b as any).categoryId;
       if (activeCategoryFilter !== 'ALL') {
-        const cat = categories.find(c => c.id === b.category_id);
-        const matchDirect = b.category_id === activeCategoryFilter;
+        const cat = categories.find(c => c.id === bCatId);
+        const matchDirect = bCatId === activeCategoryFilter;
         const matchCatName = cat && cat.name.toLowerCase().includes(activeCategoryFilter.toLowerCase());
-        const matchProdType = cat && (cat as any).product_type?.toLowerCase() === activeCategoryFilter.toLowerCase();
-        if (!matchDirect && !matchCatName && !matchProdType) {
+        const matchProdType = cat && targetCat && (cat as any).product_type && (cat as any).product_type === (targetCat as any).product_type;
+        const matchBeer = cat && targetCat && cat.name.toLowerCase().includes('beer') && targetCat.name.toLowerCase().includes('beer');
+        if (!matchDirect && !matchCatName && !matchProdType && !matchBeer) {
           return false;
         }
       }
 
       if (!query) return true;
-      const brandName = (b.name || '').toLowerCase();
+      const brandName = (b.name || (b as any).brand_name || '').toLowerCase();
       const catName = (
         b.category?.name ||
-        categories.find(c => c.id === b.category_id)?.name ||
+        categories.find(c => c.id === bCatId)?.name ||
         ''
       ).toLowerCase();
       return brandName.includes(query) || catName.includes(query);
@@ -198,19 +202,22 @@ export const UnifiedBrandSelector: React.FC<UnifiedBrandSelectorProps> = ({
     const groups: { categoryName: string; categoryId: string; icon: string; brands: Brand[] }[] = [];
 
     sortedCategories.forEach(cat => {
-      if (activeCategoryFilter !== 'ALL' && cat.id !== activeCategoryFilter) {
+      if (activeCategoryFilter !== 'ALL' && cat.id !== activeCategoryFilter && !((cat.name.toLowerCase().includes('beer') && targetCat?.name.toLowerCase().includes('beer')))) {
         return;
       }
-      const catBrands = filtered.filter(b => b.category_id === cat.id);
+      let catBrands = filtered.filter(b => (b.category_id || (b as any).categoryId) === cat.id);
+      if (catBrands.length === 0 && activeCategoryFilter === cat.id && filtered.length > 0) {
+        catBrands = filtered;
+      }
       if (catBrands.length > 0) {
         // Deduplicate by lowercase brand name within category & sort A-Z
         const seen = new Set<string>();
         const uniqueBrands: Brand[] = [];
         catBrands
           .slice()
-          .sort((a, b) => compareCanonicalBrands(a.name, b.name))
+          .sort((a, b) => compareCanonicalBrands(a.name || (a as any).brand_name, b.name || (b as any).brand_name))
           .forEach(b => {
-            const key = b.name.trim().toLowerCase();
+            const key = (b.name || (b as any).brand_name || '').trim().toLowerCase();
             if (!seen.has(key)) {
               seen.add(key);
               uniqueBrands.push(b);
@@ -227,6 +234,16 @@ export const UnifiedBrandSelector: React.FC<UnifiedBrandSelectorProps> = ({
         });
       }
     });
+
+    // Fallback if no category group matched but filtered brands exist
+    if (groups.length === 0 && filtered.length > 0) {
+      groups.push({
+        categoryName: targetCat?.name || 'Brands',
+        categoryId: targetCat?.id || 'all',
+        icon: '🏷️',
+        brands: filtered,
+      });
+    }
 
     // Fallback if categories list hasn't loaded yet but brands have embedded category
     if (groups.length === 0 && filtered.length > 0) {

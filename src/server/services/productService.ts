@@ -1,3 +1,4 @@
+import { compareCanonicalBrands } from '../../utils/canonicalBrands.js';
 import { getSupabaseServiceClient } from '../../lib/supabase/client.js';
 import {
   Product,
@@ -10,7 +11,6 @@ import {
   ProductCreateSchema,
   ProductUpdateSchema,
 } from '../../lib/validation/inventory.js';
-import { compareCanonicalBrands } from '../../utils/canonicalBrands.js';
 import { ProductMasterService } from './productMasterService.js';
 
 export class ProductService {
@@ -508,7 +508,9 @@ export class ProductService {
    */
   static async getActiveProductsForSelection(): Promise<any[]> {
     const supabase = getSupabaseServiceClient();
-    const { data, error } = await supabase
+    
+    // 1. Fetch all active products
+    const { data: products, error: pError } = await supabase
       .from('products')
       .select(`
         id,
@@ -519,35 +521,71 @@ export class ProductService {
         category_id,
         brand_id,
         pack_size_id,
+        purchase_tp_price,
+        mrp_reference,
+        pack_type,
         category:categories(id, name, code),
         brand:brands(id, name, brand_name, registration_reference),
         pack_size:pack_sizes(id, name, volume_ml, pack_type)
       `)
       .eq('status', 'Active');
 
-    if (error) {
-      throw new Error(`Failed to fetch active products for selection: ${error.message}`);
+    if (pError) {
+      throw new Error(`Failed to fetch active products: ${pError.message}`);
     }
 
-    const items = (data || []).map((row: any) => ({
-      id: row.id,
-      product_name: row.product_name || row.name,
-      name: row.name || row.product_name,
-      sku: row.sku,
-      status: row.status,
-      category_id: row.category_id,
-      category_name: row.category?.name || 'Uncategorized',
-      brand_id: row.brand_id,
-      brand_name: row.brand?.name || row.brand?.brand_name || 'Unbranded',
-      brand_code: row.brand?.registration_reference || '',
-      pack_size_id: row.pack_size_id,
-      pack_size: row.pack_size ? `${row.pack_size.name} (${row.pack_size.volume_ml}ml)` : 'Standard',
-      display_label: `${row.brand?.name || row.brand?.brand_name || 'Unbranded'} — ${row.product_name || row.name} — ${row.pack_size ? `${row.pack_size.name} (${row.pack_size.volume_ml}ml)` : 'Standard'}`,
-    }));
+    // 2. Fetch active SCM codes
+    const { data: scmCodes } = await supabase
+      .from('scm_codes')
+      .select('scm_code, product_id')
+      .eq('is_active', true);
+
+    const scmMap: Record<string, string> = {};
+    (scmCodes || []).forEach(s => {
+      if (s.product_id) scmMap[s.product_id] = s.scm_code;
+    });
+
+    // 3. Map items with full metadata
+    const items = (products || []).map((row: any) => {
+      const activeScm = scmMap[row.id] || row.sku || '';
+      const pType = ProductMasterService.resolveProductType(row.category?.name || '');
+      
+      return {
+        id: row.id,
+        productId: row.id,
+        product_name: row.product_name || row.name,
+        name: row.name || row.product_name,
+        sku: activeScm,
+        scm_code: activeScm,
+        status: row.status,
+        category_id: row.category_id,
+        categoryId: row.category_id,
+        category_name: row.category?.name || 'Uncategorized',
+        categoryName: row.category?.name || 'Uncategorized',
+        product_type: pType,
+        productType: pType,
+        brand_id: row.brand_id,
+        brandId: row.brand_id,
+        brand_name: row.brand?.name || row.brand?.brand_name || 'Unbranded',
+        brandName: row.brand?.name || row.brand?.brand_name || 'Unbranded',
+        brand_code: row.brand?.registration_reference || '',
+        pack_size_id: row.pack_size_id,
+        packSizeId: row.pack_size_id,
+        volume_ml: row.pack_size?.volume_ml || 0,
+        volumeMl: row.pack_size?.volume_ml || 0,
+        pack_type: row.pack_type || row.pack_size?.pack_type || 'Bottle',
+        packType: row.pack_type || row.pack_size?.pack_type || 'Bottle',
+        mrp: row.mrp_reference || 0,
+        purchase_tp_price: row.purchase_tp_price || 0,
+        purchasePrice: row.purchase_tp_price || 0,
+        pack_size: row.pack_size ? `${row.pack_size.name} (${row.pack_size.volume_ml}ml)` : 'Standard',
+        display_label: `${row.brand?.name || row.brand?.brand_name || 'Unbranded'} — ${row.product_name || row.name} — ${row.pack_size ? `${row.pack_size.name} (${row.pack_size.volume_ml}ml)` : 'Standard'}`,
+      };
+    });
 
     // Sort by canonical brand order -> product_name -> pack_size
     items.sort((a, b) => {
-      const cmpBrand = compareCanonicalBrands(a.brand_name, b.brand_name);
+      const cmpBrand = compareCanonicalBrands(a.brandName || '', b.brandName || ''); 
       if (cmpBrand !== 0) return cmpBrand;
       const cmpProd = a.product_name.localeCompare(b.product_name);
       if (cmpProd !== 0) return cmpProd;

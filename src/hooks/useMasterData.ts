@@ -96,7 +96,11 @@ export function useCategories() {
   return { categories, loading };
 }
 
-const brandsCache: Record<string, Brand[]> = {};
+let brandsCache: Record<string, Brand[]> = {};
+
+export function clearBrandsCache() {
+  brandsCache = {};
+}
 
 export function useBrands(categoryId?: string) {
   const cacheKey = categoryId || 'ALL';
@@ -105,21 +109,41 @@ export function useBrands(categoryId?: string) {
 
   useEffect(() => {
     let mounted = true;
-    if (brandsCache[cacheKey]) {
+    if (brandsCache[cacheKey] && brandsCache[cacheKey].length > 0) {
       setBrands(brandsCache[cacheKey]);
       setLoading(false);
     } else {
       setLoading(true);
     }
 
-    const url = categoryId ? `/api/brands?categoryId=${categoryId}&limit=500` : '/api/brands?limit=500';
-    apiGet(url).then(res => {
+    const url = categoryId ? `/api/brands?categoryId=${categoryId}&limit=500&activeOnly=true` : '/api/brands?limit=500&activeOnly=true';
+    apiGet(url).then(async res => {
       if (!mounted) return;
+      let list: any[] = [];
       if (res.success && res.data) {
-        const list = Array.isArray(res.data) ? res.data : res.data.items || res.data.brands || [];
-        brandsCache[cacheKey] = list;
-        setBrands(list);
+        list = Array.isArray(res.data) ? res.data : res.data.items || res.data.brands || [];
       }
+
+      // If category-specific fetch returned 0 items, fallback to all brands
+      if (list.length === 0 && categoryId) {
+        try {
+          const fallbackRes = await apiGet('/api/brands?limit=500&activeOnly=true');
+          if (fallbackRes.success && fallbackRes.data) {
+            list = Array.isArray(fallbackRes.data) ? fallbackRes.data : fallbackRes.data.items || fallbackRes.data.brands || [];
+          }
+        } catch {}
+      }
+
+      const normalized = list.map((b: any) => ({
+        ...b,
+        name: (b.name || b.brand_name || '').trim(),
+        brand_name: (b.name || b.brand_name || '').trim(),
+        category_id: b.category_id || b.categoryId || '',
+        categoryId: b.category_id || b.categoryId || '',
+      }));
+
+      brandsCache[cacheKey] = normalized;
+      setBrands(normalized);
       setLoading(false);
     });
 

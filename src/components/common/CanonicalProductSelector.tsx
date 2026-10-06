@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Layers, Award, Box, Package, ShieldAlert, CheckCircle2, ChevronDown } from 'lucide-react';
 import { apiGet } from '../../utils/api';
 import { CategorySelector } from './MasterDataSelectors';
@@ -57,6 +57,7 @@ export const CanonicalProductSelector: React.FC<CanonicalProductSelectorProps> =
   const [selectedSizeMl, setSelectedSizeMl] = useState<number | ''>('');
   const [selectedPackaging, setSelectedPackaging] = useState<string>('');
   const [activeProductId, setActiveProductId] = useState<string>(selectedProductId || '');
+  const lastSyncedIdRef = useRef<string | undefined>(selectedProductId);
 
   // Fetch product catalog data once on mount
   useEffect(() => {
@@ -100,26 +101,64 @@ export const CanonicalProductSelector: React.FC<CanonicalProductSelectorProps> =
   // Sync if external selectedProductId changes
   useEffect(() => {
     if (selectedProductId && rawProducts.length > 0) {
-      const match = rawProducts.find(p => p.id === selectedProductId);
-      if (match) {
-        setActiveProductId(match.id);
-        const catId = match.category_id || match.categoryId || match.category?.id || '';
-        setSelectedCategoryId(catId);
-        const pType = match.category?.product_type || match.product_type || 'Spirit';
-        setSelectedType(pType);
-        setSelectedBrandId(match.brand_id || '');
-        setSelectedVariant(match.variant || match.product_name || match.name);
-        setSelectedSizeMl(match.volume_ml || match.pack_size?.volume_ml || '');
-        setSelectedPackaging(match.pack_type || 'Bottle');
+      if (lastSyncedIdRef.current === selectedProductId) {
+        return;
       }
+      
+      const match = rawProducts.find(p => p.id === selectedProductId || p.productId === selectedProductId);
+      if (match) {
+        lastSyncedIdRef.current = selectedProductId;
+        
+        // Update all related dropdown states atomically
+        const catId = match.category_id || match.categoryId || match.category?.id || '';
+        const pType = match.productType || match.product_type || (match.category?.product_type) || 'Spirit';
+        const bId = match.brand_id || match.brandId || '';
+        const vName = match.variant || match.product_name || match.name || '';
+        const vol = match.volume_ml || match.volumeMl || match.pack_size?.volume_ml || '';
+        const pkg = match.pack_type || match.packType || 'Bottle';
+
+        setSelectedCategoryId(catId);
+        setSelectedType(pType);
+        setSelectedBrandId(bId);
+        setSelectedVariant(vName);
+        setSelectedSizeMl(vol);
+        setSelectedPackaging(pkg);
+        setActiveProductId(match.id);
+      }
+    } else if (!selectedProductId && activeProductId && lastSyncedIdRef.current) {
+      // Clear if externally cleared
+      setActiveProductId('');
+      setSelectedBrandId('');
+      setSelectedVariant('');
+      setSelectedSizeMl('');
+      setSelectedCategoryId('');
+      setSelectedType('');
+      lastSyncedIdRef.current = undefined;
     }
-  }, [selectedProductId, rawProducts]);
+  }, [selectedProductId, rawProducts, activeProductId]);
 
   // 1. Available Brands for selected Category / Product Type
   const availableBrands = useMemo(() => {
     if (selectedCategoryId) {
-      return brands.filter(b => (b.category_id || b.categoryId) === selectedCategoryId);
+      const direct = brands.filter(b => (b.category_id || b.categoryId) === selectedCategoryId);
+      if (direct.length > 0) return direct;
+      
+      const targetCat = categories.find(c => c.id === selectedCategoryId);
+      if (targetCat) {
+        const lowerName = (targetCat.name || '').toLowerCase();
+        const related = brands.filter(b => {
+          const bCatId = b.category_id || b.categoryId;
+          const bCat = categories.find(c => c.id === bCatId);
+          if (!bCat) return false;
+          if (lowerName.includes('beer') && bCat.name.toLowerCase().includes('beer')) return true;
+          if (lowerName.includes('wine') && bCat.name.toLowerCase().includes('wine')) return true;
+          return (bCat.product_type || bCat.productType) === (targetCat.product_type || targetCat.productType);
+        });
+        if (related.length > 0) return related;
+      }
+      return brands;
     }
+    
     if (!selectedType) return brands;
     const targetType = selectedType.toLowerCase();
 
@@ -156,10 +195,14 @@ export const CanonicalProductSelector: React.FC<CanonicalProductSelectorProps> =
     return rawProducts.filter(p => {
       const catId = p.category_id || p.categoryId || p.category?.id;
       if (selectedCategoryId && catId && catId !== selectedCategoryId) return false;
+      
       const pType = p.category?.product_type || p.product_type || p.productType || '';
-      if (selectedType && pType.toLowerCase() !== selectedType.toLowerCase()) return false;
+      if (selectedType && pType.toLowerCase() !== selectedType.toLowerCase() && 
+          !(selectedType.toLowerCase().includes('beer') && pType.toLowerCase().includes('beer'))) return false;
+          
       const bId = p.brand_id || p.brandId;
       if (selectedBrandId && bId !== selectedBrandId) return false;
+      
       return true;
     });
   }, [rawProducts, selectedCategoryId, selectedType, selectedBrandId]);
@@ -198,12 +241,10 @@ export const CanonicalProductSelector: React.FC<CanonicalProductSelectorProps> =
     const sizes = new Set<number>();
     matchingProducts.forEach(p => {
       const vol = Number(p.volume_ml || p.volumeMl || p.pack_size?.volume_ml);
-      if (vol && allowedSizesForType.includes(vol)) {
-        sizes.add(vol);
-      }
+      if (vol) sizes.add(vol);
     });
     return Array.from(sizes).sort((a, b) => b - a);
-  }, [matchingProducts, allowedSizesForType]);
+  }, [matchingProducts]);
 
   // 6. Available Packaging Types
   const availablePackaging = useMemo(() => {
@@ -217,8 +258,16 @@ export const CanonicalProductSelector: React.FC<CanonicalProductSelectorProps> =
 
   // Re-resolve active product whenever cascade values change
   useEffect(() => {
+    // Skip if still loading or if nothing is selected yet
+    if (loading || !rawProducts.length) return;
+    
+    // Prevent resolution if we are currently syncing an external selectedProductId
+    if (selectedProductId && lastSyncedIdRef.current === selectedProductId && activeProductId === selectedProductId) {
+      return;
+    }
+
     if (!selectedBrandId) {
-      if (activeProductId) {
+      if (activeProductId && !selectedProductId) {
         setActiveProductId('');
         onSelectProduct(null);
       }
@@ -238,53 +287,39 @@ export const CanonicalProductSelector: React.FC<CanonicalProductSelectorProps> =
     });
 
     if (resolved) {
-      setActiveProductId(resolved.id);
-      const vol = Number(resolved.volume_ml || resolved.volumeMl || resolved.pack_size?.volume_ml || selectedSizeMl || 750);
-      const detail: SelectedProductDetail = {
-        productId: resolved.id,
-        productName: resolved.name || resolved.product_name || resolved.productName,
-        sku: resolved.sku || '',
-        productType: selectedType || resolved.productType || resolved.product_type || 'Spirit',
-        categoryId: resolved.category_id || resolved.categoryId || '',
-        categoryName: resolved.category?.name || resolved.categoryName || '',
-        brandId: resolved.brand_id || resolved.brandId || selectedBrandId,
-        brandName: resolved.brand?.name || resolved.brand?.brand_name || resolved.brandName || '',
-        variant: resolved.variant || resolved.product_name || resolved.name,
-        packSizeId: resolved.pack_size_id || resolved.packSizeId || '',
-        volumeMl: vol,
-        packType: resolved.pack_type || resolved.packType || selectedPackaging || 'Bottle',
-        mrp: Number(resolved.mrp_reference || resolved.mrp || 0),
-        purchaseTpPrice: Number(resolved.purchase_tp_price || resolved.purchasePrice || 0),
-        scmCode: scmMap[resolved.id] || resolved.scm_code || undefined,
-      };
-      onSelectProduct(detail);
-    } else if (matchingProducts.length === 1 && (!selectedSizeMl || !selectedPackaging)) {
-      // Auto-select single exact product
+      if (resolved.id !== activeProductId) {
+        setActiveProductId(resolved.id);
+        const vol = Number(resolved.volume_ml || resolved.volumeMl || resolved.pack_size?.volume_ml || selectedSizeMl || 750);
+        const detail: SelectedProductDetail = {
+          productId: resolved.id,
+          productName: resolved.name || resolved.product_name || resolved.productName,
+          sku: resolved.sku || '',
+          productType: selectedType || resolved.productType || resolved.product_type || 'Spirit',
+          categoryId: resolved.category_id || resolved.categoryId || '',
+          categoryName: resolved.category?.name || resolved.categoryName || '',
+          brandId: resolved.brand_id || resolved.brandId || selectedBrandId,
+          brandName: resolved.brand?.name || resolved.brand?.brand_name || resolved.brandName || '',
+          variant: resolved.variant || resolved.product_name || resolved.name,
+          packSizeId: resolved.pack_size_id || resolved.packSizeId || '',
+          volumeMl: vol,
+          packType: resolved.pack_type || resolved.packType || selectedPackaging || 'Bottle',
+          mrp: Number(resolved.mrp_reference || resolved.mrp || 0),
+          purchaseTpPrice: Number(resolved.purchase_tp_price || resolved.purchasePrice || 0),
+          scmCode: scmMap[resolved.id] || resolved.scm_code || undefined,
+        };
+        // Only trigger update if this was a user-driven change (not an external sync already in progress)
+        if (lastSyncedIdRef.current !== detail.productId) {
+          onSelectProduct(detail);
+        }
+      }
+    } else if (matchingProducts.length === 1 && !selectedVariant && !selectedSizeMl) {
+      // Auto-select single exact product if variant/size not yet specified
       const sole = matchingProducts[0];
-      setActiveProductId(sole.id);
       const vol = Number(sole.volume_ml || sole.volumeMl || sole.pack_size?.volume_ml || 750);
       setSelectedSizeMl(vol);
       setSelectedPackaging(sole.pack_type || sole.packType || 'Bottle');
       setSelectedVariant(sole.variant || sole.product_name || sole.name);
-
-      const detail: SelectedProductDetail = {
-        productId: sole.id,
-        productName: sole.name || sole.product_name || sole.productName,
-        sku: sole.sku || '',
-        productType: selectedType || sole.productType || sole.product_type || 'Spirit',
-        categoryId: sole.category_id || sole.categoryId || '',
-        categoryName: sole.category?.name || sole.categoryName || '',
-        brandId: sole.brand_id || sole.brandId || selectedBrandId,
-        brandName: sole.brand?.name || sole.brand?.brand_name || sole.brandName || '',
-        variant: sole.variant || sole.name,
-        packSizeId: sole.pack_size_id || sole.packSizeId || '',
-        volumeMl: vol,
-        packType: sole.pack_type || sole.packType || 'Bottle',
-        mrp: Number(sole.mrp_reference || sole.mrp || 0),
-        purchaseTpPrice: Number(sole.purchase_tp_price || sole.purchasePrice || 0),
-        scmCode: scmMap[sole.id] || sole.scm_code || undefined,
-      };
-      onSelectProduct(detail);
+      setActiveProductId(sole.id);
     }
   }, [
     selectedType,
@@ -296,6 +331,9 @@ export const CanonicalProductSelector: React.FC<CanonicalProductSelectorProps> =
     scmMap,
     onSelectProduct,
     activeProductId,
+    loading,
+    rawProducts.length,
+    selectedProductId
   ]);
 
   const activeProduct = useMemo(() => {
