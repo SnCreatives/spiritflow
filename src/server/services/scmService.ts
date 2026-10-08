@@ -53,6 +53,45 @@ export class ScmService {
   }
 
   /**
+   * Ensures an SCM code exists in the master registry.
+   * If it exists and is active, returns it.
+   * If it doesn't exist, creates it.
+   */
+  static async ensureScmCodeExists(scmCode: string, productId: string, options: Partial<CreateScmCodeInput> = {}): Promise<ScmCodeRecord> {
+    if (!scmCode || !scmCode.trim()) {
+      throw new Error('SCM code is required for registration.');
+    }
+    
+    const cleanCode = scmCode.trim().toUpperCase();
+    
+    // 1. Check for existing active record with this code
+    const isDbReady = await this.checkDbTable();
+    if (isDbReady) {
+      try {
+        const supabase = getSupabaseServiceClient();
+        const { data, error } = await supabase
+          .from('scm_codes')
+          .select('*')
+          .eq('scm_code', cleanCode)
+          .eq('is_active', true)
+          .maybeSingle();
+        
+        if (!error && data) return data as ScmCodeRecord;
+      } catch {}
+    } else {
+      const found = memoryScmStore.find(s => s.scm_code === cleanCode && s.is_active);
+      if (found) return found;
+    }
+
+    // 2. If not found, create new record
+    return this.createScmCode({
+      scmCode: cleanCode,
+      productId,
+      ...options
+    });
+  }
+
+  /**
    * Create or update SCM code with non-destructive effective dating.
    * If a previous active code exists for this product, it marks effective_to and sets is_active = false.
    */

@@ -2,6 +2,7 @@ import { getSupabaseServiceClient, checkDbHasBarId } from '../../lib/supabase/cl
 import { StockTransactionType, DashboardStats, InventoryRecord, StockLedgerRecord } from '../../types/index.js';
 import { BarStoreService } from './barStoreService.js';
 import { ProductMasterService } from './productMasterService.js';
+import { ScmService } from './scmService.js';
 
 export class InventoryService {
   /**
@@ -147,6 +148,17 @@ export class InventoryService {
     if (hasBarId && data.barId) ledgerPayload.bar_id = data.barId;
 
     await supabase.from('stock_ledger').insert(ledgerPayload);
+
+    // Register SCM Code if provided
+    if ((data as any).scmCode) {
+      try {
+        await ScmService.ensureScmCodeExists((data as any).scmCode, data.productId, {
+          sourceReference: `Opening Stock: ${data.batchNumber || 'Initial'}`
+        });
+      } catch (scmErr) {
+        console.warn('SCM registration failed during opening stock:', scmErr);
+      }
+    }
 
     return {
       productId: data.productId,
@@ -335,6 +347,17 @@ export class InventoryService {
       if (hasBarId && purchaseData.barId) ledgerPayload.bar_id = purchaseData.barId;
 
       await supabase.from('stock_ledger').insert(ledgerPayload);
+
+      // 3. Register SCM Code if provided (Requirement 7)
+      if ((item as any).scmCode) {
+        try {
+          await ScmService.ensureScmCodeExists((item as any).scmCode, item.productId, {
+            sourceReference: `Inward Purchase #${purchase.purchase_number}`
+          });
+        } catch (scmErr) {
+          console.warn('SCM registration failed during purchase:', scmErr);
+        }
+      }
 
       // Link Excise Document Reference if TP permit or excise ref present
       if (purchaseData.tpPermitReference || purchaseData.exciseReference) {
