@@ -2,6 +2,8 @@ import React from 'react';
 import { useCategories, useBrands, useVariants, useProducts, useMasterData } from '../../hooks/useMasterData';
 import { Category, Brand, Product } from '../../types';
 
+import { SearchableSelect } from './SearchableSelect';
+
 export interface SelectorProps {
   value: string;
   onChange: (value: string) => void;
@@ -103,30 +105,16 @@ export const BrandSelector: React.FC<BrandSelectorProps> = ({
   allLabel = 'All Brands',
 }) => {
   const { brands, loading } = useBrands(categoryId);
-  const themeClasses =
-    theme === 'dark'
-      ? 'bg-slate-950 border border-slate-700/80 text-white focus:border-amber-400 focus:ring-1 focus:ring-amber-400'
-      : 'bg-white border border-slate-300 text-slate-900 focus:ring-2 focus:ring-amber-500';
 
   return (
-    <select
+    <SearchableSelect
+      options={brands.map(b => ({ id: b.id, name: b.name || (b as any).brand_name }))}
       value={value}
-      onChange={e => onChange(e.target.value)}
+      onChange={onChange}
       disabled={disabled || (loading && brands.length === 0)}
-      required={required}
-      className={`w-full px-3 py-2 text-sm rounded-xl focus:outline-none disabled:opacity-50 transition-all ${themeClasses} ${className}`}
-    >
-      {includeAllOption ? (
-        <option value="">{loading && brands.length === 0 ? 'Loading...' : allLabel}</option>
-      ) : (
-        <option value="">{loading && brands.length === 0 ? 'Loading...' : placeholder}</option>
-      )}
-      {brands.map(brand => (
-        <option key={brand.id} value={brand.id} className={theme === 'dark' ? 'bg-slate-950 text-white' : 'bg-white text-slate-900'}>
-          {brand.name || (brand as any).brand_name}
-        </option>
-      ))}
-    </select>
+      placeholder={loading && brands.length === 0 ? 'Loading...' : placeholder}
+      className={className}
+    />
   );
 };
 
@@ -141,26 +129,16 @@ export const VariantSelector: React.FC<SelectorProps & { brandId?: string }> = (
   theme = 'light',
 }) => {
   const { variants, loading } = useVariants(brandId);
-  const themeClasses =
-    theme === 'dark'
-      ? 'bg-slate-950 border border-slate-700/80 text-white focus:border-amber-400 focus:ring-1 focus:ring-amber-400'
-      : 'bg-white border border-slate-300 text-slate-900 focus:ring-2 focus:ring-amber-500';
 
   return (
-    <select
+    <SearchableSelect
+      options={variants.map(v => ({ id: v, name: v }))}
       value={value}
-      onChange={e => onChange(e.target.value)}
+      onChange={onChange}
       disabled={disabled || loading || !brandId}
-      required={required}
-      className={`w-full px-3 py-2 text-sm rounded-xl focus:outline-none disabled:opacity-50 transition-all ${themeClasses} ${className}`}
-    >
-      <option value="">{loading ? 'Loading...' : !brandId ? 'Select Brand first' : placeholder}</option>
-      {variants.map(v => (
-        <option key={v} value={v} className={theme === 'dark' ? 'bg-slate-950 text-white' : 'bg-white text-slate-900'}>
-          {v}
-        </option>
-      ))}
-    </select>
+      placeholder={loading ? 'Loading...' : !brandId ? 'Select Brand first' : placeholder}
+      className={className}
+    />
   );
 };
 
@@ -177,26 +155,19 @@ export const ProductSelector: React.FC<SelectorProps & { categoryId?: string; br
   theme = 'light',
 }) => {
   const { products, loading } = useProducts({ categoryId, brandId, variant });
-  const themeClasses =
-    theme === 'dark'
-      ? 'bg-slate-950 border border-slate-700/80 text-white focus:border-amber-400 focus:ring-1 focus:ring-amber-400'
-      : 'bg-white border border-slate-300 text-slate-900 focus:ring-2 focus:ring-amber-500';
 
   return (
-    <select
+    <SearchableSelect
+      options={products.map(p => ({ 
+        id: p.id, 
+        name: `${p.name || p.variant} (${p.sku})` 
+      }))}
       value={value}
-      onChange={e => onChange(e.target.value)}
+      onChange={onChange}
       disabled={disabled || loading}
-      required={required}
-      className={`w-full px-3 py-2 text-sm rounded-xl focus:outline-none disabled:opacity-50 transition-all ${themeClasses} ${className}`}
-    >
-      <option value="">{loading ? 'Loading...' : placeholder}</option>
-      {products.map(p => (
-        <option key={p.id} value={p.id} className={theme === 'dark' ? 'bg-slate-950 text-white' : 'bg-white text-slate-900'}>
-          {p.name || p.variant} ({p.sku})
-        </option>
-      ))}
-    </select>
+      placeholder={loading ? 'Loading...' : placeholder}
+      className={className}
+    />
   );
 };
 

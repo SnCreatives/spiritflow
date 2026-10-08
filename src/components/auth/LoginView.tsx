@@ -53,7 +53,11 @@ export const LoginView: React.FC<LoginViewProps> = ({
         if (res.success && Array.isArray(res.data?.bars)) {
           setBarsList(res.data.bars);
           if (res.data.bars.length > 0) {
-            setSelectedBarId(res.data.bars[0].id);
+            // Requirement: User must explicitly select the bar.
+            // However, to avoid a completely empty state that might look broken, 
+            // we will keep the list populated but the user still selects.
+            // Wait, if I set it to empty, it won't be valid until selected.
+            setSelectedBarId('');
           }
         }
       } catch {}
@@ -335,14 +339,18 @@ export const LoginView: React.FC<LoginViewProps> = ({
                     name="barId"
                     value={selectedBarId}
                     onChange={(e) => setSelectedBarId(e.target.value)}
+                    required
                     className={`w-full pl-11 pr-4 py-3 text-sm rounded-xl outline-none transition-all shadow-xs border appearance-none ${
                       isLight
                         ? 'bg-slate-50 border-slate-200 text-slate-900 focus:bg-white focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/20'
                         : 'bg-slate-900 border-slate-800 text-white focus:bg-slate-950 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/20'
                     }`}
                   >
+                    <option value="" disabled>
+                      {language === 'mr' ? 'बार आउटलेट निवडा' : language === 'hi' ? 'बार आउटलेट चुनें' : '— Select Bar Outlet —'}
+                    </option>
                     {barsList.length === 0 ? (
-                      <option value="">Loading Active Outlets...</option>
+                      <option value="" disabled>Loading Active Outlets...</option>
                     ) : (
                       barsList.map(b => (
                         <option key={b.id} value={b.id}>
@@ -474,7 +482,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
                   </>
                 ) : (
                   <>
-                    <span>Sign In to ERP Dashboard</span>
+                    <span>Sign In to Bar Console</span>
                     <ArrowRight className="w-4 h-4" />
                   </>
                 )}

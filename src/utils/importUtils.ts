@@ -39,14 +39,15 @@ export const FIELD_ALIASES: { [key: string]: string[] } = {
   adjustment_type: ['type', 'adjustment type', 'movement type'],
 };
 
-export function autoMapColumns(headers: string[], fieldKeys: string[]): ColumnMapping {
+export function autoMapColumns(headers: string[], fieldKeys: string[] = Object.keys(FIELD_ALIASES)): ColumnMapping {
   const mapping: ColumnMapping = {};
+  const keys = fieldKeys && fieldKeys.length > 0 ? fieldKeys : Object.keys(FIELD_ALIASES);
   
   headers.forEach(header => {
     const normalizedHeader = header.toLowerCase().trim().replace(/_/g, ' ');
     
     // Exact match first
-    const exactMatch = fieldKeys.find(key => key.toLowerCase() === normalizedHeader.replace(/ /g, '_'));
+    const exactMatch = keys.find(key => key.toLowerCase() === normalizedHeader.replace(/ /g, '_'));
     if (exactMatch) {
       mapping[header] = exactMatch;
       return;
@@ -54,7 +55,7 @@ export function autoMapColumns(headers: string[], fieldKeys: string[]): ColumnMa
 
     // Alias match
     for (const [key, aliases] of Object.entries(FIELD_ALIASES)) {
-      if (fieldKeys.includes(key) && aliases.includes(normalizedHeader)) {
+      if (keys.includes(key) && aliases.includes(normalizedHeader)) {
         mapping[header] = key;
         break;
       }
@@ -360,6 +361,7 @@ export interface ResolvedProduct {
   categoryId: string;
   packSizeId: string;
   packagingTypeId?: string;
+  scmMasterId?: string;
   
   productName: string;
   brandName: string;
@@ -380,13 +382,19 @@ export interface ResolvedProduct {
 /**
  * Normalizes strings for robust matching
  */
+/**
+ * Normalizes strings for robust matching
+ * Removes common punctuation, trailing dots, and standard size patterns (e.g. " (750ml)")
+ */
 function normalizeForMatch(str: any): string {
   if (!str) return '';
   return String(str)
     .toLowerCase()
     .trim()
-    .replace(/[.\-_,]/g, ' ') // replace common separators with space
-    .replace(/\s+/g, ' ')      // collapse multiple spaces
+    .replace(/\s*\(\d+\s*ml\)\s*/gi, ' ') // remove "(750ml)" patterns
+    .replace(/\s*\d+\s*ml\s*/gi, ' ')     // remove "750ml" patterns
+    .replace(/[.\-_,]/g, ' ')             // replace common separators with space
+    .replace(/\s+/g, ' ')                  // collapse multiple spaces
     .trim();
 }
 
@@ -395,9 +403,9 @@ function normalizeForMatch(str: any): string {
  * Priority:
  * 1. Exact SCM Code
  * 2. Exact canonical Product ID, if available
- * 3. Product Name + Bottle Size
+ * 3. Product Name + Bottle Size (Canonical Match)
  * 4. Brand + Variant + Bottle Size
- * 5. Normalized Product Name + Bottle Size (Fuzzy)
+ * 5. Fuzzy Item Name Match + Bottle Size
  * 
  * Strict: Never creates new records; resolves only against existing database items.
  */
@@ -423,11 +431,12 @@ export function resolveCanonicalProduct(params: {
 
   // Helper to build result from catalog row
   const buildResult = (p: any, score: number, matchType: ResolvedProduct['matchType']): ResolvedProduct => {
-    // Determine IDs and labels from row structure (handles different API response formats)
+    // Determine IDs and labels from row structure
     const pid = p.id || p.productId;
     const bid = p.brand_id || p.brandId;
     const cid = p.category_id || p.categoryId || (p.category?.id);
     const psid = p.pack_size_id || p.packSizeId;
+    const scmId = p.scmMasterId || '';
     
     const pName = p.product_name || p.name || p.productName || '';
     const bName = p.brand_name || p.brandName || (p.brand?.name) || '';
@@ -435,7 +444,7 @@ export function resolveCanonicalProduct(params: {
     const vName = p.variant || p.product_name || p.name || '';
     const vol = p.volume_ml || p.volumeMl || parseVolumeMl(p.pack_size || p.pack_size_name || '');
     const pPkg = p.pack_type || p.packType || 'Bottle';
-    const sku = p.sku || p.scmCode || p.scm_code || '';
+    const sku = scmCode ? scmCode.trim() : (p.sku || p.scmCode || p.scm_code || '');
     const mrp = Number(p.mrp_reference || p.mrp || 0);
     const pPrice = Number(p.purchase_tp_price || p.purchase_price || p.purchasePrice || 0);
 
@@ -444,6 +453,7 @@ export function resolveCanonicalProduct(params: {
       brandId: bid,
       categoryId: cid,
       packSizeId: psid,
+      scmMasterId: scmId,
       productName: pName,
       brandName: bName,
       categoryName: cName,
@@ -473,12 +483,18 @@ export function resolveCanonicalProduct(params: {
     if (match) return buildResult(match, 900, 'id');
   }
 
-  // 3. Product Name + Bottle Size (Strict match)
+  // 3. Product Name + Bottle Size (Strict Normalized Match)
   if (normItem && numSize > 0) {
     const matches = catalogProducts.filter(p => {
-      const pName = normalizeForMatch(p.product_name || p.name);
+      const pNameNorm = normalizeForMatch(p.product_name || p.name);
       const pVol = p.volume_ml || p.volumeMl || parseVolumeMl(p.pack_size || p.pack_size_name || '');
-      return (pName === normItem || pName === `${normBrand} ${normVariant}`.trim()) && pVol === numSize;
+      
+      // Direct name match or Brand + Variant combination match
+      const nameMatch = pNameNorm === normItem || 
+                        pNameNorm === `${normBrand} ${normVariant}`.trim() ||
+                        pNameNorm === `${normBrand} ${normItem}`.trim();
+      
+      return nameMatch && pVol === numSize;
     });
     
     if (matches.length === 1) {
@@ -487,7 +503,7 @@ export function resolveCanonicalProduct(params: {
       // Disambiguate by brand
       const brandMatch = matches.find(p => {
         const bName = normalizeForMatch(p.brand_name || p.brand?.name);
-        return bName === normBrand || bName.includes(normBrand) || normBrand.includes(bName);
+        return bName === normBrand || (normBrand && (bName.includes(normBrand) || normBrand.includes(bName)));
       });
       if (brandMatch) return buildResult(brandMatch, 850, 'product_size');
       
@@ -511,35 +527,30 @@ export function resolveCanonicalProduct(params: {
     if (match) return buildResult(match, 700, 'brand_variant_size');
   }
 
-  // 5. Normalized Product Name + Bottle Size (Fuzzy Item Name Match)
+  // 5. Normalized Item Name Lookup (Containment Match)
   if (normItem && numSize > 0) {
     const matches = catalogProducts.filter(p => {
-      const pName = normalizeForMatch(p.product_name || p.name || p.display_label);
+      const pNameNorm = normalizeForMatch(p.product_name || p.name);
       const pVol = p.volume_ml || p.volumeMl || parseVolumeMl(p.pack_size || p.pack_size_name || '');
       if (pVol !== numSize) return false;
       
-      return pName.includes(normItem) || normItem.includes(pName);
+      // If the pasted Item Name is contained in the product name OR vice-versa
+      return pNameNorm.includes(normItem) || normItem.includes(pNameNorm);
     });
 
     if (matches.length === 1) {
       return buildResult(matches[0], 600, 'name_size');
     } else if (matches.length > 1) {
-      const potentialResults = matches.map(m => buildResult(m, 600, 'name_size'));
-      const brandMatch = matches.find(p => {
-        const bName = normalizeForMatch(p.brand_name || p.brand?.name);
-        return (normBrand && (bName === normBrand || bName.includes(normBrand) || normBrand.includes(bName))) || 
-               (normItem.includes(bName));
-      });
-      
-      if (brandMatch) {
-        const result = buildResult(brandMatch, 650, 'name_size');
-        if (matches.length > 2) {
-          result.isAmbiguous = true;
-          result.potentialMatches = potentialResults;
-        }
-        return result;
+      // Prioritize by brand match if brandName was provided
+      if (normBrand) {
+        const brandMatch = matches.find(p => {
+          const bName = normalizeForMatch(p.brand_name || p.brand?.name);
+          return bName === normBrand || bName.includes(normBrand) || normBrand.includes(bName);
+        });
+        if (brandMatch) return buildResult(brandMatch, 650, 'name_size');
       }
 
+      const potentialResults = matches.map(m => buildResult(m, 600, 'name_size'));
       const result = potentialResults[0];
       result.isAmbiguous = true;
       result.potentialMatches = potentialResults;

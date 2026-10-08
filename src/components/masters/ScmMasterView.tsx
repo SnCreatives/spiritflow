@@ -27,6 +27,7 @@ export const ScmMasterView: React.FC = () => {
 
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [scmCodes, setScmCodes] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [filterActiveOnly, setFilterActiveOnly] = useState<boolean>(true);
@@ -81,6 +82,7 @@ export const ScmMasterView: React.FC = () => {
     }
 
     setSubmitting(true);
+    setSaveStatus('saving');
     try {
       const res = await apiPost('/api/scm-codes', {
         productId: selectedProduct.productId,
@@ -91,6 +93,7 @@ export const ScmMasterView: React.FC = () => {
       });
 
       if (res.success) {
+        setSaveStatus('saved');
         showSuccess('SCM Code assigned successfully.');
         setShowAddModal(false);
         setNewScmCode('');
@@ -102,8 +105,10 @@ export const ScmMasterView: React.FC = () => {
       }
     } catch (err: any) {
       showError(err.message || 'Unable to save. Please try again.');
+      setSaveStatus('idle');
     } finally {
       setSubmitting(false);
+      setTimeout(() => setSaveStatus('idle'), 1500);
     }
   };
 
@@ -161,89 +166,45 @@ export const ScmMasterView: React.FC = () => {
   };
 
   return (
-    <div className="page-container px-4 sm:px-6 lg:px-8 py-8 space-y-6">
-      {/* Top Banner */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+    <div className="px-4 sm:px-6 py-6 max-w-7xl mx-auto space-y-6 font-sans">
+      {/* 2. SIMPLE PAGE STRUCTURE: Page Title, Short description, Primary Action */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-200 pb-4">
         <div>
-          <div className="flex items-center gap-2 text-xs font-bold text-amber-600 uppercase tracking-wider mb-1">
-            <ShieldCheck className="w-4 h-4" />
-            Maharashtra State Regulatory Master
-          </div>
-          <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
-            Excise SCM Code Management
-          </h1>
+          <h1 className="text-xl font-bold text-slate-900">SCM Codes</h1>
           <p className="text-xs text-slate-500 mt-0.5">
-            Decoupled regulatory codes mapped to canonical liquor products with temporal versioning.
+            Maharashtra State Excise regulatory codes mapped to canonical liquor products.
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {/* Add SCM Code */}
-          <button
-            onClick={() => setShowAddModal(true)}
-            className="px-4 py-2.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold uppercase tracking-wider rounded-xl shadow-sm transition-all flex items-center gap-2 cursor-pointer"
-          >
-            <PlusCircle className="w-4 h-4" />
-            + Add SCM Code
-          </button>
-
-          {/* Import Actions */}
           <button
             onClick={() => setShowImportModal(true)}
-            className="px-4 py-2.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold uppercase tracking-wider rounded-xl shadow-sm transition-all flex items-center gap-2 cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-slate-200 bg-white hover:bg-slate-50 text-xs font-medium text-slate-700 transition-colors cursor-pointer"
           >
-            <Upload className="w-4 h-4 text-emerald-600" />
-            Import CSV
-          </button>
-          <button
-            onClick={() => setShowImportModal(true)}
-            className="px-4 py-2.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold uppercase tracking-wider rounded-xl shadow-sm transition-all flex items-center gap-2 cursor-pointer"
-          >
-            <Upload className="w-4 h-4 text-emerald-600" />
-            Import Excel
+            <Upload className="w-3.5 h-3.5 text-slate-500" />
+            <span>Import</span>
           </button>
 
-          {/* Export Actions */}
-          <button
-            onClick={() => handleExport('csv')}
-            className="px-4 py-2.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold uppercase tracking-wider rounded-xl shadow-sm transition-all flex items-center gap-2 cursor-pointer"
-          >
-            <FileText className="w-4 h-4 text-blue-600" />
-            Export CSV
-          </button>
           <button
             onClick={() => handleExport('excel')}
-            className="px-4 py-2.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold uppercase tracking-wider rounded-xl shadow-sm transition-all flex items-center gap-2 cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-slate-200 bg-white hover:bg-slate-50 text-xs font-medium text-slate-700 transition-colors cursor-pointer"
           >
-            <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
-            Export Excel
+            <Download className="w-3.5 h-3.5 text-slate-500" />
+            <span>Export</span>
           </button>
 
-          {/* Download Template */}
           <button
-            onClick={() => {
-              const headers = [
-                'SCM Code', 'Product Name', 'Brand', 'Variant', 'Product Type', 'Bottle Size', 'Packaging', 
-                'Effective From', 'Effective To', 'Status', 'Supplier Code', 'Notes'
-              ];
-              const data = [
-                ['SCM-MH-1001', 'Royal Stag Deluxe', 'Royal Stag', 'Deluxe', 'Spirit', '750 ml', 'Bottle', '2026-01-01', '', 'Active', 'RS750', 'Excise Approved']
-              ];
-              const ws = XLSX.utils.aoa_to_sheet([headers, ...data]);
-              const wb = XLSX.utils.book_new();
-              XLSX.utils.book_append_sheet(wb, ws, 'SCM Template');
-              XLSX.writeFile(wb, 'LiquorFlow_SCM_Template.xlsx');
-            }}
-            className="px-4 py-2.5 bg-slate-50 border border-slate-200 hover:bg-slate-100 text-slate-600 text-xs font-bold uppercase tracking-wider rounded-xl transition-all flex items-center gap-2 cursor-pointer"
+            onClick={() => setShowAddModal(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold transition-colors cursor-pointer"
           >
-            <Download className="w-4 h-4" />
-            Download Template
+            <PlusCircle className="w-3.5 h-3.5" />
+            <span>+ Add SCM Code</span>
           </button>
         </div>
       </div>
 
       {/* Filter Bar */}
-      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-wrap items-center justify-between gap-4">
+      <div className="bg-white p-3 rounded-lg border border-slate-200 flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-3">
           <div className="relative">
             <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
@@ -252,36 +213,34 @@ export const ScmMasterView: React.FC = () => {
               placeholder="Search SCM Code or Product..."
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
-              className="pl-8 pr-3 py-1.5 text-xs rounded-lg border border-slate-300 w-64 focus:ring-2 focus:ring-amber-500 focus:outline-none"
+              className="pl-8 pr-3 py-1.5 text-xs rounded-md border border-slate-300 w-64 focus:ring-1 focus:ring-amber-500 focus:outline-none"
             />
           </div>
 
-          <div className="flex items-center gap-2">
+          <label htmlFor="activeOnly" className="flex items-center gap-2 text-xs text-slate-700 select-none cursor-pointer">
             <input
               type="checkbox"
               id="activeOnly"
               checked={filterActiveOnly}
               onChange={e => setFilterActiveOnly(e.target.checked)}
-              className="rounded text-amber-600 focus:ring-amber-500"
+              className="rounded border-slate-300 text-amber-500 focus:ring-0"
             />
-            <label htmlFor="activeOnly" className="text-xs font-bold text-slate-700 select-none">
-              Active Mappings Only
-            </label>
-          </div>
+            <span>Active Mappings Only</span>
+          </label>
         </div>
 
         <button
           onClick={fetchScmCodes}
           disabled={loading}
-          className="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer"
+          className="px-3 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-medium rounded-md border border-slate-200 transition-colors flex items-center gap-1.5 cursor-pointer"
         >
           <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-          Refresh
+          <span>Refresh</span>
         </button>
       </div>
 
       {/* SCM Code Table */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+      <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead className="bg-slate-50 border-b border-slate-200 text-slate-700 uppercase font-bold text-[11px]">
@@ -372,41 +331,34 @@ export const ScmMasterView: React.FC = () => {
             <button
               type="button"
               onClick={() => setShowAddModal(false)}
-              className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer transition-colors"
+              className="px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 rounded-md cursor-pointer transition-colors border border-slate-300"
             >
               Cancel
             </button>
             <button
               form="scm-form"
               type="submit"
-              disabled={submitting || !selectedProduct}
-              className="px-6 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-xl shadow-md transition-all disabled:opacity-50 cursor-pointer flex items-center gap-2"
+              disabled={submitting}
+              className="px-5 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold rounded-md transition-all disabled:opacity-50 cursor-pointer"
             >
-              {submitting ? (
-                <>
-                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                  <span>Saving...</span>
-                </>
-              ) : (
-                <span>Save SCM Mapping</span>
-              )}
+              {saveStatus === 'saving' ? 'Saving...' : saveStatus === 'saved' ? 'Saved' : 'Save'}
             </button>
           </div>
         }
       >
-        <div className="space-y-6">
+        <div className="space-y-4">
           {/* Product Selector */}
-          <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+          <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
             <CanonicalProductSelector
               onSelectProduct={prod => setSelectedProduct(prod)}
               selectedProductId={selectedProduct?.productId}
             />
           </div>
 
-          <form id="scm-form" onSubmit={handleCreateScm} className="space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <form id="scm-form" onSubmit={handleCreateScm} className="space-y-3 text-xs">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1.5">
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
                   Official SCM Code *
                 </label>
                 <input
@@ -415,12 +367,12 @@ export const ScmMasterView: React.FC = () => {
                   value={newScmCode}
                   onChange={e => setNewScmCode(e.target.value)}
                   required
-                  className="w-full px-3.5 py-2 text-xs font-mono font-bold rounded-xl border border-slate-300 focus:ring-2 focus:ring-amber-500 focus:outline-none transition-all"
+                  className="w-full px-3 py-1.5 text-xs font-mono font-bold rounded-md border border-slate-300 focus:ring-1 focus:ring-amber-500 focus:outline-none"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1.5">
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
                   Effective From Date *
                 </label>
                 <input
@@ -428,24 +380,24 @@ export const ScmMasterView: React.FC = () => {
                   value={effectiveFrom}
                   onChange={e => setEffectiveFrom(e.target.value)}
                   required
-                  className="w-full px-3.5 py-2 text-xs rounded-xl border border-slate-300 focus:ring-2 focus:ring-amber-500 focus:outline-none transition-all"
+                  className="w-full px-3 py-1.5 text-xs rounded-md border border-slate-300 focus:ring-1 focus:ring-amber-500 focus:outline-none"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1.5">
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
                   Effective To Date (Optional)
                 </label>
                 <input
                   type="date"
                   value={effectiveTo}
                   onChange={e => setEffectiveTo(e.target.value)}
-                  className="w-full px-3.5 py-2 text-xs rounded-xl border border-slate-300 focus:ring-2 focus:ring-amber-500 focus:outline-none transition-all"
+                  className="w-full px-3 py-1.5 text-xs rounded-md border border-slate-300 focus:ring-1 focus:ring-amber-500 focus:outline-none"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1.5">
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
                   Regulatory Reference / Note
                 </label>
                 <input
@@ -453,7 +405,7 @@ export const ScmMasterView: React.FC = () => {
                   placeholder="e.g. Maharashtra Gazette 2026 Notification"
                   value={description}
                   onChange={e => setDescription(e.target.value)}
-                  className="w-full px-3.5 py-2 text-xs rounded-xl border border-slate-300 focus:ring-2 focus:ring-amber-500 focus:outline-none transition-all"
+                  className="w-full px-3 py-1.5 text-xs rounded-md border border-slate-300 focus:ring-1 focus:ring-amber-500 focus:outline-none"
                 />
               </div>
             </div>

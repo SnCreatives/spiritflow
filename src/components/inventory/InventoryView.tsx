@@ -1,949 +1,265 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Package,
   RefreshCw,
-  AlertCircle,
-  Plus,
-  SlidersHorizontal,
-  FileText,
   Search,
-  CheckCircle2,
-  X,
-  FileCheck2,
-  Database,
-  ArrowDownLeft,
-  ArrowUpRight,
+  Download,
 } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { SupportedLanguage, InventoryRecord, StockLedgerRecord } from '../../types';
-import { apiGet, apiPost } from '../../utils/api';
-import { translations } from '../../utils/i18n';
+import { InventoryRecord } from '../../types';
+import { apiGet } from '../../utils/api';
 import { useBar } from '../../lib/contexts/BarContext';
 import { useToast } from '../../lib/contexts/ToastContext';
-import { BulkImportDialog } from '../common/BulkImportDialog';
-import { ProductPackSizeSelector } from '../common/ProductPackSizeSelector';
 
 interface InventoryViewProps {
-  language: SupportedLanguage;
+  language?: string;
 }
 
-export const InventoryView: React.FC<InventoryViewProps> = ({ language }) => {
-  const t = translations[language];
-  const { showToast } = useToast();
+export const InventoryView: React.FC<InventoryViewProps> = () => {
   const { selectedBar } = useBar();
-  const [activeTab, setActiveTab] = useState<'inventory' | 'ledger' | 'schema'>('inventory');
+  const { showError, showSuccess } = useToast();
+
   const [items, setItems] = useState<InventoryRecord[]>([]);
-  const [ledger, setLedger] = useState<StockLedgerRecord[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
-  const [lowStockFilter, setLowStockFilter] = useState(false);
-  const [chartMetric, setChartMetric] = useState<'totalStock' | 'totalValue'>('totalStock');
-
-  // Modals
-  const [showInwardModal, setShowInwardModal] = useState(false);
-  const [showAdjustmentModal, setShowAdjustmentModal] = useState(false);
-  const [showOpeningModal, setShowOpeningModal] = useState(false);
-  const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
-
-  // Form states
-  const [productsList, setProductsList] = useState<any[]>([]);
-  const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
-  const [submitting, setSubmitting] = useState(false);
-
-  // Inward Purchase Form State
-  const [inwardForm, setInwardForm] = useState({
-    purchaseNumber: '',
-    purchaseDate: new Date().toISOString().split('T')[0],
-    tpPermitReference: '',
-    exciseReference: '',
-    documentReference: '',
-    productId: '',
-    batchNumber: '',
-    quantity: 10,
-    purchaseTpPrice: 450,
-  });
-
-  // Stock Adjustment Form State
-  const [adjForm, setAdjForm] = useState({
-    adjustmentNumber: `ADJ-${Date.now().toString().slice(-6)}`,
-    adjustmentDate: new Date().toISOString().split('T')[0],
-    productId: '',
-    adjustmentType: 'ADJUSTMENT_IN' as 'ADJUSTMENT_IN' | 'ADJUSTMENT_OUT' | 'RETURN_IN' | 'RETURN_OUT' | 'CORRECTION',
-    quantity: 1,
-    reason: '',
-  });
-
-  // Opening Stock Form State
-  const [openingForm, setOpeningForm] = useState({
-    productId: '',
-    quantity: 50,
-    purchaseTpPrice: 400,
-    batchNumber: 'BATCH-OPENING',
-    remarks: 'Initial Opening Stock',
-  });
-
-  // Schema state
-  const [schemaStatus, setSchemaStatus] = useState<any>(null);
+  const [lowStockOnly, setLowStockOnly] = useState(false);
 
   const fetchInventory = async () => {
+    if (!selectedBar?.id || selectedBar.id === 'ALL_BARS') {
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
-    setError(null);
     setItems([]);
     try {
-      const barParam = selectedBar?.id ? `&barId=${encodeURIComponent(selectedBar.id)}` : '';
-      const data = await apiGet(`/api/inventory?search=${encodeURIComponent(search)}&lowStockOnly=${lowStockFilter}${barParam}`);
+      const data = await apiGet(`/api/inventory?barId=${encodeURIComponent(selectedBar.id)}&search=${encodeURIComponent(search)}&lowStockOnly=${lowStockOnly}`);
       if (!data.success) {
         throw new Error(data.error?.message || 'Failed to fetch inventory');
       }
       setItems(data.data?.items || []);
     } catch (err: any) {
-      setError(err.message);
+      showError(err.message || 'Error loading inventory');
     } finally {
       setLoading(false);
     }
   };
 
-  const fetchLedger = async () => {
-    setLedger([]);
-    try {
-      const ledgerUrl = selectedBar?.id ? `/api/inventory/ledger?barId=${encodeURIComponent(selectedBar.id)}` : '/api/inventory/ledger';
-      const data = await apiGet(ledgerUrl);
-      if (data.success) {
-        setLedger(data.data?.ledger || []);
-      }
-    } catch {}
-  };
-
-  const fetchDropdownData = async () => {
-    try {
-      const pData = await apiGet('/api/products/selection');
-      if (pData.success) {
-        const items = pData.data?.items || [];
-        setProductsList(items);
-        if (items.length > 0) {
-          setInwardForm(prev => ({ ...prev, productId: items[0].id }));
-          setAdjForm(prev => ({ ...prev, productId: items[0].id }));
-          setOpeningForm(prev => ({ ...prev, productId: items[0].id }));
-        }
-      }
-    } catch {}
-  };
-
-  const fetchSchemaReport = async () => {
-    try {
-      const data = await apiGet('/api/database/verify');
-      if (data.success) {
-        setSchemaStatus(data.data);
-      }
-    } catch {}
-  };
-
   useEffect(() => {
     fetchInventory();
-    fetchLedger();
-    fetchDropdownData();
-    fetchSchemaReport();
-  }, [selectedBar?.id]);
+  }, [selectedBar?.id, lowStockOnly]);
 
-  const handleInwardSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSubmitting(true);
-    setFeedback(null);
-    try {
-      const data = await apiPost('/api/inventory/purchases', {
-        barId: selectedBar?.id,
-        purchaseNumber: inwardForm.purchaseNumber || `PO-${Date.now().toString().slice(-6)}`,
-        purchaseDate: inwardForm.purchaseDate,
-        tpPermitReference: inwardForm.tpPermitReference || null,
-        exciseReference: inwardForm.exciseReference || null,
-        documentReference: inwardForm.documentReference || null,
-        items: [
-          {
-            productId: inwardForm.productId,
-            batchNumber: inwardForm.batchNumber || null,
-            quantity: Number(inwardForm.quantity),
-            purchaseTpPrice: Number(inwardForm.purchaseTpPrice),
-          },
-        ],
-      });
-      if (!data.success) {
-        throw new Error(data.error?.message || 'Inward purchase failed');
-      }
-      showToast(`Inward Purchase #${data.data.purchaseNumber} recorded into stock & ledger successfully!`, 'success');
-      setShowInwardModal(false);
-      fetchInventory();
-      fetchLedger();
-    } catch (err: any) {
-      showToast(err.message, 'error');
-    } finally {
-      setSubmitting(false);
-    }
+  const handleExportCSV = () => {
+    if (items.length === 0 || !selectedBar) return;
+    let csv = `Product Name,SKU,Category,Brand,Opening,Inward (+),Adjustments,Current Stock,Valuation (INR)\n`;
+    items.forEach(item => {
+      const p = (item.product as any) || {};
+      const qty = Number(item.current_quantity ?? item.current_stock ?? 0);
+      const val = Number(item.stock_value) || (qty * Number(p.purchase_tp_price || 0));
+      csv += `"${p.product_name || p.name || ''}","${p.sku || ''}","${p.category?.name || ''}","${p.brand?.name || p.brand?.brand_name || ''}",${item.opening_quantity ?? item.opening_stock ?? 0},${item.purchased_quantity || 0},${item.adjustment_quantity ?? 0},${qty},${val}\n`;
+    });
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Inventory_${selectedBar.name}_${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    showSuccess('Inventory exported.');
   };
 
-  const handleAdjustmentSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSubmitting(true);
-    setFeedback(null);
-    try {
-      const data = await apiPost('/api/inventory/adjustments', {
-        adjustmentNumber: adjForm.adjustmentNumber,
-        adjustmentDate: adjForm.adjustmentDate,
-        productId: adjForm.productId,
-        adjustmentType: adjForm.adjustmentType,
-        quantity: Number(adjForm.quantity),
-        reason: adjForm.reason || 'Inventory Adjustment',
-      });
-      if (!data.success) {
-        throw new Error(data.error?.message || 'Stock adjustment failed');
-      }
-      showToast(`Adjustment #${data.data.adjustmentNumber} applied. New stock: ${data.data.newStock}`, 'success');
-      setShowAdjustmentModal(false);
-      fetchInventory();
-      fetchLedger();
-    } catch (err: any) {
-      showToast(err.message, 'error');
-    } finally {
-      setSubmitting(false);
-    }
-  };
+  // Calculations for summary footer
+  const totalUnits = items.reduce((sum, item) => sum + Number(item.current_quantity ?? item.current_stock ?? 0), 0);
+  const totalValuation = items.reduce((sum, item) => {
+    const qty = Number(item.current_quantity ?? item.current_stock ?? 0);
+    const p = (item.product as any) || {};
+    return sum + (Number(item.stock_value) || (qty * Number(p.purchase_tp_price || 0)));
+  }, 0);
 
-  const handleOpeningSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSubmitting(true);
-    setFeedback(null);
-    try {
-      const data = await apiPost('/api/inventory/opening-stock', {
-        productId: openingForm.productId,
-        quantity: Number(openingForm.quantity),
-        purchaseTpPrice: Number(openingForm.purchaseTpPrice),
-        batchNumber: openingForm.batchNumber,
-        remarks: openingForm.remarks,
-      });
-      if (!data.success) {
-        throw new Error(data.error?.message || 'Opening stock failed');
-      }
-      showToast(`Opening stock recorded! Current stock: ${data.data.currentStock}`, 'success');
-      setShowOpeningModal(false);
-      fetchInventory();
-      fetchLedger();
-    } catch (err: any) {
-      showToast(err.message, 'error');
-    } finally {
-      setSubmitting(false);
-    }
-  };
+  if (!selectedBar || selectedBar.id === 'ALL_BARS') {
+    return (
+      <div className="px-4 sm:px-6 py-12 max-w-xl mx-auto text-center">
+        <div className="p-8 bg-white border border-slate-200 rounded-xl">
+          <h2 className="text-base font-bold text-slate-900 mb-1">Select a Bar</h2>
+          <p className="text-xs text-slate-500">
+            Please choose a specific bar outlet to view live inventory records.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="page-container px-4 sm:px-6 lg:px-8 py-8 space-y-6">
-      {/* Header & Actions */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-slate-900 border border-slate-800 p-6 rounded-2xl">
+    <div className="px-4 sm:px-8 py-8 max-w-7xl mx-auto space-y-8 font-sans text-slate-700">
+      {/* 2. SIMPLE PAGE STRUCTURE: Page Title, Short description, Primary Action */}
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-6 border-b border-slate-200 pb-6">
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-white tracking-tight flex items-center gap-2.5">
-            <Package className="w-6 h-6 text-amber-400" />
-            <span>{t.navInventory} & Stock Control</span>
-            {selectedBar && (
-              <span className="ml-2 px-3 py-1 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-500 text-sm font-medium">
-                {selectedBar.name}
-              </span>
-            )}
-          </h1>
-          <p className="text-xs sm:text-sm text-slate-400 mt-1">
-            Current Stock = Opening + Inward/Purchases + Adjustments (In) + Returns (In) - Adjustments (Out) - Returns (Out)
+          <div className="flex items-center gap-2 mb-1">
+            <div className="w-2 h-6 bg-amber-500 rounded-full"></div>
+            <h1 className="text-2xl font-black text-slate-900 tracking-tight uppercase">Inventory Ledger</h1>
+          </div>
+          <p className="text-sm text-slate-500 font-medium">
+            Live stock balance, inward/outward breakdown, and valuation for <span className="text-slate-900 font-bold">{selectedBar.name}</span>.
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex items-center gap-3">
           <button
             type="button"
-            onClick={() => setIsBulkModalOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-medium transition-colors"
+            onClick={handleExportCSV}
+            disabled={items.length === 0}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-bold text-slate-700 disabled:opacity-50 transition-all cursor-pointer shadow-xs"
           >
-            <Database className="w-3.5 h-3.5 text-amber-400" />
-            <span>Import Opening Stock</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setShowOpeningModal(true)}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-medium transition-colors"
-          >
-            <Plus className="w-3.5 h-3.5 text-cyan-400" />
-            <span>Opening Stock</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setShowInwardModal(true)}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-lg shadow-emerald-900/20 transition-colors"
-          >
-            <ArrowDownLeft className="w-3.5 h-3.5" />
-            <span>Inward / Purchase</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setShowAdjustmentModal(true)}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-medium transition-colors"
-          >
-            <SlidersHorizontal className="w-3.5 h-3.5 text-amber-400" />
-            <span>Stock Adjustment</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={fetchInventory}
-            className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700"
-            title="Refresh"
-          >
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            <Download className="w-4 h-4" />
+            <span>EXPORT CSV</span>
           </button>
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="flex items-center gap-2 border-b border-slate-800 pb-2">
+      {/* Filters / Search */}
+      <div className="flex flex-col md:flex-row items-center justify-between gap-4 bg-white p-4 border border-slate-200 rounded-2xl shadow-sm">
+        <div className="flex flex-col md:flex-row items-center gap-4 w-full md:w-auto">
+          <div className="relative w-full md:w-96">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
+            <input
+              type="text"
+              placeholder="Search product, SKU, brand, category..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && fetchInventory()}
+              className="w-full pl-10 pr-4 py-2.5 text-xs rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 font-medium transition-all"
+            />
+          </div>
+
+          <label className="flex items-center gap-3 text-xs text-slate-600 cursor-pointer select-none bg-slate-50 px-4 py-2.5 rounded-xl border border-slate-100 hover:border-amber-200 transition-all">
+            <input
+              type="checkbox"
+              checked={lowStockOnly}
+              onChange={e => setLowStockOnly(e.target.checked)}
+              className="w-4 h-4 rounded-md border-slate-300 text-amber-500 focus:ring-amber-500/20 cursor-pointer"
+            />
+            <span className="font-bold uppercase tracking-tight">Low Stock Alerts (≤ 10)</span>
+          </label>
+        </div>
+
         <button
           type="button"
-          onClick={() => setActiveTab('inventory')}
-          className={`px-4 py-2 rounded-xl text-xs font-semibold transition-colors ${
-            activeTab === 'inventory' ? 'bg-amber-500 text-slate-950' : 'text-slate-400 hover:text-white hover:bg-slate-800'
-          }`}
+          onClick={fetchInventory}
+          disabled={loading}
+          className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-slate-100 bg-slate-50 hover:bg-slate-100 text-xs font-bold text-slate-600 w-full md:w-auto justify-center cursor-pointer transition-colors"
         >
-          Current Stock
-        </button>
-        <button
-          type="button"
-          onClick={() => { setActiveTab('ledger'); fetchLedger(); }}
-          className={`px-4 py-2 rounded-xl text-xs font-semibold transition-colors ${
-            activeTab === 'ledger' ? 'bg-amber-500 text-slate-950' : 'text-slate-400 hover:text-white hover:bg-slate-800'
-          }`}
-        >
-          Stock Ledger Audit
-        </button>
-        <button
-          type="button"
-          onClick={() => { setActiveTab('schema'); fetchSchemaReport(); }}
-          className={`px-4 py-2 rounded-xl text-xs font-semibold transition-colors ${
-            activeTab === 'schema' ? 'bg-amber-500 text-slate-950' : 'text-slate-400 hover:text-white hover:bg-slate-800'
-          }`}
-        >
-          Schema & Verification (19 Tables)
+          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+          <span>REFRESH STOCK</span>
         </button>
       </div>
 
-      {activeTab === 'inventory' && (
-        <div className="space-y-4">
-          {/* Filter Bar */}
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-slate-900 border border-slate-800 p-4 rounded-xl">
-            <div className="relative w-full sm:w-80">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-              <input
-                type="text"
-                placeholder="Search stock by product, SKU..."
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && fetchInventory()}
-                className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-9 pr-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500"
-              />
-            </div>
-
-            <label className="flex items-center gap-2 cursor-pointer text-xs text-slate-300">
-              <input
-                type="checkbox"
-                checked={lowStockFilter}
-                onChange={e => {
-                  setLowStockFilter(e.target.checked);
-                  setTimeout(fetchInventory, 50);
-                }}
-                className="rounded border-slate-700 bg-slate-950 text-amber-500 focus:ring-0"
-              />
-              <span>Show Low Stock Only (≤ 10 units)</span>
-            </label>
-          </div>
-
-          {/* Category Stock Distribution Bar Chart */}
-          {(() => {
-            const categoryDataMap = new Map<string, { category: string; totalStock: number; totalValue: number; itemCount: number }>();
-            items.forEach(item => {
-              const catName = (item.product as any)?.category?.name || 'Uncategorized';
-              const existing = categoryDataMap.get(catName) || { category: catName, totalStock: 0, totalValue: 0, itemCount: 0 };
-              existing.totalStock += Number(item.current_quantity || 0);
-              existing.totalValue += Number(item.stock_value || 0);
-              existing.itemCount += 1;
-              categoryDataMap.set(catName, existing);
-            });
-            const chartData = Array.from(categoryDataMap.values());
-
-            return (
-              <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl shadow-xl space-y-4">
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
-                  <div>
-                    <h3 className="text-sm font-bold text-white">Stock Distribution by Category</h3>
-                    <p className="text-xs text-slate-400">Interactive category-wise stock quantities and valuation</p>
-                  </div>
-                  <div className="flex items-center gap-2 bg-slate-950 p-1 rounded-xl border border-slate-800">
-                    <button
-                      type="button"
-                      onClick={() => setChartMetric('totalStock')}
-                      className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors ${
-                        chartMetric === 'totalStock' ? 'bg-amber-500 text-slate-950' : 'text-slate-400 hover:text-white'
-                      }`}
-                    >
-                      Quantity (Units)
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setChartMetric('totalValue')}
-                      className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors ${
-                        chartMetric === 'totalValue' ? 'bg-amber-500 text-slate-950' : 'text-slate-400 hover:text-white'
-                      }`}
-                    >
-                      Valuation (₹)
-                    </button>
-                  </div>
-                </div>
-
-                <div className="h-64 w-full">
-                  {chartData.length === 0 ? (
-                    <div className="h-full flex items-center justify-center text-xs text-slate-500">
-                      No stock data available for chart
-                    </div>
-                  ) : (
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={chartData} margin={{ top: 10, right: 20, left: 0, bottom: 25 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
-                        <XAxis
-                          dataKey="category"
-                          stroke="#94a3b8"
-                          fontSize={11}
-                          tickLine={false}
-                          angle={-15}
-                          textAnchor="end"
-                        />
-                        <YAxis
-                          stroke="#94a3b8"
-                          fontSize={11}
-                          tickLine={false}
-                          axisLine={false}
-                          tickFormatter={val => chartMetric === 'totalValue' ? `₹${val >= 1000 ? (val/1000).toFixed(0) + 'k' : val}` : val}
-                        />
-                        <Tooltip
-                          contentStyle={{ backgroundColor: '#090d16', borderColor: '#334155', borderRadius: '0.75rem', color: '#fff', fontSize: '12px' }}
-                          formatter={(val: any) => [
-                            chartMetric === 'totalValue' ? `₹${Number(val).toLocaleString()}` : `${Number(val).toLocaleString()} units`,
-                            chartMetric === 'totalValue' ? 'Total Valuation' : 'Total Quantity'
-                          ]}
-                        />
-                        <Bar
-                          dataKey={chartMetric}
-                          fill="#f59e0b"
-                          radius={[6, 6, 0, 0]}
-                        />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  )}
-                </div>
-              </div>
-            );
-          })()}
-
-          {/* Inventory Table */}
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl overflow-hidden">
-            <div className="table-container">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-slate-950/80 text-[11px] text-slate-400 uppercase tracking-wider border-b border-slate-800">
-                  <tr>
-                    <th className="py-3 px-4 font-semibold">Product Name</th>
-                    <th className="py-3 px-4 font-semibold">Category</th>
-                    <th className="py-3 px-4 font-semibold">Brand</th>
-                    <th className="py-3 px-4 font-semibold text-right">Opening</th>
-                    <th className="py-3 px-4 font-semibold text-right">Purchased/Inward</th>
-                    <th className="py-3 px-4 font-semibold text-right">Adjustments</th>
-                    <th className="py-3 px-4 font-semibold text-right text-amber-400">Current Stock</th>
-                    <th className="py-3 px-4 font-semibold text-right">Valuation (₹)</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-800">
-                  {items.length > 0 ? (
-                    items.map(item => {
-                      const prod = (item.product as any) || {};
-                      const qty = Number(item.current_quantity ?? item.current_stock ?? 0);
-                      const tpPrice = Number(prod.purchase_tp_price || 0);
-                      const val = Number(item.stock_value) || (qty * tpPrice);
-
-                      return (
-                        <tr key={item.id} className="hover:bg-slate-800/40 transition-colors">
-                          <td className="py-3 px-4 font-medium text-white">
-                            <div>{prod.product_name || prod.name || 'Unnamed Product'}</div>
-                            <span className="text-[10px] text-slate-400">SKU: {prod.sku || 'N/A'}</span>
-                          </td>
-                          <td className="py-3 px-4 text-slate-300">{prod.category?.name || '—'}</td>
-                          <td className="py-3 px-4 text-slate-300">{prod.brand?.brand_name || prod.brand?.name || '—'}</td>
-                          <td className="py-3 px-4 text-right text-slate-300">{item.opening_quantity ?? item.opening_stock ?? 0}</td>
-                          <td className="py-3 px-4 text-right text-emerald-400 font-medium">+{item.purchased_quantity || 0}</td>
-                          <td className="py-3 px-4 text-right text-slate-300">{item.adjustment_quantity ?? item.adjustments ?? 0}</td>
-                          <td className="py-3 px-4 text-right">
-                            <span className={`px-2 py-0.5 rounded font-bold ${qty <= 10 ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30' : 'bg-amber-500/20 text-amber-400 border border-amber-500/30'}`}>
-                              {qty}
-                            </span>
-                          </td>
-                          <td className="py-3 px-4 text-right font-semibold text-slate-200">
-                            ₹{val.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                          </td>
-                        </tr>
-                      );
-                    })
-                  ) : (
-                    <tr>
-                      <td colSpan={8} className="py-12 text-center text-slate-400">
-                        No inventory records found. Use "Opening Stock" or "Inward / Purchase" to add stock.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {activeTab === 'ledger' && (
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl overflow-hidden">
-          <div className="p-4 border-b border-slate-800 flex items-center justify-between">
-            <h3 className="text-sm font-bold text-white flex items-center gap-2">
-              <FileCheck2 className="w-4 h-4 text-cyan-400" />
-              <span>Stock Ledger Audit Records</span>
-            </h3>
-            <span className="text-xs text-slate-400">Strict reconciliation with Inventory Table</span>
-          </div>
-          <div className="table-container">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-slate-950/80 text-[11px] text-slate-400 uppercase tracking-wider border-b border-slate-800">
+      {/* Main Content: Records Table */}
+      <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs">
+            <thead className="bg-slate-50/50 border-b border-slate-100 text-slate-400 font-black uppercase tracking-widest text-[10px]">
+              <tr>
+                <th className="px-6 py-4">Product Identity</th>
+                <th className="px-6 py-4">SKU / Code</th>
+                <th className="px-6 py-4">Category</th>
+                <th className="px-6 py-4 text-right">Opening</th>
+                <th className="px-6 py-4 text-right text-emerald-600">Inward (+)</th>
+                <th className="px-6 py-4 text-right text-rose-600">Sales (-)</th>
+                <th className="px-6 py-4 text-right">Adjust</th>
+                <th className="px-6 py-4 text-right font-black text-slate-900 bg-slate-50/30">CURRENT STOCK</th>
+                <th className="px-6 py-4 text-right">Valuation (₹)</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-50 text-slate-700">
+              {loading ? (
                 <tr>
-                  <th className="py-3 px-4 font-semibold">Date & Time</th>
-                  <th className="py-3 px-4 font-semibold">Product</th>
-                  <th className="py-3 px-4 font-semibold">Type</th>
-                  <th className="py-3 px-4 font-semibold">Reference</th>
-                  <th className="py-3 px-4 font-semibold text-right text-emerald-400">Stock In (+)</th>
-                  <th className="py-3 px-4 font-semibold text-right text-rose-400">Stock Out (-)</th>
-                  <th className="py-3 px-4 font-semibold text-right text-amber-400">Balance</th>
-                  <th className="py-3 px-4 font-semibold">Remarks</th>
+                  <td colSpan={9} className="px-6 py-12 text-center">
+                    <div className="flex flex-col items-center gap-2">
+                      <RefreshCw className="w-8 h-8 text-slate-200 animate-spin" />
+                      <span className="text-slate-400 font-bold uppercase tracking-tighter">Syncing physical stock...</span>
+                    </div>
+                  </td>
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-800">
-                {ledger.length > 0 ? (
-                  ledger.map((entry, idx) => (
-                    <tr key={entry.id || idx} className="hover:bg-slate-800/40">
-                      <td className="py-3 px-4 text-slate-400 font-mono text-[11px]">
-                        {entry.transaction_date ? new Date(entry.transaction_date).toLocaleString() : '—'}
+              ) : items.length === 0 ? (
+                <tr>
+                  <td colSpan={9} className="px-6 py-12 text-center">
+                    <div className="flex flex-col items-center gap-3">
+                      <div className="w-12 h-12 rounded-2xl bg-slate-50 flex items-center justify-center text-slate-200">
+                        <RefreshCw className="w-6 h-6" />
+                      </div>
+                      <div className="text-slate-400 font-medium">No inventory records found for this bar.</div>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                items.map(item => {
+                  const prod = (item.product as any) || {};
+                  const qty = Number(item.current_quantity ?? item.current_stock ?? 0);
+                  const tpPrice = Number(prod.purchase_tp_price || 0);
+                  const val = Number(item.stock_value) || (qty * tpPrice);
+                  const isLow = qty <= 10;
+                  const salesQty = Number((item as any).sales_quantity || 0);
+
+                  return (
+                    <tr key={item.id} className="hover:bg-slate-50/50 transition-colors group">
+                      <td className="px-6 py-4">
+                        <div className="flex flex-col">
+                          <span className="font-black text-slate-900 uppercase tracking-tight">{prod.product_name || prod.name || 'Product'}</span>
+                          <span className="text-[10px] text-slate-400 font-bold uppercase">{prod.brand?.brand_name || prod.brand?.name || '—'}</span>
+                        </div>
                       </td>
-                      <td className="py-3 px-4 font-medium text-white">
-                        {(entry.product as any)?.product_name || (entry.product as any)?.name || 'Product'}
-                      </td>
-                      <td className="py-3 px-4">
-                        <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-800 text-slate-300 border border-slate-700">
-                          {entry.transaction_type}
+                      <td className="px-6 py-4 font-mono text-slate-500 font-medium">{prod.sku || '—'}</td>
+                      <td className="px-6 py-4">
+                        <span className="px-2 py-0.5 bg-slate-100 text-slate-600 rounded text-[10px] font-bold uppercase">
+                          {prod.category?.name || '—'}
                         </span>
                       </td>
-                      <td className="py-3 px-4 font-mono text-slate-300">
-                        {entry.reference_number || entry.reference || '—'}
+                      <td className="px-6 py-4 text-right font-mono text-slate-400 font-bold">
+                        {item.opening_quantity ?? item.opening_stock ?? 0}
                       </td>
-                      <td className="py-3 px-4 text-right text-emerald-400 font-semibold">
-                        {entry.stock_in > 0 ? `+${entry.stock_in}` : '—'}
+                      <td className="px-6 py-4 text-right font-mono font-black text-emerald-600">
+                        +{item.purchased_quantity || 0}
                       </td>
-                      <td className="py-3 px-4 text-right text-rose-400 font-semibold">
-                        {entry.stock_out > 0 ? `-${entry.stock_out}` : '—'}
+                      <td className="px-6 py-4 text-right font-mono font-black text-rose-500">
+                        -{salesQty}
                       </td>
-                      <td className="py-3 px-4 text-right font-bold text-amber-400">
-                        {entry.balance}
+                      <td className="px-6 py-4 text-right font-mono text-slate-400">
+                        {item.adjustment_quantity ?? 0}
                       </td>
-                      <td className="py-3 px-4 text-slate-400 text-[11px]">
-                        {entry.remarks || '—'}
+                      <td className="px-6 py-4 text-right font-mono bg-slate-50/30">
+                        <span className={`text-sm font-black ${isLow ? 'text-amber-600 bg-amber-50 px-2 py-1 rounded-lg border border-amber-100 shadow-sm' : 'text-slate-900'}`}>
+                          {qty}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-right font-mono font-black text-slate-900">
+                        ₹{val.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                       </td>
                     </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan={8} className="py-12 text-center text-slate-400">
-                      No ledger transactions recorded yet.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
         </div>
-      )}
 
-      {activeTab === 'schema' && (
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-6">
-          <div className="flex items-center justify-between border-b border-slate-800 pb-4">
-            <div>
-              <h3 className="text-base font-bold text-white flex items-center gap-2">
-                <Database className="w-5 h-5 text-cyan-400" />
-                <span>Supabase Database Schema Integrity Verification</span>
-              </h3>
-              <p className="text-xs text-slate-400 mt-1">
-                Audited against all 19 required tables and zero sales/POS tables.
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={fetchSchemaReport}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs"
-            >
-              <RefreshCw className="w-3.5 h-3.5 text-amber-400" />
-              <span>Re-run Audit</span>
-            </button>
-          </div>
-
-          <div className={`p-4 rounded-xl border ${schemaStatus?.allTablesVerified ? 'bg-emerald-950/40 border-emerald-800 text-emerald-300' : 'bg-amber-950/40 border-amber-800 text-amber-300'} text-xs font-semibold`}>
-            {schemaStatus?.message || 'Database schema audit loaded.'}
-          </div>
-
-          {/* Tables checklist */}
-          <div>
-            <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider mb-2">
-              Verified Database Tables ({schemaStatus?.verifiedTables?.length || 0}/19)
-            </h4>
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-              {(schemaStatus?.verifiedTables || []).map((tName: string) => (
-                <div key={tName} className="p-2 rounded-lg bg-slate-950 border border-slate-800 text-emerald-400 font-mono text-[11px] flex items-center gap-1.5">
-                  <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
-                  <span className="truncate">{tName}</span>
-                </div>
-              ))}
+        {/* Summary Footer */}
+        {items.length > 0 && (
+          <div className="px-6 py-4 bg-slate-900 border-t border-slate-800 flex flex-wrap items-center justify-between gap-6">
+            <span className="text-[10px] text-slate-500 font-black uppercase tracking-[0.2em]">
+              Operational Summary: <strong>{items.length}</strong> SKUs Tracked
+            </span>
+            <div className="flex items-center gap-8">
+              <div className="flex items-baseline gap-2">
+                <span className="text-[10px] text-slate-500 font-bold uppercase">Net Load</span>
+                <strong className="font-mono text-white text-lg font-black">{totalUnits.toLocaleString('en-IN')}</strong>
+              </div>
+              <div className="h-4 w-px bg-slate-800"></div>
+              <div className="flex items-baseline gap-2">
+                <span className="text-[10px] text-amber-500/60 font-bold uppercase tracking-widest">Total Valuation</span>
+                <strong className="font-mono text-amber-500 text-lg font-black tracking-tighter">₹{totalValuation.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong>
+              </div>
             </div>
           </div>
-
-          {/* Clean status */}
-          <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 text-xs space-y-1">
-            <span className="text-slate-400 block font-semibold">Forbidden Tables (Sales / POS / Billing):</span>
-            <span className="text-emerald-400 font-medium">✓ None found. Architecture is strictly Inventory & Excise.</span>
-          </div>
-        </div>
-      )}
-
-      {/* Inward Purchase Modal */}
-      {showInwardModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
-          <form onSubmit={handleInwardSubmit} className="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <h3 className="text-base font-bold text-white flex items-center gap-2">
-                <ArrowDownLeft className="w-5 h-5 text-emerald-400" />
-                <span>Inward Stock / Purchase Entry</span>
-              </h3>
-              <button type="button" onClick={() => setShowInwardModal(false)} className="text-slate-400 hover:text-white">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-              <div>
-                <label className="text-slate-400 block mb-1">Purchase Number *</label>
-                <input
-                  required
-                  type="text"
-                  value={inwardForm.purchaseNumber}
-                  onChange={e => setInwardForm({ ...inwardForm, purchaseNumber: e.target.value })}
-                  placeholder="PO-2026-001"
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-white"
-                />
-              </div>
-
-              <div>
-                <label className="text-slate-400 block mb-1">Purchase Date *</label>
-                <input
-                  required
-                  type="date"
-                  value={inwardForm.purchaseDate}
-                  onChange={e => setInwardForm({ ...inwardForm, purchaseDate: e.target.value })}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-white"
-                />
-              </div>
-
-              <div>
-                <label className="text-slate-400 block mb-1">TP Permit Reference</label>
-                <input
-                  type="text"
-                  value={inwardForm.tpPermitReference}
-                  onChange={e => setInwardForm({ ...inwardForm, tpPermitReference: e.target.value })}
-                  placeholder="TP-MH-99482"
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-white"
-                />
-              </div>
-
-              <div>
-                <label className="text-slate-400 block mb-1">Excise Document Ref</label>
-                <input
-                  type="text"
-                  value={inwardForm.exciseReference}
-                  onChange={e => setInwardForm({ ...inwardForm, exciseReference: e.target.value })}
-                  placeholder="EXC-DOC-4481"
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-white"
-                />
-              </div>
-
-              <div className="sm:col-span-2">
-                <ProductPackSizeSelector
-                  value={inwardForm.productId}
-                  onChange={productId => setInwardForm({ ...inwardForm, productId })}
-                  required
-                  label="Product / Brand"
-                />
-              </div>
-
-              <div>
-                <label className="text-slate-400 block mb-1">Batch Number</label>
-                <input
-                  type="text"
-                  value={inwardForm.batchNumber}
-                  onChange={e => setInwardForm({ ...inwardForm, batchNumber: e.target.value })}
-                  placeholder="BATCH-A01"
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-white"
-                />
-              </div>
-
-              <div>
-                <label className="text-slate-400 block mb-1">Quantity (Units) *</label>
-                <input
-                  required
-                  type="number"
-                  min="1"
-                  value={inwardForm.quantity}
-                  onChange={e => setInwardForm({ ...inwardForm, quantity: Number(e.target.value) })}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-white"
-                />
-              </div>
-
-              <div className="sm:col-span-2">
-                <label className="text-slate-400 block mb-1">Purchase TP Price (₹ VAT) *</label>
-                <input
-                  required
-                  type="number"
-                  step="0.01"
-                  value={inwardForm.purchaseTpPrice}
-                  onChange={e => setInwardForm({ ...inwardForm, purchaseTpPrice: Number(e.target.value) })}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-white"
-                />
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
-              <button
-                type="button"
-                onClick={() => setShowInwardModal(false)}
-                className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 text-xs"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={submitting}
-                className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-              >
-                {submitting ? (
-                  <>
-                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                    <span>{t.saving}</span>
-                  </>
-                ) : (
-                  <span>Record Inward Stock</span>
-                )}
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
-
-      {/* Stock Adjustment Modal */}
-      {showAdjustmentModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
-          <form onSubmit={handleAdjustmentSubmit} className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <h3 className="text-base font-bold text-white flex items-center gap-2">
-                <SlidersHorizontal className="w-5 h-5 text-amber-400" />
-                <span>Stock Adjustment</span>
-              </h3>
-              <button type="button" onClick={() => setShowAdjustmentModal(false)} className="text-slate-400 hover:text-white">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="space-y-3 text-xs">
-              <div>
-                <ProductPackSizeSelector
-                  value={adjForm.productId}
-                  onChange={productId => setAdjForm({ ...adjForm, productId })}
-                  required
-                  label="Product / Brand"
-                />
-              </div>
-
-              <div>
-                <label className="text-slate-400 block mb-1">Adjustment Type *</label>
-                <select
-                  value={adjForm.adjustmentType}
-                  onChange={e => setAdjForm({ ...adjForm, adjustmentType: e.target.value as any })}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-white"
-                >
-                  <option value="ADJUSTMENT_IN">Adjustment In (Stock Increase)</option>
-                  <option value="ADJUSTMENT_OUT">Adjustment Out (Stock Reduction)</option>
-                  <option value="RETURN_IN">Return In (Supplier/Stock Return Inward)</option>
-                  <option value="RETURN_OUT">Return Out (Return to Distillery/Supplier)</option>
-                  <option value="CORRECTION">Correction</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="text-slate-400 block mb-1">Quantity *</label>
-                <input
-                  required
-                  type="number"
-                  min="1"
-                  value={adjForm.quantity}
-                  onChange={e => setAdjForm({ ...adjForm, quantity: Number(e.target.value) })}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-white"
-                />
-              </div>
-
-              <div>
-                <label className="text-slate-400 block mb-1">Reason / Remarks *</label>
-                <input
-                  required
-                  type="text"
-                  value={adjForm.reason}
-                  onChange={e => setAdjForm({ ...adjForm, reason: e.target.value })}
-                  placeholder="Breakage, wastage, or physical audit count"
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-white"
-                />
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
-              <button
-                type="button"
-                onClick={() => setShowAdjustmentModal(false)}
-                className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 text-xs"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={submitting}
-                className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-              >
-                {submitting ? (
-                  <>
-                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                    <span>{t.saving}</span>
-                  </>
-                ) : (
-                  <span>Apply Adjustment</span>
-                )}
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
-
-      {/* Opening Stock Modal */}
-      {showOpeningModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
-          <form onSubmit={handleOpeningSubmit} className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <h3 className="text-base font-bold text-white flex items-center gap-2">
-                <Plus className="w-5 h-5 text-cyan-400" />
-                <span>Record Initial Opening Stock</span>
-              </h3>
-              <button type="button" onClick={() => setShowOpeningModal(false)} className="text-slate-400 hover:text-white">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="space-y-3 text-xs">
-              <div>
-                <ProductPackSizeSelector
-                  value={openingForm.productId}
-                  onChange={productId => setOpeningForm({ ...openingForm, productId })}
-                  required
-                  label="Product / Brand"
-                />
-              </div>
-
-              <div>
-                <label className="text-slate-400 block mb-1">Opening Quantity *</label>
-                <input
-                  required
-                  type="number"
-                  min="0"
-                  value={openingForm.quantity}
-                  onChange={e => setOpeningForm({ ...openingForm, quantity: Number(e.target.value) })}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-white"
-                />
-              </div>
-
-              <div>
-                <label className="text-slate-400 block mb-1">Purchase TP Price (₹) *</label>
-                <input
-                  required
-                  type="number"
-                  step="0.01"
-                  value={openingForm.purchaseTpPrice}
-                  onChange={e => setOpeningForm({ ...openingForm, purchaseTpPrice: Number(e.target.value) })}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-white"
-                />
-              </div>
-
-              <div>
-                <label className="text-slate-400 block mb-1">Batch Number</label>
-                <input
-                  type="text"
-                  value={openingForm.batchNumber}
-                  onChange={e => setOpeningForm({ ...openingForm, batchNumber: e.target.value })}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-white"
-                />
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
-              <button
-                type="button"
-                onClick={() => setShowOpeningModal(false)}
-                className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 text-xs"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={submitting}
-                className="px-4 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-semibold text-xs transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-              >
-                {submitting ? (
-                  <>
-                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                    <span>{t.saving}</span>
-                  </>
-                ) : (
-                  <span>Set Opening Stock</span>
-                )}
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
-
-      <BulkImportDialog
-        isOpen={isBulkModalOpen}
-        onClose={() => setIsBulkModalOpen(false)}
-        module="opening-stock"
-        language={language}
-        onSuccess={() => {
-          fetchInventory();
-          showToast('Bulk opening stock processed and verified successfully.', 'success');
-        }}
-      />
+        )}
+      </div>
     </div>
   );
 };

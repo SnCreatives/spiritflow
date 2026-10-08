@@ -38,7 +38,26 @@ export const ReportsView: React.FC = () => {
   const { selectedBar } = useBar();
   const { showError, showSuccess } = useToast();
 
-  const [activeReport, setActiveReport] = useState<ReportType>('daily-sales');
+  const validReports: ReportType[] = [
+    'daily-sales',
+    'monthly-report',
+    'excise-log-book',
+    'sales-tax',
+    'sales-summary',
+    'permit-bills',
+    'received-tp',
+    'stock-value',
+    'available-stock',
+  ];
+
+  const [activeReport, setActiveReport] = useState<ReportType>(() => {
+    const params = new URLSearchParams(window.location.search);
+    const tab = params.get('tab') || params.get('report') || params.get('type');
+    if (tab && validReports.includes(tab as ReportType)) {
+      return tab as ReportType;
+    }
+    return 'daily-sales';
+  });
   const [loading, setLoading] = useState(false);
   const [reportData, setReportData] = useState<any | null>(null);
 
@@ -52,6 +71,22 @@ export const ReportsView: React.FC = () => {
   const [endDate, setEndDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
   const [selectedMonth, setSelectedMonth] = useState<string>(() => new Date().toISOString().slice(0, 7));
   const [searchTerm, setSearchTerm] = useState<string>('');
+
+  // Sync with URL parameter changes
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const tab = params.get('tab') || params.get('report') || params.get('type');
+    if (tab && validReports.includes(tab as ReportType)) {
+      setActiveReport(tab as ReportType);
+    }
+  }, [window.location.search]);
+
+  const handleSelectReport = (type: ReportType) => {
+    setActiveReport(type);
+    const url = new URL(window.location.href);
+    url.searchParams.set('tab', type);
+    window.history.replaceState({}, '', url.pathname + url.search);
+  };
 
   // Clear report data immediately on bar change
   useEffect(() => {
@@ -179,94 +214,84 @@ export const ReportsView: React.FC = () => {
   ];
 
   return (
-    <div className="page-container px-4 sm:px-6 lg:px-8 py-8 space-y-6">
-      {/* Header Banner */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+    <div className="px-4 sm:px-6 py-6 max-w-7xl mx-auto space-y-6 font-sans">
+      {/* 2. SIMPLE PAGE STRUCTURE: Page Title, Short description, Primary Action */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-200 pb-4">
         <div>
-          <div className="flex items-center gap-2 text-xs font-bold text-amber-600 uppercase tracking-wider mb-1">
-            <BarChart3 className="w-4 h-4" />
-            Excise & ERP Compliance Reports
-          </div>
-          <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
-            Comprehensive Regulatory & Audit Reports
-          </h1>
+          <h1 className="text-xl font-bold text-slate-900">Reports</h1>
           <p className="text-xs text-slate-500 mt-0.5">
-            Active Bar:{' '}
-            <span className="font-bold text-slate-800 bg-slate-100 px-2 py-0.5 rounded">
-              {selectedBar?.name || 'All Authorized Bars'}
-            </span>
+            Excise compliance and audit registers for <span className="font-semibold text-slate-800">{selectedBar?.name}</span>
           </p>
         </div>
 
-        {/* Global Action Buttons */}
         <div className="flex items-center gap-2">
           <button
             onClick={fetchReport}
             disabled={loading}
-            className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-slate-200 bg-white hover:bg-slate-50 text-xs font-medium text-slate-700 transition-colors cursor-pointer"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-            Refresh
+            <span>Refresh</span>
           </button>
           <button
             onClick={handleExportCSV}
             disabled={loading || !reportData}
-            className="px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-slate-200 bg-white hover:bg-slate-50 text-xs font-medium text-slate-700 transition-colors cursor-pointer disabled:opacity-50"
           >
             <Download className="w-3.5 h-3.5" />
-            Export CSV
+            <span>Export CSV</span>
           </button>
           <button
             onClick={handlePrint}
             disabled={loading || !reportData}
-            className="px-3.5 py-2 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold transition-colors cursor-pointer"
           >
             <Printer className="w-3.5 h-3.5" />
-            Print
+            <span>Print</span>
           </button>
         </div>
       </div>
 
-      {/* 9 Report Navigation Tabs */}
-      <div className="flex flex-wrap gap-1.5 bg-slate-200/70 p-1.5 rounded-2xl border border-slate-300">
+      {/* Report Selection Tabs */}
+      <div className="flex flex-wrap gap-1 bg-slate-100 p-1 rounded-lg border border-slate-200">
         {navTabs.map(tab => {
           const Icon = tab.icon;
           const isActive = activeReport === tab.id;
           return (
             <button
               key={tab.id}
-              onClick={() => setActiveReport(tab.id as ReportType)}
-              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              onClick={() => handleSelectReport(tab.id as ReportType)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors cursor-pointer ${
                 isActive
-                  ? 'bg-white text-amber-700 shadow-sm border border-slate-200/80'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
+                  ? 'bg-white text-slate-900 font-bold shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'
               }`}
             >
               <Icon className="w-3.5 h-3.5 shrink-0" />
-              {tab.label}
+              <span>{tab.label}</span>
             </button>
           );
         })}
       </div>
 
       {/* Date Filters Card */}
-      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-wrap items-center justify-between gap-4">
+      <div className="bg-white p-3 rounded-lg border border-slate-200 flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-3">
           {activeReport === 'daily-sales' ? (
             <div>
-              <label className="block text-[11px] font-bold text-slate-500 uppercase mb-1">
+              <label className="block text-[11px] font-semibold text-slate-600 uppercase mb-1">
                 Report Date
               </label>
               <input
                 type="date"
                 value={singleDate}
                 onChange={e => setSingleDate(e.target.value)}
-                className="px-3 py-1.5 text-xs rounded-lg border border-slate-300 font-medium"
+                className="px-2.5 py-1.5 text-xs rounded-md border border-slate-300 font-medium focus:ring-1 focus:ring-amber-500 focus:outline-none"
               />
             </div>
           ) : activeReport === 'monthly-report' ? (
             <div>
-              <label className="block text-[11px] font-bold text-slate-500 uppercase mb-1">
+              <label className="block text-[11px] font-semibold text-slate-600 uppercase mb-1">
                 Select Month
               </label>
               <input

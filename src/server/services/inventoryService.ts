@@ -320,6 +320,7 @@ export class InventoryService {
       }
 
       // Record in Stock Ledger
+      const scmRemark = (item as any).scmCode ? ` (SCM: ${(item as any).scmCode.trim()})` : '';
       const ledgerPayload: any = {
         product_id: item.productId,
         transaction_date: new Date().toISOString(),
@@ -329,7 +330,7 @@ export class InventoryService {
         stock_in: item.quantity,
         stock_out: 0,
         balance: newCurrentStock,
-        remarks: `Inward Purchase #${purchase.purchase_number}`,
+        remarks: `Inward Purchase #${purchase.purchase_number}${scmRemark}`,
       };
       if (hasBarId && purchaseData.barId) ledgerPayload.bar_id = purchaseData.barId;
 
@@ -345,7 +346,7 @@ export class InventoryService {
           purchase_id: purchase.id,
           quantity: item.quantity,
           document_reference: purchaseData.documentReference || null,
-          remarks: `Inward permit ref for purchase ${purchase.purchase_number}`,
+          remarks: `Inward permit ref for purchase ${purchase.purchase_number}${scmRemark}`,
         });
       }
     }

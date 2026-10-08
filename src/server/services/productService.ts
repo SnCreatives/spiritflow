@@ -537,17 +537,18 @@ export class ProductService {
     // 2. Fetch active SCM codes
     const { data: scmCodes } = await supabase
       .from('scm_codes')
-      .select('scm_code, product_id')
+      .select('id, scm_code, product_id')
       .eq('is_active', true);
 
-    const scmMap: Record<string, string> = {};
+    const scmMap: Record<string, { code: string; id: string }> = {};
     (scmCodes || []).forEach(s => {
-      if (s.product_id) scmMap[s.product_id] = s.scm_code;
+      if (s.product_id) scmMap[s.product_id] = { code: s.scm_code, id: s.id };
     });
 
     // 3. Map items with full metadata
     const items = (products || []).map((row: any) => {
-      const activeScm = scmMap[row.id] || row.sku || '';
+      const activeScm = scmMap[row.id]?.code || row.sku || '';
+      const scmMasterId = scmMap[row.id]?.id || '';
       const pType = ProductMasterService.resolveProductType(row.category?.name || '');
       
       return {
@@ -557,6 +558,8 @@ export class ProductService {
         name: row.name || row.product_name,
         sku: activeScm,
         scm_code: activeScm,
+        scmCode: activeScm,
+        scmMasterId: scmMasterId,
         status: row.status,
         category_id: row.category_id,
         categoryId: row.category_id,

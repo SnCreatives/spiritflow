@@ -256,7 +256,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm font-medium rounded-xl transition-colors"
+            className="px-4 py-2 border border-slate-300 hover:bg-slate-50 text-slate-700 text-xs font-semibold rounded-md transition-colors cursor-pointer"
           >
             {t.cancel}
           </button>
@@ -264,11 +264,11 @@ export const ProductModal: React.FC<ProductModalProps> = ({
             form="product-form"
             type="submit"
             disabled={isSubmitting}
-            className="px-5 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 text-sm font-semibold rounded-xl shadow-md transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            className="px-5 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold rounded-md shadow-xs transition-all disabled:opacity-50 flex items-center gap-2 cursor-pointer"
           >
             {isSubmitting ? (
               <>
-                <RefreshCw className="w-4 h-4 animate-spin" />
+                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
                 <span>Saving...</span>
               </>
             ) : (
@@ -278,43 +278,43 @@ export const ProductModal: React.FC<ProductModalProps> = ({
         </div>
       }
     >
-      <form id="product-form" onSubmit={handleSubmit} className="space-y-6">
+      <form id="product-form" onSubmit={handleSubmit} className="space-y-4 font-sans text-xs">
         {serverError && (
-          <div className="p-3.5 bg-rose-950/50 border border-rose-800/80 rounded-xl text-rose-200 text-xs flex items-start gap-2.5">
-            <AlertCircle className="w-4 h-4 text-rose-400 flex-shrink-0 mt-0.5" />
+          <div className="p-3 bg-rose-50 border border-rose-200 rounded-md text-rose-800 text-xs flex items-start gap-2">
+            <AlertCircle className="w-4 h-4 text-rose-600 flex-shrink-0 mt-0.5" />
             <span>{serverError}</span>
           </div>
         )}
 
         {/* Section 1: Classification & Relations */}
-        <div className="space-y-4">
-          <div className="flex items-center gap-2 text-xs font-semibold text-amber-400 uppercase tracking-wider">
-            <Layers className="w-4 h-4" />
-            <span>Category & Brand Hierarchy (Relational Dependency)</span>
+        <div className="space-y-3">
+          <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800 uppercase tracking-wider">
+            <Layers className="w-3.5 h-3.5 text-amber-600" />
+            <span>Category & Brand Hierarchy</span>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {/* Category */}
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1.5">
-                {t.category} <span className="text-amber-400">*</span>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                {t.category} <span className="text-amber-600">*</span>
               </label>
               <CategorySelector
                 value={categoryId}
                 onChange={setCategoryId}
                 required={true}
                 placeholder="-- Select Category --"
-                theme="dark"
+                theme="light"
               />
               {clientErrors.categoryId && (
-                <p className="text-xs text-rose-400 mt-1">{clientErrors.categoryId}</p>
+                <p className="text-xs text-rose-600 mt-1">{clientErrors.categoryId}</p>
               )}
             </div>
 
             {/* Brand (Category-Grouped Unified Selector) */}
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1.5">
-                {t.brand} <span className="text-amber-400">*</span>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                {t.brand} <span className="text-amber-600">*</span>
               </label>
               <UnifiedBrandSelector
                 value={brandId}
@@ -324,20 +324,20 @@ export const ProductModal: React.FC<ProductModalProps> = ({
                 placeholder="-- Select Brand --"
               />
               {clientErrors.brandId && (
-                <p className="text-xs text-rose-400 mt-1">{clientErrors.brandId}</p>
+                <p className="text-xs text-rose-600 mt-1">{clientErrors.brandId}</p>
               )}
             </div>
 
             {/* Pack Size (Category-Dependent) */}
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1.5">
-                {t.packSize} <span className="text-amber-400">*</span>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                {t.packSize} <span className="text-amber-600">*</span>
               </label>
               <select
                 value={packSizeId}
                 onChange={e => handlePackSizeChange(e.target.value)}
                 disabled={!categoryId || loadingDependencies}
-                className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400 disabled:opacity-50"
+                className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-md text-slate-900 text-xs focus:outline-none focus:ring-1 focus:ring-amber-500 disabled:opacity-50"
               >
                 <option value="">
                   {!categoryId ? 'Select Category First' : packSizes.length === 0 ? 'No pack sizes configured' : '-- Select Pack Size --'}
@@ -349,18 +349,18 @@ export const ProductModal: React.FC<ProductModalProps> = ({
                 ))}
               </select>
               {clientErrors.packSizeId && (
-                <p className="text-xs text-rose-400 mt-1">{clientErrors.packSizeId}</p>
+                <p className="text-xs text-rose-600 mt-1">{clientErrors.packSizeId}</p>
               )}
             </div>
           </div>
         </div>
 
         {/* Section 2: Product Name & SKU */}
-        <div className="space-y-4 pt-2 border-t border-slate-800">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="space-y-3 pt-3 border-t border-slate-200">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div className="sm:col-span-2">
-              <label className="block text-xs font-medium text-slate-300 mb-1.5">
-                {t.productName} <span className="text-amber-400">*</span>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                {t.productName} <span className="text-amber-600">*</span>
               </label>
               <input
                 type="text"
@@ -368,15 +368,15 @@ export const ProductModal: React.FC<ProductModalProps> = ({
                 value={name}
                 onChange={e => setName(e.target.value)}
                 placeholder="e.g. Royal Stag Deluxe Whisky 750ml"
-                className="w-full px-3.5 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400"
+                className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-md text-slate-900 text-xs focus:outline-none focus:ring-1 focus:ring-amber-500"
               />
               {clientErrors.name && (
-                <p className="text-xs text-rose-400 mt-1">{clientErrors.name}</p>
+                <p className="text-xs text-rose-600 mt-1">{clientErrors.name}</p>
               )}
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1.5">
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
                 {t.sku}
               </label>
               <input
@@ -384,27 +384,27 @@ export const ProductModal: React.FC<ProductModalProps> = ({
                 value={sku}
                 onChange={e => setSku(e.target.value.toUpperCase())}
                 placeholder="Auto-generated if blank"
-                className="w-full px-3.5 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white font-mono text-sm uppercase focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400"
+                className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-md text-slate-900 font-mono text-xs uppercase focus:outline-none focus:ring-1 focus:ring-amber-500"
               />
             </div>
           </div>
         </div>
 
         {/* Section 3: Pricing & Inventory */}
-        <div className="space-y-4 pt-2 border-t border-slate-800">
-          <div className="flex items-center gap-2 text-xs font-semibold text-amber-400 uppercase tracking-wider">
-            <Tag className="w-4 h-4" />
-            <span>Pricing (Strict Non-Floating Point Numeric) & Stock</span>
+        <div className="space-y-3 pt-3 border-t border-slate-200">
+          <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800 uppercase tracking-wider">
+            <Tag className="w-3.5 h-3.5 text-amber-600" />
+            <span>Pricing & Stock</span>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {/* Purchase / TP Price */}
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1.5">
-                {t.purchasePrice} <span className="text-amber-400">*</span>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                {t.purchasePrice} <span className="text-amber-600">*</span>
               </label>
               <div className="relative">
-                <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-500 text-xs">
+                <span className="absolute inset-y-0 left-0 pl-2.5 flex items-center text-slate-400 text-xs">
                   ₹
                 </span>
                 <input
@@ -415,21 +415,21 @@ export const ProductModal: React.FC<ProductModalProps> = ({
                   value={purchasePrice}
                   onChange={e => setPurchasePrice(e.target.value === '' ? '' : parseFloat(e.target.value))}
                   placeholder="0.00"
-                  className="w-full pl-7 pr-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white font-mono text-sm focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400"
+                  className="w-full pl-6 pr-3 py-1.5 bg-white border border-slate-300 rounded-md text-slate-900 font-mono text-xs focus:outline-none focus:ring-1 focus:ring-amber-500"
                 />
               </div>
               {clientErrors.purchasePrice && (
-                <p className="text-xs text-rose-400 mt-1">{clientErrors.purchasePrice}</p>
+                <p className="text-xs text-rose-600 mt-1">{clientErrors.purchasePrice}</p>
               )}
             </div>
 
             {/* MRP */}
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1.5">
-                {t.mrp} <span className="text-amber-400">*</span>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                {t.mrp} <span className="text-amber-600">*</span>
               </label>
               <div className="relative">
-                <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-500 text-xs">
+                <span className="absolute inset-y-0 left-0 pl-2.5 flex items-center text-slate-400 text-xs">
                   ₹
                 </span>
                 <input
@@ -440,21 +440,21 @@ export const ProductModal: React.FC<ProductModalProps> = ({
                   value={mrp}
                   onChange={e => setMrp(e.target.value === '' ? '' : parseFloat(e.target.value))}
                   placeholder="0.00"
-                  className="w-full pl-7 pr-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white font-mono text-sm focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400"
+                  className="w-full pl-6 pr-3 py-1.5 bg-white border border-slate-300 rounded-md text-slate-900 font-mono text-xs focus:outline-none focus:ring-1 focus:ring-amber-500"
                 />
               </div>
               {clientErrors.mrp && (
-                <p className="text-xs text-rose-400 mt-1">{clientErrors.mrp}</p>
+                <p className="text-xs text-rose-600 mt-1">{clientErrors.mrp}</p>
               )}
             </div>
 
             {/* Selling Price */}
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1.5">
-                {t.sellingPrice} <span className="text-amber-400">*</span>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                {t.sellingPrice} <span className="text-amber-600">*</span>
               </label>
               <div className="relative">
-                <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-500 text-xs">
+                <span className="absolute inset-y-0 left-0 pl-2.5 flex items-center text-slate-400 text-xs">
                   ₹
                 </span>
                 <input
@@ -465,29 +465,29 @@ export const ProductModal: React.FC<ProductModalProps> = ({
                   value={sellingPrice}
                   onChange={e => setSellingPrice(e.target.value === '' ? '' : parseFloat(e.target.value))}
                   placeholder="0.00"
-                  className={`w-full pl-7 pr-3 py-2 bg-slate-950 border rounded-xl text-white font-mono text-sm focus:outline-none transition-colors ${
+                  className={`w-full pl-6 pr-3 py-1.5 bg-white border rounded-md text-slate-900 font-mono text-xs focus:outline-none focus:ring-1 ${
                     Number(sellingPrice) > Number(mrp) && Number(mrp) > 0
-                      ? 'border-rose-500 focus:ring-1 focus:ring-rose-500'
-                      : 'border-slate-700 focus:border-amber-400 focus:ring-1 focus:ring-amber-400'
+                      ? 'border-rose-400 focus:ring-rose-500'
+                      : 'border-slate-300 focus:ring-amber-500'
                   }`}
                 />
               </div>
               {clientErrors.sellingPrice && (
-                <p className="text-xs text-rose-400 mt-1">{clientErrors.sellingPrice}</p>
+                <p className="text-xs text-rose-600 mt-1">{clientErrors.sellingPrice}</p>
               )}
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
             {/* Status */}
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1.5">
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
                 {t.status}
               </label>
               <select
                 value={status}
                 onChange={e => setStatus(e.target.value as 'Active' | 'Inactive')}
-                className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400"
+                className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-md text-slate-900 text-xs focus:outline-none focus:ring-1 focus:ring-amber-500"
               >
                 <option value="Active">Active (Available for Sale)</option>
                 <option value="Inactive">Inactive (Disabled from Sale)</option>
@@ -497,7 +497,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({
             {/* Opening Stock (Only on creation) */}
             {!productToEdit && (
               <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1.5">
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
                   {t.openingStock} (Units)
                 </label>
                 <input
@@ -506,14 +506,14 @@ export const ProductModal: React.FC<ProductModalProps> = ({
                   step="1"
                   value={openingStock}
                   onChange={e => setOpeningStock(Math.max(0, parseInt(e.target.value, 10) || 0))}
-                  className="w-full px-3.5 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white font-mono text-sm focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400"
+                  className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-md text-slate-900 font-mono text-xs focus:outline-none focus:ring-1 focus:ring-amber-500"
                 />
               </div>
             )}
 
             {/* Compliance Ref */}
             <div className={productToEdit ? 'sm:col-span-2' : ''}>
-              <label className="block text-xs font-medium text-slate-300 mb-1.5">
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
                 {t.complianceRef}
               </label>
               <input
@@ -521,7 +521,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({
                 value={complianceRef}
                 onChange={e => setComplianceRef(e.target.value)}
                 placeholder="e.g. MH-EXC-2026-B"
-                className="w-full px-3.5 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400"
+                className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-md text-slate-900 text-xs focus:outline-none focus:ring-1 focus:ring-amber-500"
               />
             </div>
           </div>

@@ -12,27 +12,59 @@ import {
   Trash2,
   Printer,
   FileSpreadsheet,
+  Download,
   Layers,
   Calendar,
   DollarSign,
   TrendingUp,
   Percent,
   Lock,
+  ChevronRight,
+  Clipboard
 } from 'lucide-react';
 import { useBar } from '../../lib/contexts/BarContext';
 import { useToast } from '../../lib/contexts/ToastContext';
 import { apiGet, apiPost, apiPut, apiDelete } from '../../utils/api';
 import { CanonicalProductSelector, SelectedProductDetail } from '../common/CanonicalProductSelector';
+import { ModalShell } from '../common/ModalShell';
 
-type SubTab = 'add-sale' | 'update-sale' | 'range-sales' | 'closing-sales';
+import { UniversalBulkEntryModal, BulkEntryRow } from '../common/UniversalBulkEntryModal';
+
+type SubTab = 'add-sale' | 'daily-sales' | 'range-sales' | 'closing-sales';
 
 export const SalesTransactionView: React.FC = () => {
   const { selectedBar } = useBar();
   const { showSuccess, showError } = useToast();
 
-  const [activeTab, setActiveTab] = useState<SubTab>('add-sale');
+  const [activeTab, setActiveTab] = useState<SubTab>(() => {
+    const params = new URLSearchParams(window.location.search);
+    const tab = params.get('tab');
+    if (tab === 'daily' || tab === 'daily-sales') return 'daily-sales';
+    if (tab === 'range' || tab === 'range-sales') return 'range-sales';
+    if (tab === 'closing' || tab === 'closing-sales') return 'closing-sales';
+    return 'add-sale';
+  });
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
+  const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
+
+  // Sync tab with URL search parameter
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const tab = params.get('tab');
+    if (tab === 'daily' || tab === 'daily-sales') setActiveTab('daily-sales');
+    else if (tab === 'range' || tab === 'range-sales') setActiveTab('range-sales');
+    else if (tab === 'closing' || tab === 'closing-sales') setActiveTab('closing-sales');
+    else if (!tab || tab === 'add' || tab === 'add-sale') setActiveTab('add-sale');
+  }, [window.location.search]);
+
+  const handleTabChange = (tab: SubTab) => {
+    setActiveTab(tab);
+    const url = new URL(window.location.href);
+    url.searchParams.set('tab', tab);
+    window.history.replaceState({}, '', url.pathname + url.search);
+  };
 
   // Tab 1: Add Sale Form State
   const [saleDate, setSaleDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
@@ -41,16 +73,44 @@ export const SalesTransactionView: React.FC = () => {
   const [checkingStock, setCheckingStock] = useState<boolean>(false);
   const [quantity, setQuantity] = useState<number>(1);
   const [unitPrice, setUnitPrice] = useState<number>(0);
-  const [customerName, setCustomerName] = useState<string>('');
-  const [permitNumber, setPermitNumber] = useState<string>('');
-  const [paymentMethod, setPaymentMethod] = useState<string>('Cash');
   const [remarks, setRemarks] = useState<string>('');
 
-  // Tab 2: Update Sale State
+  const handleAddBulkRows = async (rows: BulkEntryRow[], replace: boolean) => {
+    if (!selectedBar?.id) return;
+    
+    setSubmitting(true);
+    try {
+      const items = rows.map(r => ({
+        productId: r.matchedProductId!,
+        quantity: r.quantity,
+        rate: r.mrp || 0,
+      }));
+
+      const res = await apiPost('/api/sales', {
+        barId: selectedBar.id,
+        saleDate,
+        remarks: 'Bulk imported sales entry',
+        items,
+      });
+
+      if (res.success) {
+        showSuccess(`Successfully imported ${items.length} sales rows.`);
+        fetchDailySales();
+        handleTabChange('daily-sales');
+      } else {
+        throw new Error(res.error?.message || 'Bulk import failed');
+      }
+    } catch (err: any) {
+      showError(err.message || 'Import failed.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // Tab 2: Daily Sales State
+  const [dailyDate, setDailyDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
   const [salesList, setSalesList] = useState<any[]>([]);
   const [searchSale, setSearchSale] = useState<string>('');
-  const [filterStartDate, setFilterStartDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
-  const [filterEndDate, setFilterEndDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
   const [editingSale, setEditingSale] = useState<any | null>(null);
   const [editQuantity, setEditQuantity] = useState<number>(1);
 
@@ -172,75 +232,68 @@ export const SalesTransactionView: React.FC = () => {
       return;
     }
 
-    setSubmitting(true);
-    try {
-      const invoiceNumber = `INV-${Date.now().toString().slice(-6)}`;
-      const payload = {
-        barId: selectedBar.id,
-        invoiceNumber,
-        invoiceDate: saleDate,
-        customerName: customerName.trim() || undefined,
-        customerPermitNumber: permitNumber.trim() || undefined,
-        paymentMethod,
-        remarks: remarks.trim() || undefined,
-        items: [
-          {
-            productId: selectedProduct.productId,
-            quantity,
-            unitPrice,
-            taxableValue,
-            vatRate,
-            vatAmount,
-            totalValue: totalAmount,
-          },
-        ],
-      };
+      setSubmitting(true);
+      setSaveStatus('saving');
+      try {
+        const payload = {
+          barId: selectedBar.id,
+          saleDate: saleDate,
+          remarks: remarks.trim() || undefined,
+          items: [
+            {
+              productId: selectedProduct.productId,
+              quantity,
+              rate: unitPrice,
+            },
+          ],
+        };
 
-      const res = await apiPost('/api/sales', payload);
-      if (res.success) {
-        showSuccess('Sale saved successfully.');
-        // Reset form
-        setQuantity(1);
-        setCustomerName('');
-        setPermitNumber('');
-        setRemarks('');
-        // Update live available stock
-        if (availableStock !== null) {
-          setAvailableStock(Math.max(0, availableStock - quantity));
+        const res = await apiPost('/api/sales', payload);
+        if (res.success) {
+          setSaveStatus('saved');
+          showSuccess('Sale transaction recorded successfully.');
+          // Reset form
+          setQuantity(1);
+          setRemarks('');
+          // Update live available stock
+          if (availableStock !== null) {
+            setAvailableStock(Math.max(0, availableStock - quantity));
+          }
+        } else {
+          throw new Error(res.error?.message || 'Failed to save sales transaction.');
         }
-      } else {
-        throw new Error(res.error?.message || 'Failed to save sales transaction.');
+      } catch (err: any) {
+        showError(err.message || 'Unable to save. Please try again.');
+        setSaveStatus('idle');
+      } finally {
+        setSubmitting(false);
+        setTimeout(() => setSaveStatus('idle'), 1500);
       }
-    } catch (err: any) {
-      showError(err.message || 'Unable to save. Please try again.');
-    } finally {
-      setSubmitting(false);
-    }
   };
 
-  // Fetch Sales for Update Tab
-  const fetchSalesList = useCallback(async () => {
+  // Fetch Sales for Daily Sales Tab
+  const fetchDailySales = useCallback(async () => {
     if (!selectedBar?.id || selectedBar.id === 'ALL_BARS') return;
     setLoading(true);
     try {
       const res = await apiGet(
-        `/api/sales?barId=${encodeURIComponent(selectedBar.id)}&startDate=${filterStartDate}&endDate=${filterEndDate}&search=${encodeURIComponent(searchSale)}&limit=100`
+        `/api/sales?barId=${encodeURIComponent(selectedBar.id)}&startDate=${dailyDate}&endDate=${dailyDate}&search=${encodeURIComponent(searchSale)}&limit=100`
       );
       if (res.success) {
         setSalesList(res.data?.sales || []);
       }
     } catch (err: any) {
-      showError(err.message || 'Failed to load sales transactions.');
+      showError(err.message || 'Failed to load daily sales.');
     } finally {
       setLoading(false);
     }
-  }, [selectedBar?.id, filterStartDate, filterEndDate, searchSale, showError]);
+  }, [selectedBar?.id, dailyDate, searchSale, showError]);
 
   useEffect(() => {
-    if (activeTab === 'update-sale' && selectedBar?.id && selectedBar.id !== 'ALL_BARS') {
-      fetchSalesList();
+    if (activeTab === 'daily-sales' && selectedBar?.id && selectedBar.id !== 'ALL_BARS') {
+      fetchDailySales();
     }
-  }, [activeTab, selectedBar?.id, fetchSalesList]);
+  }, [activeTab, selectedBar?.id, fetchDailySales]);
 
   // Handler: Update Sale Quantity
   const handleUpdateSaleSubmit = async () => {
@@ -263,7 +316,7 @@ export const SalesTransactionView: React.FC = () => {
       if (res.success) {
         showSuccess('Changes updated successfully.');
         setEditingSale(null);
-        fetchSalesList();
+        fetchDailySales();
       } else {
         throw new Error(res.error?.message || 'Failed to update sale.');
       }
@@ -286,7 +339,7 @@ export const SalesTransactionView: React.FC = () => {
       const res = await apiDelete(`/api/sales/${id}?barId=${encodeURIComponent(selectedBar.id)}`);
       if (res.success) {
         showSuccess('Sale deleted successfully and stock restored.');
-        fetchSalesList();
+        fetchDailySales();
       } else {
         throw new Error(res.error?.message || 'Failed to delete sale.');
       }
@@ -381,6 +434,51 @@ export const SalesTransactionView: React.FC = () => {
     return closingStockItems.filter(i => i.closingQuantity > 0 || i.salesQuantity > 0 || i.openingQuantity > 0);
   }, [closingStockItems, showZeroStock]);
 
+  const handleExportDailyCSV = () => {
+    if (salesList.length === 0 || !selectedBar) return;
+    const barName = selectedBar.name;
+    let csv = `Daily Sales Report - ${dailyDate}\n`;
+    csv += `Bar: ${barName}\n`;
+    csv += `Export Date: ${new Date().toISOString()}\n\n`;
+    csv += `Time,Product Type,Brand,Variant,Size,SCM Code,Quantity\n`;
+    
+    salesList.forEach(sale => {
+      const time = new Date(sale.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      (sale.items || []).forEach((item: any) => {
+        csv += `"${time}","${item.product?.category?.name || 'Spirit'}","${item.product?.brand?.name || item.product?.brand_name || ''}","${item.product?.product_name || item.product?.name || ''}","${item.product?.pack_size?.name || item.product?.size || ''}","${item.product?.sku || item.product?.scm_code || ''}",${item.quantity}\n`;
+      });
+    });
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `DailySales_${barName}_${dailyDate}.csv`;
+    a.click();
+    showSuccess('Daily sales export downloaded.');
+  };
+
+  const handleExportRangeCSV = () => {
+    if (rangeSalesData.length === 0 || !selectedBar) return;
+    const barName = selectedBar.name;
+    let csv = `Range Sales Summary: ${rangeStartDate} to ${rangeEndDate}\n`;
+    csv += `Bar: ${barName}\n`;
+    csv += `Export Date: ${new Date().toISOString()}\n\n`;
+    csv += `Product Type,Brand,Variant,Size,Units Sold,Total Value\n`;
+    
+    rangeSalesData.forEach(item => {
+      csv += `"${item.categoryName || 'Spirit'}","${item.brandName}","${item.productName}","${item.volumeMl || ''} ml",${item.totalQuantity},${item.totalValue}\n`;
+    });
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `RangeSales_${barName}_${rangeStartDate}_to_${rangeEndDate}.csv`;
+    a.click();
+    showSuccess('Range sales export downloaded.');
+  };
+
   // Guard for ALL_BARS selection
   if (!selectedBar || selectedBar.id === 'ALL_BARS') {
     return (
@@ -399,77 +497,90 @@ export const SalesTransactionView: React.FC = () => {
   }
 
   return (
-    <div className="page-container px-4 sm:px-6 lg:px-8 py-8 space-y-6">
-      {/* Top Banner & Bar Title */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+    <div className="px-4 sm:px-8 py-8 max-w-7xl mx-auto space-y-8 font-sans text-slate-700">
+      {/* 2. SIMPLE PAGE STRUCTURE: Page Title, Short description, Primary Action */}
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-6 border-b border-slate-200 pb-6">
         <div>
-          <div className="flex items-center gap-2 text-xs font-bold text-amber-600 uppercase tracking-wider mb-1">
-            <ShoppingCart className="w-4 h-4" />
-            Operational Transaction Entry
+          <div className="flex items-center gap-2 mb-1">
+            <div className="w-2 h-6 bg-amber-500 rounded-full"></div>
+            <h1 className="text-2xl font-black text-slate-900 tracking-tight uppercase">Sales Ledger</h1>
           </div>
-          <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
-            Sales & Stock Register
-          </h1>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Active Bar:{' '}
-            <span className="font-bold text-slate-800 bg-slate-100 px-2 py-0.5 rounded">
-              {selectedBar.name}
-            </span>
+          <p className="text-sm text-slate-500 font-medium">
+            Daily counter transactions and operational sales register for <span className="text-slate-900 font-bold">{selectedBar.name}</span>.
           </p>
         </div>
 
         {/* Subtab Navigation */}
-        <div className="flex flex-wrap items-center bg-slate-100 p-1 rounded-xl border border-slate-200">
+        <div className="flex items-center bg-slate-100 p-1 rounded-2xl border border-slate-200 gap-1 shadow-inner">
           <button
-            onClick={() => setActiveTab('add-sale')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+            type="button"
+            onClick={() => handleTabChange('add-sale')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black transition-all cursor-pointer ${
               activeTab === 'add-sale'
-                ? 'bg-white text-amber-700 shadow-sm'
-                : 'text-slate-600 hover:text-slate-900'
+                ? 'bg-white text-slate-900 shadow-sm border border-slate-200'
+                : 'text-slate-500 hover:text-slate-900 hover:bg-white/50'
             }`}
           >
-            <PlusCircle className="w-3.5 h-3.5" />
-            Add Sale
+            <PlusCircle className="w-4 h-4" />
+            <span className="uppercase tracking-wider">New Sale</span>
           </button>
           <button
-            onClick={() => setActiveTab('update-sale')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-              activeTab === 'update-sale'
-                ? 'bg-white text-amber-700 shadow-sm'
-                : 'text-slate-600 hover:text-slate-900'
+            type="button"
+            onClick={() => handleTabChange('daily-sales')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black transition-all cursor-pointer ${
+              activeTab === 'daily-sales'
+                ? 'bg-white text-slate-900 shadow-sm border border-slate-200'
+                : 'text-slate-500 hover:text-slate-900 hover:bg-white/50'
             }`}
           >
-            <FileEdit className="w-3.5 h-3.5" />
-            Update Sale Entry
+            <Calendar className="w-4 h-4" />
+            <span className="uppercase tracking-wider">Daily</span>
           </button>
           <button
-            onClick={() => setActiveTab('range-sales')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+            type="button"
+            onClick={() => handleTabChange('range-sales')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black transition-all cursor-pointer ${
               activeTab === 'range-sales'
-                ? 'bg-white text-amber-700 shadow-sm'
-                : 'text-slate-600 hover:text-slate-900'
+                ? 'bg-white text-slate-900 shadow-sm border border-slate-200'
+                : 'text-slate-500 hover:text-slate-900 hover:bg-white/50'
             }`}
           >
-            <CalendarRange className="w-3.5 h-3.5" />
-            Range Sales
+            <CalendarRange className="w-4 h-4" />
+            <span className="uppercase tracking-wider">Summary</span>
           </button>
           <button
-            onClick={() => setActiveTab('closing-sales')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+            type="button"
+            onClick={() => handleTabChange('closing-sales')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black transition-all cursor-pointer ${
               activeTab === 'closing-sales'
-                ? 'bg-white text-amber-700 shadow-sm'
-                : 'text-slate-600 hover:text-slate-900'
+                ? 'bg-white text-slate-900 shadow-sm border border-slate-200'
+                : 'text-slate-500 hover:text-slate-900 hover:bg-white/50'
             }`}
           >
-            <Archive className="w-3.5 h-3.5" />
-            Closing Sales
+            <Archive className="w-4 h-4" />
+            <span className="uppercase tracking-wider">Closing</span>
           </button>
         </div>
       </div>
 
       {/* TAB 1: ADD SALE */}
       {activeTab === 'add-sale' && (
-        <form onSubmit={handleAddSale} className="space-y-6">
+        <form onSubmit={handleAddSale} className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <div className="w-1.5 h-8 bg-amber-500 rounded-full"></div>
+              <div className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Inventory Outward entry</div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsBulkModalOpen(true)}
+              className="px-5 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 text-[10px] font-black uppercase tracking-widest rounded-xl flex items-center gap-2 cursor-pointer shadow-lg shadow-amber-500/10 transition-all active:scale-95"
+            >
+              <Clipboard className="w-4 h-4" />
+              <span>Paste from Excel</span>
+            </button>
+          </div>
+
           {/* Step 1: Canonical Product Selector */}
           <CanonicalProductSelector
             onSelectProduct={prod => setSelectedProduct(prod)}
@@ -477,46 +588,52 @@ export const SalesTransactionView: React.FC = () => {
           />
 
           {/* Step 2: Transaction Details Form Card */}
-          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-5">
-            <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider border-b border-slate-100 pb-2 flex items-center justify-between">
-              <span>Sale Transaction Parameters</span>
-              {checkingStock && (
-                <span className="text-xs font-normal text-slate-500 animate-pulse">
-                  Checking current stock...
-                </span>
-              )}
+          <div className="bg-white p-6 rounded-[2rem] border border-slate-200 shadow-sm space-y-6">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-slate-900 flex items-center justify-center text-white shadow-lg shadow-slate-900/10">
+                  <Layers className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-slate-900 uppercase tracking-tight">
+                    Sale Parameters
+                  </h3>
+                  <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Entry Verification</p>
+                </div>
+              </div>
+              
               {availableStock !== null && (
-                <span
-                  className={`text-xs px-2.5 py-1 rounded-full font-bold border ${
-                    availableStock > 0
-                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                      : 'bg-rose-50 text-rose-700 border-rose-200'
-                  }`}
-                >
-                  Available Stock: {availableStock} units
-                </span>
+                <div className="flex items-center gap-3">
+                  <div className="text-right hidden sm:block">
+                    <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Physical Availability</div>
+                    <div className={`text-sm font-black font-mono ${availableStock > 0 ? 'text-emerald-600' : 'text-rose-500 animate-pulse'}`}>
+                      {availableStock} Units
+                    </div>
+                  </div>
+                  <div className={`w-2 h-10 rounded-full ${availableStock > 0 ? 'bg-emerald-500/20' : 'bg-rose-500/20'}`}></div>
+                </div>
               )}
-            </h3>
+            </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
               {/* Date */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                  Sale Date *
+              <div className="space-y-1.5">
+                <label className="block text-[11px] font-black uppercase tracking-wider text-slate-400 ml-1">
+                  Sale Posting Date *
                 </label>
                 <input
                   type="date"
                   value={saleDate}
                   onChange={e => setSaleDate(e.target.value)}
                   required
-                  className="w-full px-3 py-2 text-xs font-medium rounded-lg border border-slate-300 focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                  className="w-full px-4 py-3 text-xs rounded-xl border border-slate-200 bg-white font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition-all shadow-sm"
                 />
               </div>
 
               {/* Quantity */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                  Quantity (Units/Bottles) *
+              <div className="space-y-1.5">
+                <label className="block text-[11px] font-black uppercase tracking-wider text-slate-400 ml-1">
+                  Units / Bottles *
                 </label>
                 <input
                   type="number"
@@ -525,13 +642,13 @@ export const SalesTransactionView: React.FC = () => {
                   value={quantity}
                   onChange={e => setQuantity(Math.max(1, parseInt(e.target.value, 10) || 1))}
                   required
-                  className="w-full px-3 py-2 text-xs font-medium rounded-lg border border-slate-300 focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                  className="w-full px-4 py-3 text-xs rounded-xl border border-slate-200 bg-white font-mono font-black text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition-all shadow-sm"
                 />
               </div>
 
               {/* Unit MRP / Selling Price */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+              <div className="space-y-1.5">
+                <label className="block text-[11px] font-black uppercase tracking-wider text-slate-400 ml-1">
                   Unit MRP (₹) *
                 </label>
                 <input
@@ -541,263 +658,223 @@ export const SalesTransactionView: React.FC = () => {
                   value={unitPrice}
                   onChange={e => setUnitPrice(parseFloat(e.target.value) || 0)}
                   required
-                  className="w-full px-3 py-2 text-xs font-medium rounded-lg border border-slate-300 focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                  className="w-full px-4 py-3 text-xs rounded-xl border border-slate-200 bg-white font-mono font-black text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition-all shadow-sm"
                 />
               </div>
 
-              {/* Payment Method */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                  Payment Method
+              {/* Remaining Stock (Calculated) */}
+              <div className="space-y-1.5">
+                <label className="block text-[11px] font-black uppercase tracking-wider text-slate-400 ml-1">
+                  Post-Sale Balance
                 </label>
-                <select
-                  value={paymentMethod}
-                  onChange={e => setPaymentMethod(e.target.value)}
-                  className="w-full px-3 py-2 text-xs font-medium rounded-lg border border-slate-300 bg-white focus:ring-2 focus:ring-amber-500 focus:outline-none"
-                >
-                  <option value="Cash">Cash</option>
-                  <option value="UPI / QR">UPI / QR</option>
-                  <option value="Card">Card</option>
-                  <option value="Credit / Ledger">Credit / Ledger</option>
-                </select>
-              </div>
-
-              {/* Customer Name */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                  Customer Name
-                </label>
-                <input
-                  type="text"
-                  placeholder="Counter / Customer Name"
-                  value={customerName}
-                  onChange={e => setCustomerName(e.target.value)}
-                  className="w-full px-3 py-2 text-xs font-medium rounded-lg border border-slate-300 focus:ring-2 focus:ring-amber-500 focus:outline-none"
-                />
-              </div>
-
-              {/* Permit Number */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                  Permit Number (If Applicable)
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. MH-PERMIT-4091"
-                  value={permitNumber}
-                  onChange={e => setPermitNumber(e.target.value)}
-                  className="w-full px-3 py-2 text-xs font-medium rounded-lg border border-slate-300 focus:ring-2 focus:ring-amber-500 focus:outline-none"
-                />
+                <div className="w-full px-4 py-3 rounded-xl border border-slate-100 bg-slate-50/50 font-mono font-black text-slate-500 shadow-inner flex items-center justify-between">
+                  <span>{availableStock !== null ? Math.max(0, availableStock - quantity) : '—'}</span>
+                  <span className="text-[10px] uppercase font-bold tracking-widest text-slate-400">Bottles</span>
+                </div>
               </div>
 
               {/* Remarks */}
-              <div className="sm:col-span-2">
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                  Remarks / Notes
+              <div className="sm:col-span-4 space-y-1.5">
+                <label className="block text-[11px] font-black uppercase tracking-wider text-slate-400 ml-1">
+                  Audit Remarks / Notes
                 </label>
                 <input
                   type="text"
-                  placeholder="Optional transaction reference"
+                  placeholder="Optional operational reference for this transaction..."
                   value={remarks}
                   onChange={e => setRemarks(e.target.value)}
-                  className="w-full px-3 py-2 text-xs font-medium rounded-lg border border-slate-300 focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                  className="w-full px-4 py-3 text-xs rounded-xl border border-slate-200 bg-white font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition-all shadow-sm"
                 />
               </div>
             </div>
 
-            {/* Calculations Breakdown Card */}
-            <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 flex flex-wrap items-center justify-between gap-4">
-              <div className="flex flex-wrap items-center gap-6">
+            {/* Calculations Breakdown and Save Button */}
+            <div className="p-6 bg-slate-900 rounded-[2rem] shadow-2xl shadow-slate-900/20 flex flex-wrap items-center justify-between gap-8 border border-slate-800">
+              <div className="flex items-center gap-10">
                 <div>
-                  <span className="text-[11px] font-bold text-slate-500 uppercase block">
-                    Taxable Value
-                  </span>
-                  <span className="text-sm font-bold text-slate-900">₹{taxableValue}</span>
+                  <div className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-500 mb-2">Net Revenue</div>
+                  <div className="flex items-baseline gap-1 text-white">
+                    <span className="text-sm font-bold text-slate-400">₹</span>
+                    <span className="text-3xl font-black font-mono tracking-tighter">{taxableValue.toLocaleString('en-IN')}</span>
+                  </div>
                 </div>
+                <div className="h-12 w-px bg-slate-800/50"></div>
                 <div>
-                  <span className="text-[11px] font-bold text-slate-500 uppercase block">
-                    Sales Tax Rate
-                  </span>
-                  <span className="text-sm font-bold text-slate-900">{vatRate}%</span>
-                </div>
-                <div>
-                  <span className="text-[11px] font-bold text-slate-500 uppercase block">
-                    VAT Amount
-                  </span>
-                  <span className="text-sm font-bold text-slate-900">₹{vatAmount}</span>
-                </div>
-                <div>
-                  <span className="text-[11px] font-bold text-slate-500 uppercase block">
-                    Total Invoice Amount
-                  </span>
-                  <span className="text-base font-black text-amber-600">₹{totalAmount}</span>
+                  <div className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-500 mb-2">Sales Tax ({vatRate}%)</div>
+                  <div className="flex items-baseline gap-1 text-white">
+                    <span className="text-sm font-bold text-slate-400">₹</span>
+                    <span className="text-3xl font-black font-mono tracking-tighter">{vatAmount.toLocaleString('en-IN')}</span>
+                  </div>
                 </div>
               </div>
+              
+              <div className="flex flex-col sm:flex-row items-center gap-8">
+                <div className="text-right">
+                  <div className="text-[10px] font-black uppercase tracking-[0.3em] text-amber-500 mb-2">Gross Transaction Value</div>
+                  <div className="text-4xl font-black text-amber-500 font-mono tracking-tighter">
+                    ₹{totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </div>
+                </div>
 
-              <button
-                type="submit"
-                disabled={submitting || !selectedProduct}
-                className="px-6 py-2.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold uppercase tracking-wider rounded-xl shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 cursor-pointer"
-              >
-                {submitting ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 animate-spin" />
-                    <span>Saving...</span>
-                  </>
-                ) : (
-                  <>
-                    <CheckCircle2 className="w-4 h-4" />
-                    <span>Record Sale Transaction</span>
-                  </>
-                )}
-              </button>
+                {/* 5. SAVE BUTTON: ONE obvious primary Save button */}
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="px-12 py-3.5 bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-black uppercase tracking-widest rounded-2xl shadow-xl shadow-amber-500/20 transition-all disabled:opacity-50 cursor-pointer active:scale-95"
+                >
+                  {saveStatus === 'saving' ? 'Processing...' : saveStatus === 'saved' ? 'Posted ✓' : 'Post Transaction'}
+                </button>
+              </div>
             </div>
           </div>
         </form>
       )}
 
-      {/* TAB 2: UPDATE SALE ENTRY */}
-      {activeTab === 'update-sale' && (
-        <div className="space-y-4">
-          {/* Filters Card */}
-          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-wrap items-center justify-between gap-4">
-            <div className="flex flex-wrap items-center gap-3">
-              <div>
-                <label className="block text-[11px] font-bold text-slate-500 uppercase mb-1">
-                  From Date
+      {/* TAB 2: DAILY SALES */}
+      {activeTab === 'daily-sales' && (
+        <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+          {/* Date Selector Card */}
+          <div className="bg-white p-4 rounded-2xl border border-slate-200 flex flex-col md:flex-row items-center justify-between gap-6 shadow-sm">
+            <div className="flex flex-wrap items-center gap-6 w-full md:w-auto">
+              <div className="space-y-1.5">
+                <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">
+                  Active Sale Date
                 </label>
                 <input
                   type="date"
-                  value={filterStartDate}
-                  onChange={e => setFilterStartDate(e.target.value)}
-                  className="px-3 py-1.5 text-xs rounded-lg border border-slate-300"
+                  value={dailyDate}
+                  onChange={e => setDailyDate(e.target.value)}
+                  className="px-4 py-2.5 text-xs rounded-xl border border-slate-200 bg-slate-50/50 font-black text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition-all"
                 />
               </div>
-              <div>
-                <label className="block text-[11px] font-bold text-slate-500 uppercase mb-1">
-                  To Date
+              <div className="space-y-1.5 flex-1 md:w-80">
+                <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">
+                  Filter Ledger
                 </label>
-                <input
-                  type="date"
-                  value={filterEndDate}
-                  onChange={e => setFilterEndDate(e.target.value)}
-                  className="px-3 py-1.5 text-xs rounded-lg border border-slate-300"
-                />
-              </div>
-              <div>
-                <label className="block text-[11px] font-bold text-slate-500 uppercase mb-1">
-                  Search Invoice / Product
-                </label>
-                <input
-                  type="text"
-                  placeholder="Invoice number or item"
-                  value={searchSale}
-                  onChange={e => setSearchSale(e.target.value)}
-                  className="px-3 py-1.5 text-xs rounded-lg border border-slate-300 w-48"
-                />
+                <div className="relative">
+                  <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
+                  <input
+                    type="text"
+                    placeholder="Search product variant name..."
+                    value={searchSale}
+                    onChange={e => setSearchSale(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2.5 text-xs rounded-xl border border-slate-200 bg-slate-50/50 font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition-all"
+                  />
+                </div>
               </div>
             </div>
 
-            <button
-              onClick={fetchSalesList}
-              disabled={loading}
-              className="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded-xl transition-all flex items-center gap-2 cursor-pointer"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-              Refresh
-            </button>
+            <div className="flex items-center gap-3 w-full md:w-auto">
+              <button
+                type="button"
+                onClick={handleExportDailyCSV}
+                disabled={salesList.length === 0}
+                className="flex flex-1 md:flex-none items-center justify-center gap-2 px-5 py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-black text-slate-700 disabled:opacity-50 transition-all cursor-pointer shadow-xs uppercase tracking-widest"
+              >
+                <Download className="w-4 h-4" />
+                <span>Export CSV</span>
+              </button>
+              <button
+                onClick={fetchDailySales}
+                disabled={loading}
+                className="flex flex-1 md:flex-none items-center justify-center gap-2 px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-black rounded-xl border border-transparent shadow-lg shadow-slate-900/10 transition-all cursor-pointer uppercase tracking-widest"
+              >
+                <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+                <span>Sync</span>
+              </button>
+            </div>
           </div>
 
-          {/* Table */}
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          {/* Daily Sales Table */}
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
-                <thead className="bg-slate-50 border-b border-slate-200 text-slate-700 uppercase font-bold text-[11px]">
+                <thead className="bg-slate-50/50 border-b border-slate-100 text-slate-400 font-black uppercase tracking-widest text-[10px]">
                   <tr>
-                    <th className="px-4 py-3">Invoice #</th>
-                    <th className="px-4 py-3">Date</th>
-                    <th className="px-4 py-3">Customer / Permit</th>
-                    <th className="px-4 py-3">Items Sold</th>
-                    <th className="px-4 py-3 text-right">Taxable (₹)</th>
-                    <th className="px-4 py-3 text-right">VAT (₹)</th>
-                    <th className="px-4 py-3 text-right">Total (₹)</th>
-                    <th className="px-4 py-3 text-center">Actions</th>
+                    <th className="px-6 py-4">Post Time</th>
+                    <th className="px-6 py-4">Identity</th>
+                    <th className="px-6 py-4">Category</th>
+                    <th className="px-6 py-4">Bottle Size</th>
+                    <th className="px-6 py-4">SCM Code</th>
+                    <th className="px-6 py-4 text-right">Sold Qty</th>
+                    <th className="px-6 py-4 text-center">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
+                <tbody className="divide-y divide-slate-50">
                   {loading ? (
                     <tr>
-                      <td colSpan={8} className="px-4 py-8 text-center text-slate-400">
-                        <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-amber-500" />
-                        Loading sales transactions...
+                      <td colSpan={8} className="px-6 py-12 text-center">
+                        <div className="flex flex-col items-center gap-2">
+                          <RefreshCw className="w-8 h-8 text-slate-200 animate-spin" />
+                          <span className="text-slate-400 font-bold uppercase tracking-tighter">Scanning daily sales registry...</span>
+                        </div>
                       </td>
                     </tr>
                   ) : salesList.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="px-4 py-8 text-center text-slate-400">
-                        No sales transactions found for this date range in {selectedBar.name}.
+                      <td colSpan={8} className="px-6 py-12 text-center">
+                        <div className="flex flex-col items-center gap-3 text-slate-400">
+                          <div className="w-12 h-12 rounded-2xl bg-slate-50 flex items-center justify-center">
+                            <ShoppingCart className="w-6 h-6" />
+                          </div>
+                          <p className="font-medium">No sales transactions recorded for {dailyDate}.</p>
+                        </div>
                       </td>
                     </tr>
                   ) : (
                     salesList.map(sale => (
-                      <tr key={sale.id} className="hover:bg-slate-50/80 transition-colors">
-                        <td className="px-4 py-3 font-mono font-bold text-slate-900">
-                          {sale.invoice_number}
-                        </td>
-                        <td className="px-4 py-3 text-slate-600">
-                          {sale.invoice_date?.split('T')[0]}
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className="font-semibold text-slate-900 block">
-                            {sale.customer_name || 'Counter Customer'}
-                          </span>
-                          {sale.customer_permit_number && (
-                            <span className="text-[10px] text-amber-700 font-mono">
-                              Permit: {sale.customer_permit_number}
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3">
-                          {(sale.items || []).map((item: any, idx: number) => (
-                            <div key={idx} className="text-slate-700">
-                              <span className="font-medium">
-                                {item.product?.name || item.product?.product_name || 'Product'}
-                              </span>{' '}
-                              <strong className="text-slate-900">x{item.quantity}</strong>
-                            </div>
-                          ))}
-                        </td>
-                        <td className="px-4 py-3 text-right font-medium text-slate-700">
-                          ₹{Number(sale.total_taxable_value || 0).toFixed(2)}
-                        </td>
-                        <td className="px-4 py-3 text-right font-medium text-slate-700">
-                          ₹{Number(sale.total_vat_amount || 0).toFixed(2)}
-                        </td>
-                        <td className="px-4 py-3 text-right font-bold text-slate-900">
-                          ₹{Number(sale.total_invoice_value || 0).toFixed(2)}
-                        </td>
-                        <td className="px-4 py-3 text-center">
-                          <div className="flex items-center justify-center gap-1.5">
-                            <button
-                              onClick={() => {
-                                setEditingSale(sale);
-                                setEditQuantity(Number(sale.items?.[0]?.quantity || 1));
-                              }}
-                              className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                              title="Edit Quantity"
-                            >
-                              <FileEdit className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={() => handleDeleteSale(sale.id)}
-                              className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
-                              title="Delete Transaction"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
+                      <React.Fragment key={sale.id}>
+                        {(sale.items || []).map((item: any, idx: number) => (
+                          <tr key={`${sale.id}-${idx}`} className="hover:bg-slate-50/50 transition-colors group">
+                            <td className="px-6 py-4 text-slate-400 font-mono font-bold">
+                              {new Date(sale.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </td>
+                            <td className="px-6 py-4">
+                              <div className="flex flex-col">
+                                <span className="font-black text-slate-900 uppercase tracking-tight">{item.product?.product_name || item.product?.name || '—'}</span>
+                                <span className="text-[10px] text-slate-400 font-bold uppercase">{item.product?.brand?.name || item.product?.brand_name || '—'}</span>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4">
+                              <span className="px-2 py-0.5 bg-slate-100 text-slate-600 rounded text-[10px] font-bold uppercase tracking-tighter">
+                                {item.product?.category?.name || 'Spirit'}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-slate-500 font-bold">
+                              {item.product?.pack_size?.name || item.product?.size || '—'}
+                            </td>
+                            <td className="px-6 py-4 font-mono text-slate-400 font-medium tracking-tighter">
+                              {item.product?.sku || item.product?.scm_code || '—'}
+                            </td>
+                            <td className="px-6 py-4 text-right">
+                              <span className="px-3 py-1 bg-amber-50 text-amber-900 border border-amber-100 rounded-lg font-mono font-black text-sm">
+                                {item.quantity}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 text-center">
+                              <div className="flex items-center justify-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <button
+                                  onClick={() => {
+                                    setEditingSale(sale);
+                                    setEditQuantity(Number(item.quantity || 1));
+                                  }}
+                                  className="p-2 rounded-lg text-slate-400 hover:text-slate-900 hover:bg-white border border-transparent hover:border-slate-200 transition-all cursor-pointer shadow-xs"
+                                  title="Correct Entry"
+                                >
+                                  <FileEdit className="w-4 h-4" />
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteSale(sale.id)}
+                                  className="p-2 rounded-lg text-slate-300 hover:text-rose-600 hover:bg-rose-50 border border-transparent hover:border-rose-100 transition-all cursor-pointer shadow-xs"
+                                  title="Delete Record"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </React.Fragment>
                     ))
                   )}
                 </tbody>
@@ -805,146 +882,156 @@ export const SalesTransactionView: React.FC = () => {
             </div>
           </div>
 
-          {/* Edit Modal */}
-          {editingSale && (
-            <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-              <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl border border-slate-200 space-y-4">
-                <h3 className="text-sm font-bold text-slate-900 uppercase">
-                  Update Sale: {editingSale.invoice_number}
-                </h3>
-                <p className="text-xs text-slate-600">
-                  Product: {editingSale.items?.[0]?.product?.name || 'Selected Item'}
-                </p>
+          {/* Edit Sale Modal */}
+          <ModalShell
+            isOpen={!!editingSale}
+            onClose={() => setEditingSale(null)}
+            title="Correct Sale Entry"
+            subtitle={`Invoice: ${editingSale?.invoice_number || 'Internal Ref'}`}
+            icon={<FileEdit className="w-5 h-5" />}
+            maxWidth="max-w-md"
+            footer={
+              <div className="flex justify-end gap-3 w-full">
+                <button
+                  onClick={() => setEditingSale(null)}
+                  className="px-6 py-2.5 rounded-xl border border-slate-200 text-slate-700 text-xs font-black transition-all uppercase tracking-widest"
+                >
+                  Discard
+                </button>
+                <button
+                  onClick={handleUpdateSaleSubmit}
+                  disabled={submitting}
+                  className="px-10 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-black shadow-lg shadow-amber-500/20 transition-all disabled:opacity-50 active:scale-95 uppercase tracking-widest"
+                >
+                  {submitting ? 'SYNCING...' : 'Update & Rebalance'}
+                </button>
+              </div>
+            }
+          >
+            {editingSale && (
+              <div className="space-y-6">
+                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                  <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Product Identity</div>
+                  <div className="text-sm font-black text-slate-900 uppercase tracking-tight truncate">
+                    {editingSale.items?.[0]?.product?.name || 'Consignment Item'}
+                  </div>
+                </div>
 
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                    Corrected Quantity *
+                <div className="space-y-1.5">
+                  <label className="block text-[11px] font-black uppercase tracking-wider text-slate-400 ml-1">
+                    Corrected Physical Quantity *
                   </label>
                   <input
                     type="number"
                     min="1"
                     value={editQuantity}
                     onChange={e => setEditQuantity(Math.max(1, parseInt(e.target.value, 10) || 1))}
-                    className="w-full px-3 py-2 text-sm rounded-lg border border-slate-300"
+                    className="w-full px-4 py-3 text-sm rounded-xl border border-slate-200 bg-white font-mono font-black text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition-all shadow-sm"
                   />
-                  <p className="text-[11px] text-slate-500 mt-1">
-                    Stock ledger will be automatically rebalanced upon update.
-                  </p>
-                </div>
-
-                <div className="flex justify-end gap-2 pt-2">
-                  <button
-                    onClick={() => setEditingSale(null)}
-                    className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleUpdateSaleSubmit}
-                    disabled={submitting}
-                    className="px-5 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-xl disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                  >
-                    {submitting ? (
-                      <>
-                        <RefreshCw className="w-4 h-4 animate-spin" />
-                        <span>Saving...</span>
-                      </>
-                    ) : (
-                      <span>Update Transaction</span>
-                    )}
-                  </button>
+                  <div className="flex items-center gap-2 mt-2 px-1">
+                    <AlertCircle className="w-3.5 h-3.5 text-amber-500" />
+                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">
+                      Inventory valuation & Stock ledger will be rebalanced automatically.
+                    </p>
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            )}
+          </ModalShell>
         </div>
       )}
 
       {/* TAB 3: RANGE SALES */}
       {activeTab === 'range-sales' && (
-        <div className="space-y-4">
-          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-wrap items-center justify-between gap-4">
-            <div className="flex flex-wrap items-center gap-3">
-              <div>
-                <label className="block text-[11px] font-bold text-slate-500 uppercase mb-1">
-                  From Date
+        <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+          <div className="bg-white p-4 rounded-2xl border border-slate-200 flex flex-col md:flex-row items-center justify-between gap-6 shadow-sm">
+            <div className="flex flex-wrap items-center gap-6 w-full md:w-auto">
+              <div className="space-y-1.5">
+                <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">
+                  Start Date
                 </label>
                 <input
                   type="date"
                   value={rangeStartDate}
                   onChange={e => setRangeStartDate(e.target.value)}
-                  className="px-3 py-1.5 text-xs rounded-lg border border-slate-300"
+                  className="px-4 py-2.5 text-xs rounded-xl border border-slate-200 bg-slate-50/50 font-black text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition-all"
                 />
               </div>
-              <div>
-                <label className="block text-[11px] font-bold text-slate-500 uppercase mb-1">
-                  To Date
+              <div className="space-y-1.5">
+                <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">
+                  End Date
                 </label>
                 <input
                   type="date"
                   value={rangeEndDate}
                   onChange={e => setRangeEndDate(e.target.value)}
-                  className="px-3 py-1.5 text-xs rounded-lg border border-slate-300"
+                  className="px-4 py-2.5 text-xs rounded-xl border border-slate-200 bg-slate-50/50 font-black text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition-all"
                 />
               </div>
             </div>
 
-            <button
-              onClick={fetchRangeSales}
-              disabled={loading}
-              className="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded-xl transition-all flex items-center gap-2 cursor-pointer"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-              Calculate Range
-            </button>
+            <div className="flex items-center gap-3 w-full md:w-auto">
+              <button
+                type="button"
+                onClick={handleExportRangeCSV}
+                disabled={rangeSalesData.length === 0}
+                className="flex flex-1 md:flex-none items-center justify-center gap-2 px-5 py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-black text-slate-700 disabled:opacity-50 transition-all cursor-pointer shadow-xs uppercase tracking-widest"
+              >
+                <Download className="w-4 h-4" />
+                <span>Export Summary</span>
+              </button>
+              <button
+                onClick={fetchRangeSales}
+                disabled={loading}
+                className="flex flex-1 md:flex-none items-center justify-center gap-2 px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-black rounded-xl border border-transparent shadow-lg shadow-slate-900/10 transition-all cursor-pointer uppercase tracking-widest"
+              >
+                <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+                <span>Process Report</span>
+              </button>
+            </div>
           </div>
 
           {/* Range Sales Table */}
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
-                <thead className="bg-slate-50 border-b border-slate-200 text-slate-700 uppercase font-bold text-[11px]">
+                <thead className="bg-slate-50/50 border-b border-slate-100 text-slate-400 font-black uppercase tracking-widest text-[10px]">
                   <tr>
-                    <th className="px-4 py-3">Product Name</th>
-                    <th className="px-4 py-3">Brand</th>
-                    <th className="px-4 py-3">Category</th>
-                    <th className="px-4 py-3 text-right">Units Sold</th>
-                    <th className="px-4 py-3 text-right">Taxable (₹)</th>
-                    <th className="px-4 py-3 text-right">VAT (₹)</th>
-                    <th className="px-4 py-3 text-right">Total Value (₹)</th>
+                    <th className="px-6 py-4">Brand Identity</th>
+                    <th className="px-6 py-4">Variant</th>
+                    <th className="px-6 py-4">Category</th>
+                    <th className="px-6 py-4 text-right">Units Sold</th>
+                    <th className="px-6 py-4 text-right">Total Net Value</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
+                <tbody className="divide-y divide-slate-50">
                   {loading ? (
                     <tr>
-                      <td colSpan={7} className="px-4 py-8 text-center text-slate-400">
-                        <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-amber-500" />
-                        Generating range sales summary...
+                      <td colSpan={5} className="px-6 py-12 text-center text-slate-400 font-black uppercase tracking-widest">
+                        Scanning time period ledger...
                       </td>
                     </tr>
                   ) : rangeSalesData.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="px-4 py-8 text-center text-slate-400">
-                        No sales recorded for this date range in {selectedBar.name}.
+                      <td colSpan={5} className="px-6 py-12 text-center text-slate-400 font-medium">
+                        No sales found for this period.
                       </td>
                     </tr>
                   ) : (
                     rangeSalesData.map((item, idx) => (
-                      <tr key={idx} className="hover:bg-slate-50/80 transition-colors">
-                        <td className="px-4 py-3 font-bold text-slate-900">{item.productName}</td>
-                        <td className="px-4 py-3 text-slate-600">{item.brandName}</td>
-                        <td className="px-4 py-3 text-slate-600">{item.categoryName}</td>
-                        <td className="px-4 py-3 text-right font-mono font-bold text-slate-900">
-                          {item.totalQuantity}
+                      <tr key={idx} className="hover:bg-slate-50/50 transition-colors">
+                        <td className="px-6 py-4 font-black text-slate-900 uppercase tracking-tight">{item.brandName}</td>
+                        <td className="px-6 py-4 text-slate-700 font-bold uppercase tracking-tighter">{item.productName}</td>
+                        <td className="px-6 py-4">
+                          <span className="px-2 py-0.5 bg-slate-100 text-slate-500 rounded text-[10px] font-black tracking-widest uppercase">
+                            {item.categoryName || 'Spirit'}
+                          </span>
                         </td>
-                        <td className="px-4 py-3 text-right font-medium text-slate-700">
-                          ₹{Number(item.totalTaxable || 0).toFixed(2)}
+                        <td className="px-6 py-4 text-right">
+                          <span className="font-mono font-black text-slate-900 text-sm">{item.totalQuantity}</span>
                         </td>
-                        <td className="px-4 py-3 text-right font-medium text-slate-700">
-                          ₹{Number(item.totalVat || 0).toFixed(2)}
-                        </td>
-                        <td className="px-4 py-3 text-right font-black text-amber-600">
-                          ₹{Number(item.totalValue || 0).toFixed(2)}
+                        <td className="px-6 py-4 text-right font-mono font-black text-amber-600">
+                          ₹{Number(item.totalValue || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                         </td>
                       </tr>
                     ))
@@ -958,131 +1045,122 @@ export const SalesTransactionView: React.FC = () => {
 
       {/* TAB 4: CLOSING SALES & CLOSING STOCK */}
       {activeTab === 'closing-sales' && (
-        <div className="space-y-4">
-          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-wrap items-center justify-between gap-4">
-            <div className="flex flex-wrap items-center gap-3">
-              <div>
-                <label className="block text-[11px] font-bold text-slate-500 uppercase mb-1">
-                  From Opening Stock Date
-                </label>
+        <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+          <div className="bg-white p-4 rounded-2xl border border-slate-200 flex flex-col md:flex-row items-center justify-between gap-6 shadow-sm">
+            <div className="flex flex-wrap items-center gap-6 w-full md:w-auto">
+              <div className="space-y-1.5">
+                <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Period Start</label>
                 <input
                   type="date"
                   value={closingStartDate}
                   onChange={e => setClosingStartDate(e.target.value)}
-                  className="px-3 py-1.5 text-xs rounded-lg border border-slate-300"
+                  className="px-4 py-2.5 text-xs rounded-xl border border-slate-200 bg-slate-50/50 font-black text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition-all"
                 />
               </div>
-              <div>
-                <label className="block text-[11px] font-bold text-slate-500 uppercase mb-1">
-                  To Closing Stock Date
-                </label>
+              <div className="space-y-1.5">
+                <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Period End</label>
                 <input
                   type="date"
                   value={closingEndDate}
                   onChange={e => setClosingEndDate(e.target.value)}
-                  className="px-3 py-1.5 text-xs rounded-lg border border-slate-300"
+                  className="px-4 py-2.5 text-xs rounded-xl border border-slate-200 bg-slate-50/50 font-black text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition-all"
                 />
               </div>
-              <div className="flex items-center gap-2 pt-5">
-                <input
-                  type="checkbox"
-                  id="zeroStock"
-                  checked={showZeroStock}
-                  onChange={e => setShowZeroStock(e.target.checked)}
-                  className="rounded text-amber-600 focus:ring-amber-500"
-                />
-                <label htmlFor="zeroStock" className="text-xs font-bold text-slate-700 select-none">
-                  Show Zero Stock Items
+              <div className="pt-4 flex items-center gap-3">
+                <label className="flex items-center gap-3 text-xs text-slate-600 cursor-pointer select-none bg-slate-50 px-4 py-2.5 rounded-xl border border-slate-100 hover:border-amber-200 transition-all">
+                  <input
+                    type="checkbox"
+                    checked={showZeroStock}
+                    onChange={e => setShowZeroStock(e.target.checked)}
+                    className="w-4 h-4 rounded-md border-slate-300 text-amber-500 focus:ring-amber-500/20 cursor-pointer"
+                  />
+                  <span className="font-bold uppercase tracking-tight">Full Matrix</span>
                 </label>
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3 w-full md:w-auto">
               <button
                 onClick={() => setShowDryModal(true)}
-                className="px-3 py-2 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer"
+                className="flex flex-1 md:flex-none items-center justify-center gap-2 px-5 py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-black text-slate-700 transition-all cursor-pointer shadow-xs uppercase tracking-widest"
               >
-                <Calendar className="w-3.5 h-3.5" />
-                Add Dry Day
+                <Calendar className="w-4 h-4" />
+                <span>Mark Dry Day</span>
               </button>
               <button
                 onClick={fetchClosingStock}
                 disabled={loading}
-                className="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded-xl transition-all flex items-center gap-2 cursor-pointer"
+                className="flex flex-1 md:flex-none items-center justify-center gap-2 px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-black rounded-xl border border-transparent shadow-lg shadow-slate-900/10 transition-all cursor-pointer uppercase tracking-widest"
               >
-                <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-                Generate Closing
+                <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+                <span>Audit Period</span>
               </button>
             </div>
           </div>
 
-          {/* Dry Days Notification Banner if any exist in period */}
+          {/* Dry Days Banner */}
           {dryDays.length > 0 && (
-            <div className="bg-amber-50 border border-amber-200 p-3 rounded-xl flex items-center gap-2 text-xs text-amber-900">
-              <AlertCircle className="w-4 h-4 text-amber-700 shrink-0" />
-              <span>
-                <strong>Configured Dry Days:</strong>{' '}
-                {dryDays.map(d => `${d.dry_date} (${d.reason})`).join(' • ')}
-              </span>
+            <div className="bg-amber-50/80 border border-amber-200 p-4 rounded-2xl flex items-center gap-4 text-xs">
+              <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-200 flex items-center justify-center text-amber-600 shrink-0">
+                <AlertCircle className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="text-[10px] font-black uppercase tracking-widest text-amber-700">Period Sanctions Active</div>
+                <div className="text-amber-900 font-bold mt-0.5">
+                  {dryDays.map(d => `${d.dry_date} (${d.reason})`).join(' • ')}
+                </div>
+              </div>
             </div>
           )}
 
           {/* Closing Stock Matrix Table */}
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
-                <thead className="bg-slate-50 border-b border-slate-200 text-slate-700 uppercase font-bold text-[11px]">
+                <thead className="bg-slate-50/50 border-b border-slate-100 text-slate-400 font-black uppercase tracking-widest text-[10px]">
                   <tr>
-                    <th className="px-4 py-3">Serial</th>
-                    <th className="px-4 py-3">Brand / Product</th>
-                    <th className="px-4 py-3">Type</th>
-                    <th className="px-4 py-3">ML</th>
-                    <th className="px-4 py-3">SCM Code</th>
-                    <th className="px-4 py-3 text-right">Opening</th>
-                    <th className="px-4 py-3 text-right">Received</th>
-                    <th className="px-4 py-3 text-right">Sales</th>
-                    <th className="px-4 py-3 text-right">Closing</th>
-                    <th className="px-4 py-3 text-right">Valuation (₹)</th>
+                    <th className="px-6 py-4">#</th>
+                    <th className="px-6 py-4">Identity</th>
+                    <th className="px-6 py-4">Volume</th>
+                    <th className="px-6 py-4 text-right">Opening</th>
+                    <th className="px-6 py-4 text-right text-emerald-600">Inward (+)</th>
+                    <th className="px-6 py-4 text-right text-rose-600">Sales (-)</th>
+                    <th className="px-6 py-4 text-right font-black text-slate-900 bg-slate-50/30">AUDIT CLOSING</th>
+                    <th className="px-6 py-4 text-right">Valuation</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
+                <tbody className="divide-y divide-slate-50">
                   {loading ? (
                     <tr>
-                      <td colSpan={10} className="px-4 py-8 text-center text-slate-400">
-                        <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-amber-500" />
-                        Calculating authoritative backend closing stock...
+                      <td colSpan={10} className="px-6 py-12 text-center font-black uppercase tracking-widest text-slate-200">
+                        Running reconciliation audit...
                       </td>
                     </tr>
                   ) : displayedClosingItems.length === 0 ? (
                     <tr>
-                      <td colSpan={10} className="px-4 py-8 text-center text-slate-400">
-                        No closing stock records calculated for the selected period in {selectedBar.name}.
+                      <td colSpan={10} className="px-6 py-12 text-center text-slate-400 font-medium">
+                        No closing stock records calculated for the selected period.
                       </td>
                     </tr>
                   ) : (
                     displayedClosingItems.map((item, idx) => (
-                      <tr key={idx} className="hover:bg-slate-50/80 transition-colors">
-                        <td className="px-4 py-3 font-mono text-slate-500">{idx + 1}</td>
-                        <td className="px-4 py-3 font-bold text-slate-900">{item.productName}</td>
-                        <td className="px-4 py-3 text-slate-600">{item.productType}</td>
-                        <td className="px-4 py-3 text-slate-600">{item.volumeMl} ml</td>
-                        <td className="px-4 py-3 font-mono text-amber-800 text-[11px]">
-                          {item.scmCode || 'Pending'}
+                      <tr key={idx} className="hover:bg-slate-50/50 transition-colors">
+                        <td className="px-6 py-4 font-mono font-bold text-slate-300">{idx + 1}</td>
+                        <td className="px-6 py-4">
+                          <div className="flex flex-col">
+                            <span className="font-black text-slate-900 uppercase tracking-tight leading-tight">{item.productName}</span>
+                            <span className="text-[10px] text-slate-400 font-bold uppercase mt-0.5">{item.productType} • SCM: {item.scmCode || '—'}</span>
+                          </div>
                         </td>
-                        <td className="px-4 py-3 text-right font-mono font-medium text-slate-700">
-                          {item.openingQuantity}
+                        <td className="px-6 py-4 text-slate-500 font-bold">{item.volumeMl} ml</td>
+                        <td className="px-6 py-4 text-right font-mono font-bold text-slate-400">{item.openingStock}</td>
+                        <td className="px-6 py-4 text-right font-mono font-black text-emerald-600">+{item.receivedStock}</td>
+                        <td className="px-6 py-4 text-right font-mono font-black text-rose-500">-{item.salesStock}</td>
+                        <td className="px-6 py-4 text-right font-mono font-black text-slate-900 bg-slate-50/30">
+                          <span className="text-sm">{item.closingStock}</span>
                         </td>
-                        <td className="px-4 py-3 text-right font-mono font-medium text-emerald-700">
-                          +{item.receivedQuantity}
-                        </td>
-                        <td className="px-4 py-3 text-right font-mono font-medium text-rose-700">
-                          -{item.salesQuantity}
-                        </td>
-                        <td className="px-4 py-3 text-right font-mono font-black text-slate-900">
-                          {item.closingQuantity}
-                        </td>
-                        <td className="px-4 py-3 text-right font-bold text-amber-700">
-                          ₹{Number(item.stockValuation || 0).toLocaleString()}
+                        <td className="px-6 py-4 text-right font-mono font-black text-slate-900 whitespace-nowrap">
+                          ₹{Number(item.stockValuation || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                         </td>
                       </tr>
                     ))
@@ -1093,63 +1171,67 @@ export const SalesTransactionView: React.FC = () => {
           </div>
 
           {/* Add Dry Day Modal */}
-          {showDryModal && (
-            <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-              <form
-                onSubmit={handleAddDryDay}
-                className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl border border-slate-200 space-y-4"
-              >
-                <h3 className="text-sm font-bold text-slate-900 uppercase flex items-center gap-2">
-                  <Calendar className="w-4 h-4 text-amber-600" />
-                  Add Dry Day for {selectedBar.name}
-                </h3>
+          <ModalShell
+            isOpen={showDryModal}
+            onClose={() => setShowDryModal(false)}
+            title="Declare Dry Day"
+            subtitle="Operational Restriction Entry"
+            icon={<Calendar className="w-5 h-5" />}
+            maxWidth="max-w-md"
+            footer={
+              <div className="flex justify-end gap-3 w-full">
+                <button
+                  type="button"
+                  onClick={() => setShowDryModal(false)}
+                  className="px-6 py-2.5 rounded-xl border border-slate-200 text-slate-700 text-xs font-black uppercase tracking-widest transition-all"
+                >
+                  Discard
+                </button>
+                <button
+                  onClick={handleAddDryDay}
+                  className="px-10 py-2.5 rounded-xl bg-slate-900 text-white text-xs font-black uppercase tracking-widest transition-all active:scale-95 shadow-lg shadow-slate-900/10"
+                >
+                  Confirm Declaration
+                </button>
+              </div>
+            }
+          >
+            <div className="space-y-6">
+              <div className="space-y-1.5">
+                <label className="block text-[11px] font-black uppercase tracking-wider text-slate-400 ml-1">Declare Date *</label>
+                <input
+                  type="date"
+                  value={newDryDate}
+                  onChange={e => setNewDryDate(e.target.value)}
+                  required
+                  className="w-full px-4 py-3 text-xs rounded-xl border border-slate-200 bg-white font-black text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition-all shadow-sm"
+                />
+              </div>
 
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                    Dry Date *
-                  </label>
-                  <input
-                    type="date"
-                    value={newDryDate}
-                    onChange={e => setNewDryDate(e.target.value)}
-                    required
-                    className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                    Reason / Mandate *
-                  </label>
-                  <input
-                    type="text"
-                    value={newDryReason}
-                    onChange={e => setNewDryReason(e.target.value)}
-                    required
-                    className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300"
-                  />
-                </div>
-
-                <div className="flex justify-end gap-2 pt-2">
-                  <button
-                    type="button"
-                    onClick={() => setShowDryModal(false)}
-                    className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    className="px-5 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-xl cursor-pointer"
-                  >
-                    Add Dry Day
-                  </button>
-                </div>
-              </form>
+              <div className="space-y-1.5">
+                <label className="block text-[11px] font-black uppercase tracking-wider text-slate-400 ml-1">Regulatory Mandate / Reason *</label>
+                <input
+                  type="text"
+                  value={newDryReason}
+                  onChange={e => setNewDryReason(e.target.value)}
+                  required
+                  placeholder="e.g. State Excise Mandated..."
+                  className="w-full px-4 py-3 text-xs rounded-xl border border-slate-200 bg-white font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition-all shadow-sm"
+                />
+              </div>
             </div>
-          )}
+          </ModalShell>
         </div>
       )}
+
+      {/* Universal Bulk Import Modal */}
+      <UniversalBulkEntryModal
+        isOpen={isBulkModalOpen}
+        onClose={() => setIsBulkModalOpen(false)}
+        module="sales"
+        language="en"
+        onAddRows={handleAddBulkRows}
+      />
     </div>
   );
 };

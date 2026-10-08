@@ -361,15 +361,12 @@ export const BrandMasterView: React.FC<BrandMasterViewProps> = ({ language }) =>
   };
 
   return (
-    <div className="space-y-6">
-      {/* Title Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+    <div className="space-y-6 font-sans">
+      {/* 2. SIMPLE PAGE STRUCTURE: Page Title, Short description, Primary Action */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-200 pb-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-white flex items-center gap-2.5">
-            <Tag className="w-6 h-6 text-amber-400" />
-            <span>{t.brandsTitle}</span>
-          </h1>
-          <p className="text-xs text-slate-400 mt-1">
+          <h1 className="text-xl font-bold text-slate-900">{t.brandsTitle}</h1>
+          <p className="text-xs text-slate-500 mt-0.5">
             Registered excise liquor and beer brands classified by category ({brands.length} Brands)
           </p>
         </div>
@@ -377,32 +374,32 @@ export const BrandMasterView: React.FC<BrandMasterViewProps> = ({ language }) =>
         <div className="flex items-center gap-2">
           <button
             onClick={() => setIsBulkModalOpen(true)}
-            className="inline-flex items-center gap-2 px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-sm rounded-xl border border-slate-700 transition-all cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-slate-200 bg-white hover:bg-slate-50 text-xs font-medium text-slate-700 transition-colors cursor-pointer"
           >
-            <Upload className="w-4 h-4 text-amber-400" />
+            <Upload className="w-3.5 h-3.5" />
             <span>Import</span>
           </button>
           <button
             onClick={handleOpenAdd}
-            className="inline-flex items-center gap-2 px-4 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-semibold text-sm rounded-xl shadow-lg shadow-amber-500/10 transition-all cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold transition-colors cursor-pointer"
           >
-            <Plus className="w-4 h-4" />
+            <Plus className="w-3.5 h-3.5" />
             <span>{t.addBrand}</span>
           </button>
         </div>
       </div>
 
       {/* Filter Bar */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3">
+      <div className="bg-white border border-slate-200 rounded-lg p-3 space-y-3">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div className="relative">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
             <input
               type="text"
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
               placeholder={t.searchBrands}
-              className="w-full pl-9 pr-4 py-2 bg-slate-950 border border-slate-700/80 rounded-xl text-white placeholder-slate-500 text-sm focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400 transition-colors"
+              className="w-full pl-8 pr-3 py-1.5 bg-white border border-slate-300 rounded-md text-slate-900 placeholder-slate-400 text-xs focus:outline-none focus:ring-1 focus:ring-amber-500"
             />
           </div>
 
@@ -415,7 +412,7 @@ export const BrandMasterView: React.FC<BrandMasterViewProps> = ({ language }) =>
               }}
               includeAllOption={true}
               allLabel={t.allCategories}
-              theme="dark"
+              theme="light"
             />
           </div>
 
@@ -426,24 +423,24 @@ export const BrandMasterView: React.FC<BrandMasterViewProps> = ({ language }) =>
               onChange={setSelectedBrandId}
               includeAllOption={true}
               allLabel="All Brands"
-              theme="dark"
+              theme="light"
             />
           </div>
         </div>
 
         {/* Quick Category Filter Pills */}
         {sortedCategories.length > 0 && (
-          <div className="flex items-center gap-2 flex-wrap pt-1">
+          <div className="flex items-center gap-1.5 flex-wrap pt-1 border-t border-slate-100">
             <button
               type="button"
               onClick={() => {
                 setSelectedCategory('');
                 setSelectedBrandId('');
               }}
-              className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
+              className={`px-2.5 py-1 rounded text-xs font-medium transition-colors cursor-pointer ${
                 selectedCategory === ''
-                  ? 'bg-amber-500 text-slate-950'
-                  : 'bg-slate-800 text-slate-300 hover:bg-slate-700 border border-slate-700'
+                  ? 'bg-amber-500 text-slate-950 font-bold'
+                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
               }`}
             >
               All
@@ -456,10 +453,10 @@ export const BrandMasterView: React.FC<BrandMasterViewProps> = ({ language }) =>
                   setSelectedCategory(cat.id);
                   setSelectedBrandId('');
                 }}
-                className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
+                className={`px-2.5 py-1 rounded text-xs font-medium transition-colors cursor-pointer ${
                   selectedCategory === cat.id
-                    ? 'bg-amber-500 text-slate-950'
-                    : 'bg-slate-800 text-slate-300 hover:bg-slate-700 border border-slate-700'
+                    ? 'bg-amber-500 text-slate-950 font-bold'
+                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                 }`}
               >
                 {cat.name}
@@ -470,64 +467,64 @@ export const BrandMasterView: React.FC<BrandMasterViewProps> = ({ language }) =>
       </div>
 
       {/* Category-Grouped Brands Table */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
-        <div className="table-container">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="border-b border-slate-800 bg-slate-950/60 text-slate-400 text-xs uppercase tracking-wider font-semibold">
-                <th className="py-3.5 px-3 w-10 text-center">
+      <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs">
+            <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold uppercase text-[11px]">
+              <tr>
+                <th className="py-2.5 px-3 w-8 text-center">
                   <input
                     type="checkbox"
                     checked={brands.length > 0 && selectedBrandIds.size === brands.length}
                     onChange={handleSelectAll}
-                    className="rounded border-slate-700 bg-slate-950 text-amber-500 focus:ring-amber-400 cursor-pointer"
+                    className="rounded border-slate-300 text-amber-500 focus:ring-0 cursor-pointer"
                     title="Select All Brands"
                   />
                 </th>
-                <th className="py-3.5 px-4">{t.brandName}</th>
-                <th className="py-3.5 px-3">{t.category}</th>
-                <th className="py-3.5 px-3">{t.maharashtraStatus}</th>
-                <th className="py-3.5 px-3 text-center">{t.status}</th>
-                <th className="py-3.5 px-4 text-right">{t.actions}</th>
+                <th className="py-2.5 px-4">{t.brandName}</th>
+                <th className="py-2.5 px-3">{t.category}</th>
+                <th className="py-2.5 px-3">{t.maharashtraStatus}</th>
+                <th className="py-2.5 px-3 text-center">{t.status}</th>
+                <th className="py-2.5 px-4 text-right">{t.actions}</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800 text-sm">
+            <tbody className="divide-y divide-slate-100 text-slate-700">
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="py-12 text-center text-slate-400">
-                    <RefreshCw className="w-6 h-6 animate-spin text-amber-500 mx-auto mb-2" />
+                  <td colSpan={6} className="py-10 text-center text-slate-400">
+                    <RefreshCw className="w-5 h-5 animate-spin text-amber-500 mx-auto mb-2" />
                     <span>{t.loading}</span>
                   </td>
                 </tr>
               ) : error ? (
                 <tr>
-                  <td colSpan={6} className="py-12 text-center text-rose-400">
-                    <AlertCircle className="w-6 h-6 mx-auto mb-2" />
+                  <td colSpan={6} className="py-10 text-center text-rose-600">
+                    <AlertCircle className="w-5 h-5 mx-auto mb-2" />
                     <span>{error}</span>
                   </td>
                 </tr>
               ) : groupedBrands.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-12 text-center text-slate-400">
-                    <Tag className="w-8 h-8 mx-auto mb-2 text-slate-600" />
-                    <p className="font-medium text-slate-300">{t.noDataFound}</p>
+                  <td colSpan={6} className="py-10 text-center text-slate-400">
+                    <Tag className="w-8 h-8 mx-auto mb-2 text-slate-400" />
+                    <p className="font-medium text-slate-700">{t.noDataFound}</p>
                   </td>
                 </tr>
               ) : (
                 groupedBrands.map(group => (
                   <React.Fragment key={group.categoryId}>
                     {/* Distinct Category Group Header Row */}
-                    <tr className="bg-slate-950/90 border-y border-slate-800">
+                    <tr className="bg-slate-100/70 border-y border-slate-200">
                       <td
                         colSpan={6}
-                        className="py-2.5 px-4 text-xs font-bold tracking-widest uppercase text-amber-400"
+                        className="py-1.5 px-4 text-[11px] font-bold tracking-wider uppercase text-slate-800"
                       >
                         <div className="flex items-center justify-between">
-                          <span className="flex items-center gap-2">
+                          <span className="flex items-center gap-1.5">
                             <span>{group.icon}</span>
-                            <span>{group.categoryName.toUpperCase()}</span>
+                            <span>{group.categoryName}</span>
                           </span>
-                          <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-slate-800 text-slate-300">
+                          <span className="font-mono text-[10px] text-slate-500">
                             {group.brands.length} Brands
                           </span>
                         </div>
@@ -536,59 +533,59 @@ export const BrandMasterView: React.FC<BrandMasterViewProps> = ({ language }) =>
 
                     {/* Brands in this Category */}
                     {group.brands.map(brand => (
-                      <tr key={brand.id} className="hover:bg-slate-800/40 transition-colors">
-                        <td className="py-3 px-3 text-center">
+                      <tr key={brand.id} className="hover:bg-slate-50">
+                        <td className="py-2.5 px-3 text-center">
                           <input
                             type="checkbox"
                             checked={selectedBrandIds.has(brand.id)}
                             onChange={() => handleToggleSelectBrand(brand.id)}
-                            className="rounded border-slate-700 bg-slate-950 text-amber-500 focus:ring-amber-400 cursor-pointer"
+                            className="rounded border-slate-300 text-amber-500 focus:ring-0 cursor-pointer"
                           />
                         </td>
-                        <td className="py-3 px-4 font-semibold text-white">
+                        <td className="py-2.5 px-4 font-semibold text-slate-900">
                           {brand.name}
                           {brand.registration_ref && (
-                            <div className="text-xs text-slate-500 font-mono mt-0.5">
+                            <div className="text-[11px] text-slate-500 font-mono mt-0.5">
                               Ref: {brand.registration_ref}
                             </div>
                           )}
                         </td>
-                        <td className="py-3 px-3">
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                        <td className="py-2.5 px-3">
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-slate-100 text-slate-700">
                             {brand.category?.name || group.categoryName}
                           </span>
                         </td>
-                        <td className="py-3 px-3">
-                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-950/70 text-blue-400 border border-blue-800">
+                        <td className="py-2.5 px-3">
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-blue-50 text-blue-700 border border-blue-200">
                             {brand.maharashtra_status || 'Approved'}
                           </span>
                         </td>
-                        <td className="py-3 px-3 text-center">
+                        <td className="py-2.5 px-3 text-center">
                           <span
-                            className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                            className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium ${
                               brand.active
-                                ? 'bg-emerald-950/70 text-emerald-400 border border-emerald-800'
-                                : 'bg-slate-800 text-slate-400 border border-slate-700'
+                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                : 'bg-slate-100 text-slate-500 border border-slate-200'
                             }`}
                           >
                             {brand.active ? t.active : t.inactive}
                           </span>
                         </td>
-                        <td className="py-3 px-4 text-right">
-                          <div className="flex items-center justify-end gap-2">
+                        <td className="py-2.5 px-4 text-right">
+                          <div className="flex items-center justify-end gap-1">
                             <button
                               onClick={() => handleOpenEdit(brand)}
-                              className="p-1.5 text-slate-400 hover:text-amber-400 hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
+                              className="p-1 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded cursor-pointer"
                               title={t.editBrand}
                             >
-                              <Edit2 className="w-4 h-4" />
+                              <Edit2 className="w-3.5 h-3.5" />
                             </button>
                             <button
                               onClick={() => handleDelete(brand)}
-                              className="p-1.5 text-slate-500 hover:text-rose-400 hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
+                              className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded cursor-pointer"
                               title={t.close}
                             >
-                              <Trash2 className="w-4 h-4" />
+                              <Trash2 className="w-3.5 h-3.5" />
                             </button>
                           </div>
                         </td>
@@ -602,7 +599,7 @@ export const BrandMasterView: React.FC<BrandMasterViewProps> = ({ language }) =>
         </div>
 
         {/* Footer Summary */}
-        <div className="px-4 py-3 bg-slate-950/80 border-t border-slate-800 flex items-center justify-between text-xs text-slate-400">
+        <div className="px-4 py-2.5 bg-slate-50 border-t border-slate-200 flex items-center justify-between text-xs text-slate-500">
           <span>
             {t.showing} {brands.length} {t.of} {brands.length} Brands across {groupedBrands.length} Categories
           </span>
@@ -614,13 +611,13 @@ export const BrandMasterView: React.FC<BrandMasterViewProps> = ({ language }) =>
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         title={brandToEdit ? t.editBrand : t.addBrand}
-        icon={<Tag className="w-5 h-5" />}
+        icon={<Tag className="w-5 h-5 text-amber-600" />}
         footer={
           <div className="flex justify-end gap-3">
             <button
               type="button"
               onClick={() => setIsModalOpen(false)}
-              className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-xl"
+              className="px-4 py-2 border border-slate-300 hover:bg-slate-50 text-slate-700 text-xs font-semibold rounded-md transition-colors cursor-pointer"
             >
               {t.cancel}
             </button>
@@ -628,7 +625,7 @@ export const BrandMasterView: React.FC<BrandMasterViewProps> = ({ language }) =>
               form="brand-form"
               type="submit"
               disabled={isSubmitting}
-              className="px-5 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-semibold rounded-xl flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-5 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold rounded-md shadow-xs transition-all flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
             >
               {isSubmitting ? (
                 <>
@@ -642,17 +639,17 @@ export const BrandMasterView: React.FC<BrandMasterViewProps> = ({ language }) =>
           </div>
         }
       >
-        <form id="brand-form" onSubmit={handleSubmit} className="space-y-4">
+        <form id="brand-form" onSubmit={handleSubmit} className="space-y-4 font-sans text-xs">
           {modalError && (
-            <div className="p-3 bg-rose-950/50 border border-rose-800 rounded-xl text-rose-200 text-xs flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 text-rose-400 flex-shrink-0" />
+            <div className="p-3 bg-rose-50 border border-rose-200 rounded-md text-rose-800 text-xs flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-rose-600 flex-shrink-0" />
               <span>{modalError}</span>
             </div>
           )}
 
           <div>
-            <label className="block text-xs font-medium text-slate-300 mb-1.5">
-              {t.brandName} <span className="text-amber-400">*</span>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
+              {t.brandName} <span className="text-amber-600">*</span>
             </label>
             <input
               type="text"
@@ -660,32 +657,32 @@ export const BrandMasterView: React.FC<BrandMasterViewProps> = ({ language }) =>
               value={name}
               onChange={e => setName(e.target.value)}
               placeholder="e.g. Royal Stag"
-              className="w-full px-3.5 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-amber-400"
+              className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-md text-slate-900 text-xs focus:outline-none focus:ring-1 focus:ring-amber-500"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-slate-300 mb-1.5">
-              {t.category} <span className="text-amber-400">*</span>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
+              {t.category} <span className="text-amber-600">*</span>
             </label>
             <CategorySelector
               value={categoryId}
               onChange={setCategoryId}
               required={true}
               placeholder="-- Select Category --"
-              theme="dark"
+              theme="light"
             />
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1.5">
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
                 {t.maharashtraStatus}
               </label>
               <select
                 value={maharashtraStatus}
                 onChange={e => setMaharashtraStatus(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-amber-400"
+                className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-md text-slate-900 text-xs focus:outline-none focus:ring-1 focus:ring-amber-500"
               >
                 <option value="Approved">Approved</option>
                 <option value="Registered">Registered</option>
@@ -694,7 +691,7 @@ export const BrandMasterView: React.FC<BrandMasterViewProps> = ({ language }) =>
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1.5">
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
                 {t.regReference}
               </label>
               <input
@@ -702,20 +699,20 @@ export const BrandMasterView: React.FC<BrandMasterViewProps> = ({ language }) =>
                 value={registrationRef}
                 onChange={e => setRegistrationRef(e.target.value)}
                 placeholder="e.g. MH-BR-2026"
-                className="w-full px-3.5 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-amber-400"
+                className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-md text-slate-900 text-xs focus:outline-none focus:ring-1 focus:ring-amber-500 font-mono"
               />
             </div>
           </div>
 
-          <div className="pt-2 flex items-center gap-2">
+          <div className="pt-1 flex items-center gap-2">
             <input
               type="checkbox"
               id="brandActive"
               checked={active}
               onChange={e => setActive(e.target.checked)}
-              className="rounded border-slate-700 bg-slate-950 text-amber-500 focus:ring-amber-400"
+              className="rounded border-slate-300 text-amber-500 focus:ring-0 cursor-pointer"
             />
-            <label htmlFor="brandActive" className="text-xs text-slate-300">
+            <label htmlFor="brandActive" className="text-xs text-slate-700 cursor-pointer select-none">
               {t.active} (Available for product registration)
             </label>
           </div>

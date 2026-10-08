@@ -27,6 +27,9 @@ import { ErpReportService } from './services/erpReportService.js';
 import { BackupService } from './services/backupService.js';
 import { TaxService } from './services/taxService.js';
 import { createSessionCookie, clearSessionCookie, extractSessionTokenFromCookie, isSecureRequest } from '../lib/auth/session.js';
+import multer from 'multer';
+
+const upload = multer({ storage: multer.memoryStorage() });
 
 export const apiApp = express();
 apiApp.set('trust proxy', 1);
@@ -1310,37 +1313,52 @@ apiApp.get('/api/reports/stock-value', requireAuth, async (req: Request, res: Re
 });
 
 /**
- * 13E. Bar-Scoped Backup & Restore Endpoints
+ * 13E. Bar-Scoped Backup & Restore Endpoints (Business-friendly Excel)
  */
-apiApp.post('/api/backup/export', requireAuth, async (req: Request, res: Response) => {
+apiApp.get('/api/backup/excel/download', requireAuth, async (req: Request, res: Response) => {
   try {
-    const barId = (req as any).barId || req.body.barId;
+    const barId = (req as any).barId || (req.query.barId as string);
     if (!barId || barId === 'ALL_BARS') {
-      return sendError(res, 'BAR_REQUIRED', 'Please select a bar before exporting backup.', 400);
+      return sendError(res, 'BAR_REQUIRED', 'Please select a specific bar before exporting backup.', 400);
     }
     const user = (req as any).user;
-    const backup = await BackupService.exportBackup({
+    const { buffer, fileName } = await BackupService.exportToExcel({
       barId,
-      dataType: req.body.dataType,
       userId: user?.id,
     });
-    return sendSuccess(res, backup);
+    
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename=${fileName}`);
+    return res.send(buffer);
   } catch (err: any) {
     return sendError(res, 'BACKUP_EXPORT_FAILED', err?.message || 'Failed to export backup', 500);
   }
 });
 
-apiApp.post('/api/backup/restore', requireAuth, async (req: Request, res: Response) => {
+apiApp.post('/api/backup/excel/validate', requireAuth, upload.single('file'), async (req: Request, res: Response) => {
   try {
-    const barId = (req as any).barId || req.body.barId;
-    if (!barId || barId === 'ALL_BARS') {
-      return sendError(res, 'BAR_REQUIRED', 'Please select a target bar for restore.', 400);
-    }
+    const barId = (req as any).barId || (req.body.barId as string);
+    if (!req.file) return sendError(res, 'FILE_MISSING', 'Please upload an Excel backup file.', 400);
+    if (!barId) return sendError(res, 'BAR_REQUIRED', 'No active bar context found.', 400);
+
+    const summary = await BackupService.validateExcelBackup(req.file.buffer, barId);
+    return sendSuccess(res, summary);
+  } catch (err: any) {
+    return sendError(res, 'BACKUP_VALIDATION_FAILED', err?.message || 'Validation failed', 400);
+  }
+});
+
+apiApp.post('/api/backup/excel/restore', requireAuth, upload.single('file'), async (req: Request, res: Response) => {
+  try {
+    const barId = (req as any).barId || (req.body.barId as string);
+    if (!req.file) return sendError(res, 'FILE_MISSING', 'Please upload an Excel backup file.', 400);
+    if (!barId) return sendError(res, 'BAR_REQUIRED', 'No active bar context found.', 400);
+
     const user = (req as any).user;
-    const result = await BackupService.restoreBackup(barId, req.body.backupPackage, user?.id);
+    const result = await BackupService.restoreFromExcel(req.file.buffer, barId, user?.id);
     return sendSuccess(res, result);
   } catch (err: any) {
-    return sendError(res, 'BACKUP_RESTORE_FAILED', err?.message || 'Failed to restore backup', 400);
+    return sendError(res, 'BACKUP_RESTORE_FAILED', err?.message || 'Restoration failed', 400);
   }
 });
 

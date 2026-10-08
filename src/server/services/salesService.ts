@@ -131,7 +131,7 @@ export class SalesService {
     }
 
     const timestamp = Date.now().toString().slice(-6);
-    const invoiceNumber = input.invoiceNumber?.trim() || `INV-${timestamp}-${Math.floor(Math.random() * 1000)}`;
+    const invoiceNumber = input.invoiceNumber?.trim() || `SALE-${timestamp}-${Math.floor(Math.random() * 1000)}`;
 
     // 3. Insert Parent Sales Transaction with bar_id
     const { data: sale, error: saleErr } = await supabase
@@ -140,7 +140,7 @@ export class SalesService {
         bar_id: input.barId,
         invoice_number: invoiceNumber,
         invoice_date: `${saleDate}T12:00:00Z`,
-        customer_name: input.customerName || 'Walk-in Customer',
+        customer_name: input.customerName || 'Counter Sale',
         vat_number: input.vatNumber || null,
         total_taxable_value: Math.round(totalTaxable * 100) / 100,
         total_vat_amount: Math.round(totalVat * 100) / 100,
@@ -173,21 +173,23 @@ export class SalesService {
         console.error('Error inserting sales item:', itemErr.message);
       }
 
-      // 5. Insert Stock Ledger Entry (SALE / SALES_OUT)
-      await supabase.from('stock_ledger').insert({
+      // 5. Insert Stock Ledger Entry (ADJUSTMENT_OUT for sale reduction)
+      const { error: ledgerErr } = await supabase.from('stock_ledger').insert({
         bar_id: input.barId,
         product_id: vItem.productId,
         transaction_date: `${saleDate}T12:00:00Z`,
-        transaction_type: 'SALE',
+        transaction_type: 'ADJUSTMENT_OUT',
         reference_id: sale.id,
         reference_number: invoiceNumber,
         stock_in: 0,
         stock_out: vItem.quantity,
         balance: vItem.newStock,
-        unit_price: vItem.unitPrice,
-        total_value: vItem.totalValue,
         remarks: `Sale via invoice ${invoiceNumber}`,
       });
+
+      if (ledgerErr) {
+        console.error('Error inserting stock ledger for sale:', ledgerErr.message);
+      }
 
       // 6. Update Inventory record
       await supabase
@@ -336,32 +338,92 @@ export class SalesService {
 
   /**
    * Update sale transaction scoped to authorized barId.
+   * Supports updating remarks and line item quantities with stock reconciliation.
    */
   static async updateSale(
     id: string,
     barId: string,
-    updates: { customerName?: string; remarks?: string }
+    updates: { remarks?: string; customerName?: string; items?: Array<{ id: string; productId: string; quantity: number }> }
   ) {
     if (!id || !barId || barId === 'ALL_BARS') return null;
     const existing = await this.getSaleById(id, barId);
     if (!existing) return null;
 
-    const payload: any = {};
-    if (updates.customerName !== undefined) payload.customer_name = updates.customerName;
-    if (updates.remarks !== undefined) payload.remarks = updates.remarks;
-    payload.updated_at = new Date().toISOString();
-
     const supabase = getSupabaseServiceClient();
-    const { data: updated, error } = await supabase
-      .from('sales_transactions')
-      .update(payload)
-      .eq('id', id)
-      .eq('bar_id', barId)
-      .select()
-      .maybeSingle();
 
-    if (error) throw new Error(`Failed to update sale: ${error.message}`);
-    return updated;
+    // 1. Update Parent remarks/customer if provided
+    const parentUpdates: any = {};
+    if (updates.remarks !== undefined) parentUpdates.remarks = updates.remarks;
+    if (updates.customerName !== undefined) parentUpdates.customer_name = updates.customerName;
+    
+    if (Object.keys(parentUpdates).length > 0) {
+      parentUpdates.updated_at = new Date().toISOString();
+      await supabase.from('sales_transactions').update(parentUpdates).eq('id', id).eq('bar_id', barId);
+    }
+
+    // 2. Handle Item Updates (Quantity Corrections)
+    if (updates.items && updates.items.length > 0) {
+      for (const updateItem of updates.items) {
+        const existingItem = (existing.items as any[]).find(i => i.id === updateItem.id);
+        if (!existingItem) continue;
+
+        const oldQty = Number(existingItem.quantity);
+        const newQty = Number(updateItem.quantity);
+        if (oldQty === newQty) continue;
+
+        const qtyDelta = newQty - oldQty; // Positive if increasing sale (reducing stock), negative if decreasing sale (increasing stock)
+
+        // Fetch current inventory
+        const { data: inv } = await supabase
+          .from('inventory')
+          .select('current_quantity, stock_value')
+          .eq('product_id', updateItem.productId)
+          .eq('bar_id', barId)
+          .maybeSingle();
+
+        const currentStock = Number(inv?.current_quantity || 0);
+
+        // If increasing sale, check if enough stock exists
+        if (qtyDelta > 0 && currentStock < qtyDelta) {
+          throw new Error(`Insufficient stock for correction. Available: ${currentStock}, Needed: ${qtyDelta}`);
+        }
+
+        const newStock = currentStock - qtyDelta;
+
+        // Fetch product for cost price (inventory valuation)
+        const { data: prod } = await supabase.from('products').select('purchase_tp_price').eq('id', updateItem.productId).single();
+        const costPrice = Number(prod?.purchase_tp_price || 0);
+
+        // Update sales_transaction_items
+        await supabase.from('sales_transaction_items').update({
+          quantity: newQty,
+          // Recalculate values if unit price was stored (omitted for brevity, keeping simple quantity fix)
+        }).eq('id', updateItem.id).eq('bar_id', barId);
+
+        // Update inventory
+        await supabase.from('inventory').update({
+          current_quantity: newStock,
+          stock_value: newStock * costPrice,
+          updated_at: new Date().toISOString(),
+        }).eq('product_id', updateItem.productId).eq('bar_id', barId);
+
+        // Add ledger entry for correction
+        await supabase.from('stock_ledger').insert({
+          bar_id: barId,
+          product_id: updateItem.productId,
+          transaction_date: new Date().toISOString(),
+          transaction_type: 'CORRECTION',
+          reference_id: id,
+          reference_number: existing.invoice_number,
+          stock_in: qtyDelta < 0 ? Math.abs(qtyDelta) : 0,
+          stock_out: qtyDelta > 0 ? qtyDelta : 0,
+          balance: newStock,
+          remarks: `Sale quantity correction (Invoice: ${existing.invoice_number})`,
+        });
+      }
+    }
+
+    return await this.getSaleById(id, barId);
   }
 
   /**

@@ -4,6 +4,8 @@ import { useMasterData } from '../../hooks/useMasterData';
 import { CategorySelector } from './MasterDataSelectors';
 import { apiGet } from '../../utils/api';
 
+import { SearchableSelect } from './SearchableSelect';
+
 interface ProductPackSizeSelectorProps {
   value: string; // product_id
   onChange: (productId: string) => void;
@@ -72,8 +74,7 @@ export const ProductPackSizeSelector: React.FC<ProductPackSizeSelectorProps> = (
     onChange('');
   };
 
-  const handleBrandChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const bId = e.target.value;
+  const handleBrandChange = (bId: string) => {
     setSelectedBrandId(bId);
     setSelectedVariant('');
     onChange('');
@@ -88,13 +89,13 @@ export const ProductPackSizeSelector: React.FC<ProductPackSizeSelectorProps> = (
     }
   };
 
-  const handleVariantChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setSelectedVariant(e.target.value);
+  const handleVariantChange = (v: string) => {
+    setSelectedVariant(v);
     onChange('');
   };
 
-  const handleProductChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    onChange(e.target.value);
+  const handleProductChange = (pid: string) => {
+    onChange(pid);
   };
 
   // Products to display in Tier 4
@@ -138,19 +139,13 @@ export const ProductPackSizeSelector: React.FC<ProductPackSizeSelectorProps> = (
             <Tag className="w-3 h-3 text-cyan-400" />
             <span>2. Brand</span>
           </label>
-          <select
+          <SearchableSelect
+            options={brands.map(b => ({ id: b.id, name: b.name || (b as any).brand_name }))}
             value={selectedBrandId}
             onChange={handleBrandChange}
             disabled={disabled}
-            className="w-full px-2.5 py-2 bg-slate-900 border border-slate-700/80 rounded-xl text-white text-xs focus:outline-none focus:border-amber-400 disabled:opacity-50"
-          >
-            <option value="">{brands.length === 0 ? 'Loading Brands...' : '-- Select Brand --'}</option>
-            {brands.map(b => (
-              <option key={b.id} value={b.id}>
-                {b.name || (b as any).brand_name}
-              </option>
-            ))}
-          </select>
+            placeholder={brands.length === 0 ? 'Loading Brands...' : 'Select Brand'}
+          />
         </div>
 
         {/* Tier 3: Variant */}
@@ -159,19 +154,13 @@ export const ProductPackSizeSelector: React.FC<ProductPackSizeSelectorProps> = (
             <Package className="w-3 h-3 text-emerald-400" />
             <span>3. Variant</span>
           </label>
-          <select
+          <SearchableSelect
+            options={variants.map(v => ({ id: v, name: v }))}
             value={selectedVariant}
             onChange={handleVariantChange}
             disabled={disabled || !selectedBrandId}
-            className="w-full px-2.5 py-2 bg-slate-900 border border-slate-700/80 rounded-xl text-white text-xs focus:outline-none focus:border-amber-400 disabled:opacity-50"
-          >
-            <option value="">{!selectedBrandId ? 'Select Brand first' : variants.length === 0 ? '-- Standard --' : '-- All Variants --'}</option>
-            {variants.map(v => (
-              <option key={v} value={v}>
-                {v}
-              </option>
-            ))}
-          </select>
+            placeholder={!selectedBrandId ? 'Select Brand first' : variants.length === 0 ? 'Standard' : 'All Variants'}
+          />
         </div>
 
         {/* Tier 4: Product (Pack Size) */}
@@ -180,25 +169,16 @@ export const ProductPackSizeSelector: React.FC<ProductPackSizeSelectorProps> = (
             <Box className="w-3 h-3 text-purple-400" />
             <span>4. Pack Size & MRP</span>
           </label>
-          <select
+          <SearchableSelect
+            options={displayProducts.map(p => ({
+              id: p.id,
+              name: `${p.name || (p as any).product_name || p.variant} ${p.mrp ? `• MRP ₹${p.mrp}` : ''}`
+            }))}
             value={value}
             onChange={handleProductChange}
             disabled={disabled || !selectedBrandId}
-            className="w-full px-2.5 py-2 bg-slate-900 border border-slate-700/80 rounded-xl text-white text-xs focus:outline-none focus:border-amber-400 disabled:opacity-50 font-medium text-amber-300"
-          >
-            <option value="">
-              {!selectedBrandId
-                ? 'Select Brand first'
-                : displayProducts.length === 0
-                ? 'No products found'
-                : '-- Select Pack Size / SKU --'}
-            </option>
-            {displayProducts.map(p => (
-              <option key={p.id} value={p.id}>
-                {p.name || (p as any).product_name || p.variant} {p.mrp ? `• MRP ₹${p.mrp}` : ''}
-              </option>
-            ))}
-          </select>
+            placeholder={!selectedBrandId ? 'Select Brand first' : displayProducts.length === 0 ? 'No products' : 'Select Pack Size'}
+          />
         </div>
       </div>
     </div>

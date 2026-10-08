@@ -183,15 +183,12 @@ export const ProductListView: React.FC<ProductListViewProps> = ({ language }) =>
   };
 
   return (
-    <div className="space-y-6">
-      {/* Page Title & Action Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+    <div className="space-y-6 font-sans">
+      {/* 2. SIMPLE PAGE STRUCTURE: Page Title, Short description, Primary Action */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-200 pb-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-white flex items-center gap-2.5">
-            <Package className="w-6 h-6 text-amber-400" />
-            <span>{t.productsTitle}</span>
-          </h1>
-          <p className="text-xs text-slate-400 mt-1">
+          <h1 className="text-xl font-bold text-slate-900">{t.productsTitle}</h1>
+          <p className="text-xs text-slate-500 mt-0.5">
             Production SKU register, category-brand relationships, excise pack specifications & pricing
           </p>
         </div>
@@ -199,36 +196,36 @@ export const ProductListView: React.FC<ProductListViewProps> = ({ language }) =>
         <div className="flex items-center gap-2">
           <button
             onClick={() => setIsBulkModalOpen(true)}
-            className="inline-flex items-center gap-2 px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-sm rounded-xl border border-slate-700 transition-all cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-slate-200 bg-white hover:bg-slate-50 text-xs font-medium text-slate-700 transition-colors cursor-pointer"
           >
-            <Tag className="w-4 h-4 text-amber-400" />
-            <span>Paste from Excel / Copy-Paste</span>
+            <Tag className="w-3.5 h-3.5" />
+            <span>Paste from Excel</span>
           </button>
           <button
             onClick={() => {
               setProductToEdit(null);
               setIsModalOpen(true);
             }}
-            className="inline-flex items-center gap-2 px-4 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-semibold text-sm rounded-xl shadow-lg shadow-amber-500/10 transition-all cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold transition-colors cursor-pointer"
           >
-            <Plus className="w-4 h-4" />
+            <Plus className="w-3.5 h-3.5" />
             <span>{t.addProduct}</span>
           </button>
         </div>
       </div>
 
       {/* Filter Toolbar */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3">
+      <div className="bg-white border border-slate-200 rounded-lg p-3">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           {/* Search Input */}
           <div className="relative">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
             <input
               type="text"
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
               placeholder={t.searchProducts}
-              className="w-full pl-9 pr-4 py-2 bg-slate-950 border border-slate-700/80 rounded-xl text-white placeholder-slate-500 text-sm focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400 transition-colors"
+              className="w-full pl-8 pr-3 py-1.5 bg-white border border-slate-300 rounded-md text-slate-900 placeholder-slate-400 text-xs focus:outline-none focus:ring-1 focus:ring-amber-500"
             />
           </div>
 
@@ -242,7 +239,7 @@ export const ProductListView: React.FC<ProductListViewProps> = ({ language }) =>
               }}
               includeAllOption={true}
               allLabel={t.allCategories}
-              theme="dark"
+              theme="light"
             />
           </div>
 
@@ -269,7 +266,7 @@ export const ProductListView: React.FC<ProductListViewProps> = ({ language }) =>
                 setSelectedStatus(e.target.value);
                 setPage(1);
               }}
-              className="w-full px-3 py-2 bg-slate-950 border border-slate-700/80 rounded-xl text-white text-sm focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400"
+              className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-md text-slate-900 text-xs focus:outline-none focus:ring-1 focus:ring-amber-500 font-medium"
             >
               <option value="all">{t.allStatus}</option>
               <option value="Active">{t.active}</option>
@@ -280,37 +277,37 @@ export const ProductListView: React.FC<ProductListViewProps> = ({ language }) =>
       </div>
 
       {/* Products Table */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
-        <div className="table-container">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="border-b border-slate-800 bg-slate-950/60 text-slate-400 text-xs uppercase tracking-wider font-semibold">
-                <th className="py-3.5 px-4">{t.productName}</th>
-                <th className="py-3.5 px-3">{t.category}</th>
-                <th className="py-3.5 px-3">{t.brand}</th>
-                <th className="py-3.5 px-3">{t.packSize}</th>
-                <th className="py-3.5 px-3 text-right">{t.purchasePrice}</th>
-                <th className="py-3.5 px-3 text-right">{t.sellingPrice} / MRP</th>
-                <th className="py-3.5 px-3 text-center">{t.currentStock}</th>
-                <th className="py-3.5 px-3 text-center">{t.status}</th>
-                <th className="py-3.5 px-4 text-right">{t.actions}</th>
+      <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs">
+            <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold uppercase text-[11px]">
+              <tr>
+                <th className="py-2.5 px-4">{t.productName}</th>
+                <th className="py-2.5 px-3">{t.category}</th>
+                <th className="py-2.5 px-3">{t.brand}</th>
+                <th className="py-2.5 px-3">{t.packSize}</th>
+                <th className="py-2.5 px-3 text-right">{t.purchasePrice}</th>
+                <th className="py-2.5 px-3 text-right">{t.sellingPrice} / MRP</th>
+                <th className="py-2.5 px-3 text-center">{t.currentStock}</th>
+                <th className="py-2.5 px-3 text-center">{t.status}</th>
+                <th className="py-2.5 px-4 text-right">{t.actions}</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800 text-sm">
+            <tbody className="divide-y divide-slate-100 text-slate-700">
               {loading ? (
                 <tr>
-                  <td colSpan={9} className="py-12 text-center text-slate-400">
+                  <td colSpan={9} className="py-10 text-center text-slate-400">
                     <div className="flex flex-col items-center justify-center gap-2">
-                      <RefreshCw className="w-6 h-6 animate-spin text-amber-500" />
+                      <RefreshCw className="w-5 h-5 animate-spin text-amber-500" />
                       <span>{t.loading}</span>
                     </div>
                   </td>
                 </tr>
               ) : products.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="py-12 text-center text-slate-400">
-                    <Package className="w-8 h-8 mx-auto mb-2 text-slate-600" />
-                    <p className="font-medium text-slate-300">{t.noDataFound}</p>
+                  <td colSpan={9} className="py-10 text-center text-slate-400">
+                    <Package className="w-8 h-8 mx-auto mb-2 text-slate-400" />
+                    <p className="font-medium text-slate-700">{t.noDataFound}</p>
                     <p className="text-xs text-slate-500 mt-1">Try adjusting search criteria or add your first product.</p>
                   </td>
                 </tr>
@@ -318,16 +315,16 @@ export const ProductListView: React.FC<ProductListViewProps> = ({ language }) =>
                 products.map(product => {
                   const isLowStock = (product.inventory?.current_stock ?? 0) <= (product.inventory?.minimum_stock ?? 5);
                   return (
-                    <tr key={product.id} className="hover:bg-slate-800/40 transition-colors group">
+                    <tr key={product.id} className="hover:bg-slate-50 transition-colors">
                       {/* Product Name & SKU */}
-                      <td className="py-3.5 px-4">
-                        <div className="font-semibold text-white group-hover:text-amber-400 transition-colors">
+                      <td className="py-2.5 px-4">
+                        <div className="font-semibold text-slate-900">
                           {product.name}
                         </div>
-                        <div className="flex items-center gap-2 text-xs text-slate-400 font-mono mt-0.5">
+                        <div className="flex items-center gap-2 text-[11px] text-slate-500 font-mono mt-0.5">
                           <span>SKU: {product.sku || 'N/A'}</span>
                           {product.compliance_ref && (
-                            <span className="text-[11px] px-1.5 py-0.2 rounded bg-slate-800 text-slate-400">
+                            <span className="text-[10px] px-1 rounded bg-slate-100 text-slate-600">
                               {product.compliance_ref}
                             </span>
                           )}
@@ -335,47 +332,47 @@ export const ProductListView: React.FC<ProductListViewProps> = ({ language }) =>
                       </td>
 
                       {/* Category Badge */}
-                      <td className="py-3.5 px-3">
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                      <td className="py-2.5 px-3">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-amber-50 text-amber-800 border border-amber-200">
                           {product.category?.name || 'N/A'}
                         </span>
                       </td>
 
                       {/* Brand */}
-                      <td className="py-3.5 px-3">
-                        <div className="font-medium text-slate-200">{product.brand?.name || 'N/A'}</div>
+                      <td className="py-2.5 px-3">
+                        <div className="font-medium text-slate-800">{product.brand?.name || 'N/A'}</div>
                       </td>
 
                       {/* Pack Size & Type */}
-                      <td className="py-3.5 px-3">
-                        <div className="font-medium text-slate-200">
+                      <td className="py-2.5 px-3">
+                        <div className="font-medium text-slate-800">
                           {product.pack_size ? `${product.pack_size.name} (${product.pack_size.volume_ml} ml)` : `${product.pack_type || 'Bottle'}`}
                         </div>
-                        <div className="text-xs text-slate-500 capitalize">{product.pack_type}</div>
+                        <div className="text-[11px] text-slate-500 capitalize">{product.pack_type}</div>
                       </td>
 
                       {/* Purchase Price */}
-                      <td className="py-3.5 px-3 text-right font-mono text-slate-300">
+                      <td className="py-2.5 px-3 text-right font-mono text-slate-600">
                         ₹{Number(product.purchase_price).toFixed(2)}
                       </td>
 
                       {/* Selling Price / MRP */}
-                      <td className="py-3.5 px-3 text-right font-mono">
-                        <div className="font-semibold text-amber-400">
+                      <td className="py-2.5 px-3 text-right font-mono">
+                        <div className="font-semibold text-slate-900">
                           ₹{Number(product.selling_price).toFixed(2)}
                         </div>
-                        <div className="text-xs text-slate-500">
+                        <div className="text-[11px] text-slate-500">
                           MRP: ₹{Number(product.mrp).toFixed(2)}
                         </div>
                       </td>
 
                       {/* Current Stock */}
-                      <td className="py-3.5 px-3 text-center">
+                      <td className="py-2.5 px-3 text-center">
                         <span
-                          className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold font-mono ${
+                          className={`inline-flex items-center px-2 py-0.5 rounded font-mono text-xs font-bold ${
                             isLowStock
-                              ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
-                              : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                              ? 'text-amber-700 bg-amber-50'
+                              : 'text-slate-900'
                           }`}
                         >
                           {product.inventory?.current_stock ?? 0}
@@ -383,12 +380,12 @@ export const ProductListView: React.FC<ProductListViewProps> = ({ language }) =>
                       </td>
 
                       {/* Status */}
-                      <td className="py-3.5 px-3 text-center">
+                      <td className="py-2.5 px-3 text-center">
                         <span
-                          className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                          className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium ${
                             product.status === 'Active'
-                              ? 'bg-emerald-950/70 text-emerald-400 border border-emerald-800'
-                              : 'bg-slate-800 text-slate-400 border border-slate-700'
+                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                              : 'bg-slate-100 text-slate-500 border border-slate-200'
                           }`}
                         >
                           {product.status === 'Active' ? t.active : t.inactive}
@@ -396,40 +393,40 @@ export const ProductListView: React.FC<ProductListViewProps> = ({ language }) =>
                       </td>
 
                       {/* Actions */}
-                      <td className="py-3.5 px-4 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
+                      <td className="py-2.5 px-4 text-right">
+                        <div className="flex items-center justify-end gap-1">
                           {/* Edit */}
                           <button
                             onClick={() => {
                               setProductToEdit(product);
                               setIsModalOpen(true);
                             }}
-                            className="p-1.5 text-slate-400 hover:text-amber-400 hover:bg-slate-800 rounded-lg transition-colors"
+                            className="p-1 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded cursor-pointer"
                             title={t.editProduct}
                           >
-                            <Edit2 className="w-4 h-4" />
+                            <Edit2 className="w-3.5 h-3.5" />
                           </button>
 
                           {/* Toggle Active / Inactive */}
                           <button
                             onClick={() => setStatusConfirmProduct(product)}
-                            className={`p-1.5 rounded-lg transition-colors ${
+                            className={`p-1 rounded cursor-pointer ${
                               product.status === 'Active'
-                                ? 'text-emerald-400 hover:text-amber-400 hover:bg-slate-800'
-                                : 'text-slate-500 hover:text-emerald-400 hover:bg-slate-800'
+                                ? 'text-slate-500 hover:text-amber-600 hover:bg-slate-100'
+                                : 'text-slate-400 hover:text-emerald-600 hover:bg-slate-100'
                             }`}
                             title={product.status === 'Active' ? t.deactivate : t.activate}
                           >
-                            <Power className="w-4 h-4" />
+                            <Power className="w-3.5 h-3.5" />
                           </button>
 
                           {/* Delete */}
                           <button
                             onClick={() => setDeleteConfirmProduct(product)}
-                            className="p-1.5 text-slate-500 hover:text-rose-400 hover:bg-slate-800 rounded-lg transition-colors"
+                            className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded cursor-pointer"
                             title={t.deleteProduct}
                           >
-                            <Trash2 className="w-4 h-4" />
+                            <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         </div>
                       </td>
@@ -442,13 +439,13 @@ export const ProductListView: React.FC<ProductListViewProps> = ({ language }) =>
         </div>
 
         {/* Server-Side Pagination Bar */}
-        <div className="px-4 py-3 bg-slate-950/80 border-t border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-400">
+        <div className="px-4 py-2.5 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-600">
           <div className="flex items-center gap-2">
             <span>
               {t.showing} {meta.total === 0 ? 0 : (meta.page - 1) * meta.limit + 1} -{' '}
               {Math.min(meta.page * meta.limit, meta.total)} {t.of} {meta.total}
             </span>
-            <span className="text-slate-600">|</span>
+            <span className="text-slate-300">|</span>
             <label className="flex items-center gap-1.5">
               <span>Per page:</span>
               <select
@@ -457,7 +454,7 @@ export const ProductListView: React.FC<ProductListViewProps> = ({ language }) =>
                   setLimit(Number(e.target.value));
                   setPage(1);
                 }}
-                className="bg-slate-900 border border-slate-800 rounded px-2 py-0.5 text-white"
+                className="bg-white border border-slate-300 rounded px-2 py-0.5 text-slate-800"
               >
                 <option value={10}>10</option>
                 <option value={25}>25</option>
@@ -470,21 +467,21 @@ export const ProductListView: React.FC<ProductListViewProps> = ({ language }) =>
             <button
               onClick={() => setPage(p => Math.max(1, p - 1))}
               disabled={page <= 1 || loading}
-              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 disabled:opacity-40 transition-colors"
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 disabled:opacity-40 transition-colors cursor-pointer"
             >
-              <ChevronLeft className="w-4 h-4" />
+              <ChevronLeft className="w-3.5 h-3.5" />
               <span>{t.previous}</span>
             </button>
-            <span className="px-2 font-mono text-slate-300">
+            <span className="px-2 font-mono text-slate-700">
               {meta.page} / {Math.max(1, meta.totalPages)}
             </span>
             <button
               onClick={() => setPage(p => Math.min(meta.totalPages, p + 1))}
               disabled={page >= meta.totalPages || loading}
-              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 disabled:opacity-40 transition-colors"
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 disabled:opacity-40 transition-colors cursor-pointer"
             >
               <span>{t.next}</span>
-              <ChevronRight className="w-4 h-4" />
+              <ChevronRight className="w-3.5 h-3.5" />
             </button>
           </div>
         </div>

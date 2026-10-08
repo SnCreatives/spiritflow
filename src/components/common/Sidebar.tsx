@@ -1,23 +1,22 @@
 import React, { useState, useEffect } from 'react';
 import {
-  LayoutDashboard,
+  Home,
   Package,
   ShoppingCart,
   BarChart3,
   Sliders,
+  ChevronDown,
   ChevronRight,
   Store,
   User,
   FileInput,
   ArrowDownToLine,
   FileSpreadsheet,
-  Award,
-  Box,
-  Layers,
   ShieldCheck,
   Database,
   Receipt,
   TrendingUp,
+  CircleDot,
 } from 'lucide-react';
 import { AuthUser } from '../../types';
 import { LiquorFlowLogo } from './LiquorFlowLogo';
@@ -45,15 +44,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
     management: false,
   });
 
-  // Auto-expand parent module when route matches
+  // Auto-expand group when route matches
   useEffect(() => {
-    if (['/stock/opening', '/opening-stock', '/purchases', '/received-stock', '/inventory', '/stock/adjustments', '/stock-ledger', '/products', '/brands', '/pack-sizes'].includes(currentRoute)) {
+    const route = currentRoute.split('?')[0];
+    if (['/stock/opening', '/opening-stock', '/purchases', '/received-stock', '/inventory', '/stock/adjustments', '/stock-ledger'].includes(route)) {
       setOpenGroups(prev => ({ ...prev, inventory: true }));
-    } else if (currentRoute.startsWith('/transactions') || currentRoute.startsWith('/sales')) {
+    } else if (route.startsWith('/transactions') || route.startsWith('/sales')) {
       setOpenGroups(prev => ({ ...prev, transactions: true }));
-    } else if (currentRoute.startsWith('/reports') || currentRoute === '/reports') {
+    } else if (route.startsWith('/reports')) {
       setOpenGroups(prev => ({ ...prev, reports: true }));
-    } else if (['/scm-code', '/excise', '/backup-restore', '/bar-settings', '/bars', '/user-settings', '/settings'].includes(currentRoute)) {
+    } else if (['/scm-code', '/backup-restore', '/bar-settings', '/bars', '/user-settings', '/settings', '/brands', '/products', '/pack-sizes'].includes(route)) {
       setOpenGroups(prev => ({ ...prev, management: true }));
     }
   }, [currentRoute]);
@@ -65,176 +65,189 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const modules = [
     {
       key: 'inventory',
-      label: 'INVENTORY',
+      label: 'Inventory',
       icon: Package,
       items: [
-        { id: '/stock/opening', label: 'Opening Stock', icon: FileInput },
-        { id: '/purchases', label: 'Received Stock', icon: ArrowDownToLine },
-        { id: '/inventory', label: 'Inventory Register', icon: Package },
-        { id: '/stock/adjustments', label: 'Stock Adjustments', icon: Sliders },
-        { id: '/stock-ledger', label: 'Stock Ledger', icon: FileSpreadsheet },
-        { id: '/products', label: 'Product Master', icon: Layers },
-        { id: '/brands', label: 'Brand Master', icon: Award },
-        { id: '/pack-sizes', label: 'Bottle Sizes', icon: Box },
+        { id: '/stock/opening', label: 'Opening Stock' },
+        { id: '/purchases', label: 'Received Stock' },
+        { id: '/inventory', label: 'Inventory' },
+        { id: '/stock/adjustments', label: 'Stock Adjustments' },
       ],
     },
     {
       key: 'transactions',
-      label: 'TRANSACTIONS',
+      label: 'Sales',
       icon: ShoppingCart,
       items: [
-        { id: '/transactions', label: 'Add Sale Entry', icon: Receipt },
-        { id: '/transactions?tab=update', label: 'Update Sale Entry', icon: Receipt },
-        { id: '/transactions?tab=range', label: 'Range Sales', icon: TrendingUp },
-        { id: '/transactions?tab=closing', label: 'Closing Sales & Stock', icon: Package },
+        { id: '/transactions?tab=add-sale', label: 'Add New Sale' },
+        { id: '/transactions?tab=daily-sales', label: 'Daily Sales' },
+        { id: '/transactions?tab=range-sales', label: 'Range Sales' },
+        { id: '/transactions?tab=closing-sales', label: 'Closing Sales' },
       ],
     },
     {
       key: 'reports',
-      label: 'REPORTS',
+      label: 'Reports',
       icon: BarChart3,
       items: [
-        { id: '/reports', label: 'Daily Sales Report', icon: BarChart3 },
-        { id: '/reports', label: 'Monthly Reports', icon: BarChart3 },
-        { id: '/reports', label: 'Excise Log Book Report', icon: ShieldCheck },
-        { id: '/reports', label: 'Sales Tax Report', icon: BarChart3 },
-        { id: '/reports', label: 'Sales Report Summary', icon: BarChart3 },
-        { id: '/reports', label: 'Permit Bills', icon: Receipt },
-        { id: '/reports', label: 'Received TP Report', icon: ArrowDownToLine },
-        { id: '/reports', label: 'Stock Value Report', icon: Package },
-        { id: '/reports', label: 'Available Stock Status', icon: Package },
+        { id: '/reports?tab=daily-sales', label: 'Daily Sales' },
+        { id: '/reports?tab=monthly-report', label: 'Monthly Reports' },
+        { id: '/reports?tab=excise-log-book', label: 'Excise Log Book' },
+        { id: '/reports?tab=sales-tax', label: 'Sales Tax' },
+        { id: '/reports?tab=sales-summary', label: 'Sales Summary' },
+        { id: '/reports?tab=permit-bills', label: 'Permit Bills' },
+        { id: '/reports?tab=received-tp', label: 'Received TP' },
+        { id: '/reports?tab=stock-value', label: 'Stock Value' },
+        { id: '/reports?tab=available-stock', label: 'Available Stock' },
       ],
     },
     {
       key: 'management',
-      label: 'MANAGEMENT',
+      label: 'Management',
       icon: Sliders,
       items: [
-        { id: '/scm-code', label: 'SCM Code Management', icon: ShieldCheck },
-        { id: '/backup-restore', label: 'Backup & Restore', icon: Database },
-        { id: '/bar-settings', label: 'Bar Settings', icon: Store },
-        { id: '/user-settings', label: 'User Settings', icon: User },
+        { id: '/scm-code', label: 'SCM Codes' },
+        { id: '/backup-restore', label: 'Backup & Restore' },
+        { id: '/bar-settings', label: 'Bar Settings' },
+        { id: '/user-settings', label: 'User Settings' },
       ],
     },
   ];
 
+  const isItemActive = (itemId: string) => {
+    if (itemId === currentRoute) return true;
+    const currentBase = currentRoute.split('?')[0];
+    const itemBase = itemId.split('?')[0];
+    
+    // Check if query parameter matches
+    if (itemId.includes('?')) {
+      if (currentRoute.includes('?')) {
+        return itemId === currentRoute;
+      }
+      return itemId === (currentRoute + window.location.search);
+    }
+    
+    return currentBase === itemBase;
+  };
+
+  const isBarHomeActive = currentRoute === '/bar-home' || currentRoute === '/' || currentRoute === '';
+
   return (
-    <aside className="w-64 bg-slate-900 border-r border-slate-800 min-h-screen flex flex-col justify-between select-none font-sans text-slate-300">
-      <div className="flex-1 py-5 px-4 space-y-6 overflow-y-auto custom-scrollbar">
-        {/* Brand Banner */}
-        <div className="px-1 py-1 flex items-center justify-start">
-          <LiquorFlowLogo size="md" variant="full" theme="white" />
-        </div>
+    <aside className="w-64 bg-[#0f172a] text-slate-300 border-r border-slate-800 min-h-screen flex flex-col justify-between select-none font-sans overflow-hidden">
+      <div className="flex-1 py-6 px-4 space-y-6 overflow-y-auto scrollbar-hide">
+        {/* Brand Logo */}
+        <button
+          type="button"
+          onClick={() => onRouteChange('/bar-home')}
+          className="w-full text-left px-2 mb-2 cursor-pointer focus:outline-none transition-transform hover:scale-[1.02] active:scale-100"
+        >
+          <LiquorFlowLogo size="md" variant="full" theme="dark" />
+        </button>
 
-        {/* Selected Bar Context Badge (Compact premium status component) */}
-        <div className="mx-1 px-3 py-2.5 bg-slate-950/50 border border-slate-800 rounded-xl">
-          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block">
-            CURRENT BAR
-          </span>
-          <div className="flex items-center justify-between mt-1">
-            <span className="text-xs font-bold text-slate-100 truncate pr-2">
-              {selectedBar?.name || 'No Bar Selected'}
-            </span>
-            <div className="flex items-center gap-1 shrink-0">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              <span className="text-[10px] font-medium text-emerald-400">Active</span>
-            </div>
+        {/* Current Bar Status & Link to Bar Home */}
+        <button
+          type="button"
+          onClick={() => onRouteChange('/bar-home')}
+          className="w-full text-left px-3.5 py-3 bg-slate-800/40 hover:bg-slate-800 transition-all border border-slate-700/50 rounded-xl cursor-pointer group"
+        >
+          <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest flex items-center justify-between mb-1">
+            <span>Outlet</span>
+            <span className="text-[9px] text-amber-400 font-bold bg-amber-900/30 px-1.5 py-0.5 rounded border border-amber-800/50 group-hover:bg-amber-800/50 transition-colors">Switch</span>
           </div>
-        </div>
-
-        {/* Navigation Accordion */}
-        <nav className="space-y-4">
-          {/* Dashboard (Direct Item) */}
-          <div>
-            <button
-              type="button"
-              onClick={() => onRouteChange('/dashboard')}
-              className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                currentRoute === '/dashboard'
-                  ? 'bg-emerald-600 text-slate-950 font-bold shadow-md shadow-emerald-600/10'
-                  : 'text-slate-400 hover:text-slate-100 hover:bg-slate-800/40'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <LayoutDashboard className={`w-4 h-4 shrink-0 ${currentRoute === '/dashboard' ? 'text-slate-950' : 'text-slate-500'}`} />
-                <span>Dashboard</span>
-              </div>
-            </button>
+          <div className="text-sm font-bold text-white truncate">
+            {selectedBar?.name || 'No Bar Selected'}
           </div>
+        </button>
 
-          {/* Collapsible Modules */}
-          {modules.map(module => {
-            const isOpen = openGroups[module.key];
-            const ModuleIcon = module.icon;
-            const isAnyChildActive = module.items.some(
-              item => currentRoute === item.id || (item.id.includes('?') && currentRoute === item.id.split('?')[0])
-            );
+        {/* Navigation List */}
+        <nav className="space-y-1">
+          {/* Bar Home Link */}
+          <button
+            type="button"
+            onClick={() => onRouteChange('/bar-home')}
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-semibold transition-all cursor-pointer text-left ${
+              isBarHomeActive
+                ? 'bg-amber-500 text-slate-950 shadow-lg shadow-amber-500/10'
+                : 'text-slate-400 hover:bg-slate-800/60 hover:text-white'
+            }`}
+          >
+            <Home className={`w-4.5 h-4.5 shrink-0 ${isBarHomeActive ? 'text-slate-900' : 'text-slate-500'}`} />
+            <span>Bar Home</span>
+          </button>
 
-            return (
-              <div key={module.key} className="space-y-1">
-                <button
-                  type="button"
-                  onClick={() => toggleGroup(module.key)}
-                  className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-[10px] font-bold tracking-wider transition-colors cursor-pointer ${
-                    isAnyChildActive && !isOpen
-                      ? 'text-emerald-400 bg-emerald-950/20'
-                      : 'text-slate-400 hover:text-slate-100 hover:bg-slate-800/20'
-                  }`}
-                >
-                  <div className="flex items-center gap-2">
-                    <ModuleIcon className={`w-3.5 h-3.5 shrink-0 ${isAnyChildActive ? 'text-emerald-400' : 'text-slate-500'}`} />
-                    <span>{module.label}</span>
-                  </div>
-                  <ChevronRight
-                    className={`w-3 h-3 text-slate-500 transition-transform duration-150 ${
-                      isOpen ? 'rotate-90 text-emerald-400' : ''
+          {/* Groups */}
+          <div className="pt-4 pb-2">
+            <div className="px-3 mb-2 text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em]">Modules</div>
+            {modules.map(module => {
+              const isOpen = openGroups[module.key];
+              const ModuleIcon = module.icon;
+              const hasActiveChild = module.items.some(item => isItemActive(item.id));
+
+              return (
+                <div key={module.key} className="mb-1">
+                  <button
+                    type="button"
+                    onClick={() => toggleGroup(module.key)}
+                    className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-semibold transition-all cursor-pointer text-left group ${
+                      hasActiveChild && !isOpen
+                        ? 'text-amber-400 bg-amber-400/5'
+                        : 'text-slate-400 hover:bg-slate-800/40 hover:text-slate-200'
                     }`}
-                  />
-                </button>
+                  >
+                    <div className="flex items-center gap-3">
+                      <ModuleIcon className={`w-4.5 h-4.5 shrink-0 transition-colors ${hasActiveChild ? 'text-amber-500' : 'text-slate-500 group-hover:text-slate-400'}`} />
+                      <span>{module.label}</span>
+                    </div>
+                    {isOpen ? (
+                      <ChevronDown className="w-3.5 h-3.5 text-slate-600 group-hover:text-slate-400" />
+                    ) : (
+                      <ChevronRight className="w-3.5 h-3.5 text-slate-600 group-hover:text-slate-400" />
+                    )}
+                  </button>
 
-                {isOpen && (
-                  <div className="pl-3 py-0.5 space-y-1 ml-2 border-l border-slate-800">
-                    {module.items.map((item, idx) => {
-                      const SubIcon = item.icon;
-                      const isSubActive = currentRoute === item.id || (idx === 0 && module.key === 'reports' && currentRoute === '/reports');
+                  {isOpen && (
+                    <div className="ml-5.5 pl-4 border-l border-slate-800/80 mt-1 space-y-1">
+                      {module.items.map(item => {
+                        const active = isItemActive(item.id);
 
-                      return (
-                        <button
-                          key={idx}
-                          type="button"
-                          onClick={() => onRouteChange(item.id.split('?')[0])}
-                          className={`w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-[11px] font-medium transition-all cursor-pointer text-left border-l-2 ${
-                            isSubActive
-                              ? 'bg-slate-800/80 text-emerald-400 font-bold border-emerald-500'
-                              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/30 border-transparent'
-                          }`}
-                        >
-                          <SubIcon className={`w-3.5 h-3.5 shrink-0 ${isSubActive ? 'text-emerald-400' : 'text-slate-500'}`} />
-                          <span className="truncate">{item.label}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            );
-          })}
+                        return (
+                          <button
+                            key={item.id}
+                            type="button"
+                            onClick={() => onRouteChange(item.id)}
+                            className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs transition-all cursor-pointer text-left ${
+                              active
+                                ? 'bg-amber-500/10 text-amber-400 font-bold'
+                                : 'text-slate-500 hover:text-slate-200 hover:bg-slate-800/30'
+                            }`}
+                          >
+                            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${active ? 'bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.5)]' : 'bg-slate-700'}`} />
+                            <span className="truncate">{item.label}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </nav>
       </div>
 
-      {/* User Footer Summary */}
+      {/* User Info Footer */}
       {user && (
-        <div className="p-3.5 border-t border-slate-800 bg-slate-950/40 m-3 rounded-xl flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 font-bold text-xs">
-            {user.username ? user.username.slice(0, 2).toUpperCase() : 'US'}
+        <div className="p-4 border-t border-slate-800 bg-[#0f172a] flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-500 flex items-center justify-center font-bold text-sm shrink-0">
+            {user.username ? user.username.slice(0, 1).toUpperCase() : 'U'}
           </div>
           <div className="flex-1 min-w-0">
-            <span className="text-xs font-bold text-slate-200 truncate block">
+            <div className="text-xs font-bold text-white truncate">
               {user.username || 'Admin User'}
-            </span>
-            <span className="text-[10px] text-slate-500 truncate block">
+            </div>
+            <div className="text-[10px] text-slate-500 truncate font-medium">
               {user.email || 'Bar Manager'}
-            </span>
+            </div>
           </div>
         </div>
       )}

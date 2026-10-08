@@ -225,6 +225,7 @@ export class AuthService {
       const supabase = getSupabaseServiceClient();
 
       // 1. Look up active session in database
+      console.log(`[AuthService] DB Lookup for token: ${cleanToken.substring(0, 8)}...`);
       const { data: session, error } = await supabase
         .from('sessions')
         .select('id, session_token, owner_id, expires_at')
@@ -232,13 +233,20 @@ export class AuthService {
         .limit(1)
         .maybeSingle();
 
-      if (error || !session) {
+      if (error) {
+        console.error(`[AuthService] DB Error looking up session:`, error.message);
+        return null;
+      }
+      if (!session) {
+        console.warn(`[AuthService] No session found in DB for token ${cleanToken.substring(0, 8)}...`);
         return null;
       }
 
       // 2. Check session expiry
       const expiryMs = new Date(session.expires_at).getTime();
-      if (expiryMs < Date.now()) {
+      const nowMs = Date.now();
+      if (expiryMs < nowMs) {
+        console.warn(`[AuthService] Session expired: ${session.expires_at} (Now: ${new Date().toISOString()})`);
         await supabase.from('sessions').delete().eq('session_token', cleanToken);
         return null;
       }
@@ -251,7 +259,8 @@ export class AuthService {
         .then(() => {}, () => {});
 
       // 4. Fetch owner details, settings & authorized bars
-      const [{ data: owner }, { data: settings }] = await Promise.all([
+      console.log(`[AuthService] Fetching owner/settings for owner_id: ${session.owner_id}`);
+      const [{ data: owner, error: ownerErr }, { data: settings, error: settingsErr }] = await Promise.all([
         supabase
           .from('owner_credentials')
           .select('id, mobile_number')
@@ -265,10 +274,14 @@ export class AuthService {
           .maybeSingle(),
       ]);
 
+      if (ownerErr) console.warn(`[AuthService] Owner fetch error:`, ownerErr.message);
+      if (settingsErr) console.warn(`[AuthService] Settings fetch error:`, settingsErr.message);
+
       let bars: any[] = [];
       try {
         bars = await BarStoreService.getBars(session.owner_id);
-      } catch {
+      } catch (barErr: any) {
+        console.warn(`[AuthService] Bars fetch error:`, barErr.message);
         bars = [];
       }
 
@@ -280,10 +293,11 @@ export class AuthService {
         bars: bars,
       };
 
+      console.log(`[AuthService] Session validated successfully for user: ${user.mobile_number}`);
       memorySessions.set(cleanToken, { user, expiresAt: expiryMs });
       return user;
     } catch (err: any) {
-      console.warn('[AuthService.validateSession] Warning validating session:', err?.message);
+      console.error('[AuthService.validateSession] CRITICAL EXCEPTION:', err?.message);
       return null;
     }
   }

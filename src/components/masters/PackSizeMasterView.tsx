@@ -374,7 +374,7 @@ export const PackSizeMasterView: React.FC<PackSizeMasterViewProps> = ({ language
             <button
               type="button"
               onClick={() => setIsModalOpen(false)}
-              className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-xl transition-colors"
+              className="px-4 py-2 border border-slate-300 hover:bg-slate-50 text-slate-700 text-xs font-semibold rounded-md transition-colors cursor-pointer"
             >
               {t.cancel}
             </button>
@@ -382,7 +382,7 @@ export const PackSizeMasterView: React.FC<PackSizeMasterViewProps> = ({ language
               form="pack-size-form"
               type="submit"
               disabled={isSubmitting}
-              className="px-5 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-semibold rounded-xl flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed shadow-md transition-all"
+              className="px-5 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold rounded-md flex items-center gap-1.5 disabled:opacity-50 shadow-xs transition-all cursor-pointer"
             >
               {isSubmitting ? (
                 <>
@@ -396,30 +396,30 @@ export const PackSizeMasterView: React.FC<PackSizeMasterViewProps> = ({ language
           </div>
         }
       >
-        <form id="pack-size-form" onSubmit={handleSubmit} className="space-y-4">
+        <form id="pack-size-form" onSubmit={handleSubmit} className="space-y-4 font-sans text-xs">
           {modalError && (
-            <div className="p-3 bg-rose-950/50 border border-rose-800 rounded-xl text-rose-200 text-xs flex items-start gap-2">
-              <AlertCircle className="w-4 h-4 text-rose-400 flex-shrink-0 mt-0.5" />
+            <div className="p-3 bg-rose-50 border border-rose-200 rounded-md text-rose-800 text-xs flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 text-rose-600 flex-shrink-0 mt-0.5" />
               <span>{modalError}</span>
             </div>
           )}
 
           <div>
-            <label className="block text-xs font-medium text-slate-300 mb-1.5">
-              {t.category} <span className="text-amber-400">*</span>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
+              {t.category} <span className="text-amber-600">*</span>
             </label>
             <CategorySelector
               value={categoryId}
               onChange={setCategoryId}
               required={true}
               placeholder="-- Select Category --"
-              theme="dark"
+              theme="light"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-slate-300 mb-1.5">
-              {t.packSizeName} <span className="text-amber-400">*</span>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
+              {t.packSizeName} <span className="text-amber-600">*</span>
             </label>
             <input
               type="text"
@@ -427,14 +427,14 @@ export const PackSizeMasterView: React.FC<PackSizeMasterViewProps> = ({ language
               value={name}
               onChange={e => setName(e.target.value)}
               placeholder="e.g. Quart (750 ml) or Can (500 ml)"
-              className="w-full px-3.5 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400 transition-colors"
+              className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-md text-slate-900 text-xs focus:outline-none focus:ring-1 focus:ring-amber-500"
             />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1.5">
-                {t.volumeMl} <span className="text-amber-400">*</span>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                {t.volumeMl} <span className="text-amber-600">*</span>
               </label>
               <input
                 type="number"
@@ -443,18 +443,18 @@ export const PackSizeMasterView: React.FC<PackSizeMasterViewProps> = ({ language
                 value={volumeMl}
                 onChange={e => setVolumeMl(e.target.value === '' ? '' : parseInt(e.target.value, 10))}
                 placeholder="750"
-                className="w-full px-3.5 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white font-mono text-sm focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400 transition-colors"
+                className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-md text-slate-900 font-mono text-xs focus:outline-none focus:ring-1 focus:ring-amber-500"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1.5">
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
                 {t.packType}
               </label>
               <select
                 value={packType}
                 onChange={e => setPackType(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400 transition-colors"
+                className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-md text-slate-900 text-xs focus:outline-none focus:ring-1 focus:ring-amber-500"
               >
                 <option value="Bottle">Bottle</option>
                 <option value="Can">Can</option>
@@ -466,21 +466,21 @@ export const PackSizeMasterView: React.FC<PackSizeMasterViewProps> = ({ language
           </div>
 
           {Number(volumeMl) === 500 && packType.toLowerCase() === 'pint' && (
-            <div className="p-2.5 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-300 text-xs flex items-center gap-2 animate-pulse">
-              <AlertTriangle className="w-4 h-4 text-amber-400 flex-shrink-0" />
+            <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-md text-amber-800 text-xs flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0" />
               <span>Reminder: 500 ml must be designated as 'Can' or 'Bottle', never 'Pint'.</span>
             </div>
           )}
 
-          <div className="pt-2 flex items-center gap-2.5">
+          <div className="pt-1 flex items-center gap-2">
             <input
               type="checkbox"
               id="packActive"
               checked={active}
               onChange={e => setActive(e.target.checked)}
-              className="w-4 h-4 rounded border-slate-700 bg-slate-950 text-amber-500 focus:ring-amber-400 transition-colors"
+              className="rounded border-slate-300 text-amber-500 focus:ring-0 cursor-pointer"
             />
-            <label htmlFor="packActive" className="text-xs text-slate-300 font-medium cursor-pointer">
+            <label htmlFor="packActive" className="text-xs text-slate-700 font-medium cursor-pointer select-none">
               {t.active} (Available for product registration)
             </label>
           </div>

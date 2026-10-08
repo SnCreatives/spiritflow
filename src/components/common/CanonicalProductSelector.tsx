@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Layers, Award, Box, Package, ShieldAlert, CheckCircle2, ChevronDown } from 'lucide-react';
 import { apiGet } from '../../utils/api';
 import { CategorySelector } from './MasterDataSelectors';
+import { SearchableSelect } from './SearchableSelect';
 
 export interface SelectedProductDetail {
   productId: string;
@@ -57,7 +58,11 @@ export const CanonicalProductSelector: React.FC<CanonicalProductSelectorProps> =
   const [selectedSizeMl, setSelectedSizeMl] = useState<number | ''>('');
   const [selectedPackaging, setSelectedPackaging] = useState<string>('');
   const [activeProductId, setActiveProductId] = useState<string>(selectedProductId || '');
-  const lastSyncedIdRef = useRef<string | undefined>(selectedProductId);
+  
+  // Track the ID that was last synced from props to avoid loops
+  const lastPropSyncIdRef = useRef<string | undefined>(undefined);
+  // Track if a change is internally driven to avoid redundant updates
+  const isInternalChangeRef = useRef<boolean>(false);
 
   // Fetch product catalog data once on mount
   useEffect(() => {
@@ -101,13 +106,13 @@ export const CanonicalProductSelector: React.FC<CanonicalProductSelectorProps> =
   // Sync if external selectedProductId changes
   useEffect(() => {
     if (selectedProductId && rawProducts.length > 0) {
-      if (lastSyncedIdRef.current === selectedProductId) {
+      if (lastPropSyncIdRef.current === selectedProductId) {
         return;
       }
       
       const match = rawProducts.find(p => p.id === selectedProductId || p.productId === selectedProductId);
       if (match) {
-        lastSyncedIdRef.current = selectedProductId;
+        lastPropSyncIdRef.current = selectedProductId;
         
         // Update all related dropdown states atomically
         const catId = match.category_id || match.categoryId || match.category?.id || '';
@@ -125,7 +130,7 @@ export const CanonicalProductSelector: React.FC<CanonicalProductSelectorProps> =
         setSelectedPackaging(pkg);
         setActiveProductId(match.id);
       }
-    } else if (!selectedProductId && activeProductId && lastSyncedIdRef.current) {
+    } else if (!selectedProductId && lastPropSyncIdRef.current) {
       // Clear if externally cleared
       setActiveProductId('');
       setSelectedBrandId('');
@@ -133,61 +138,65 @@ export const CanonicalProductSelector: React.FC<CanonicalProductSelectorProps> =
       setSelectedSizeMl('');
       setSelectedCategoryId('');
       setSelectedType('');
-      lastSyncedIdRef.current = undefined;
+      lastPropSyncIdRef.current = undefined;
     }
-  }, [selectedProductId, rawProducts, activeProductId]);
+  }, [selectedProductId, rawProducts]);
 
   // 1. Available Brands for selected Category / Product Type
   const availableBrands = useMemo(() => {
+    let filtered = brands;
     if (selectedCategoryId) {
       const direct = brands.filter(b => (b.category_id || b.categoryId) === selectedCategoryId);
-      if (direct.length > 0) return direct;
-      
-      const targetCat = categories.find(c => c.id === selectedCategoryId);
-      if (targetCat) {
-        const lowerName = (targetCat.name || '').toLowerCase();
-        const related = brands.filter(b => {
-          const bCatId = b.category_id || b.categoryId;
-          const bCat = categories.find(c => c.id === bCatId);
-          if (!bCat) return false;
-          if (lowerName.includes('beer') && bCat.name.toLowerCase().includes('beer')) return true;
-          if (lowerName.includes('wine') && bCat.name.toLowerCase().includes('wine')) return true;
-          return (bCat.product_type || bCat.productType) === (targetCat.product_type || targetCat.productType);
-        });
-        if (related.length > 0) return related;
+      if (direct.length > 0) {
+        filtered = direct;
+      } else {
+        const targetCat = categories.find(c => c.id === selectedCategoryId);
+        if (targetCat) {
+          const lowerName = (targetCat.name || '').toLowerCase();
+          filtered = brands.filter(b => {
+            const bCatId = b.category_id || b.categoryId;
+            const bCat = categories.find(c => c.id === bCatId);
+            if (!bCat) return false;
+            if (lowerName.includes('beer') && bCat.name.toLowerCase().includes('beer')) return true;
+            if (lowerName.includes('wine') && bCat.name.toLowerCase().includes('wine')) return true;
+            return (bCat.product_type || bCat.productType) === (targetCat.product_type || targetCat.productType);
+          });
+        }
       }
-      return brands;
+    } else if (selectedType) {
+      const targetType = selectedType.toLowerCase();
+      const catIdsForType = categories
+        .filter(c => {
+          const name = (c.name || '').toLowerCase();
+          const rawType = (c.product_type || c.productType || '').toLowerCase();
+
+          if (rawType) {
+            if (targetType === 'spirit' && (rawType === 'spirit' || rawType.includes('spirit'))) return true;
+            if (targetType === 'wine' && rawType.includes('wine')) return true;
+            if (targetType === 'mild beer' && rawType.includes('mild')) return true;
+            if (targetType === 'fermented beer' && (rawType.includes('fermented') || rawType.includes('strong') || rawType === 'beer')) return true;
+          }
+
+          if (targetType === 'wine') return name.includes('wine');
+          if (targetType === 'mild beer') return name.includes('mild beer') || name === 'mild';
+          if (targetType === 'fermented beer') return name.includes('fermented') || name.includes('beer');
+          if (targetType === 'spirit') {
+            return !name.includes('wine') && !name.includes('beer');
+          }
+          return true;
+        })
+        .map(c => c.id);
+
+      filtered = brands.filter(b => {
+        const bCatId = b.category_id || b.categoryId;
+        return !bCatId || catIdsForType.includes(bCatId);
+      });
     }
-    
-    if (!selectedType) return brands;
-    const targetType = selectedType.toLowerCase();
 
-    const catIdsForType = categories
-      .filter(c => {
-        const name = (c.name || '').toLowerCase();
-        const rawType = (c.product_type || c.productType || '').toLowerCase();
-
-        if (rawType) {
-          if (targetType === 'spirit' && (rawType === 'spirit' || rawType.includes('spirit'))) return true;
-          if (targetType === 'wine' && rawType.includes('wine')) return true;
-          if (targetType === 'mild beer' && rawType.includes('mild')) return true;
-          if (targetType === 'fermented beer' && (rawType.includes('fermented') || rawType.includes('strong') || rawType === 'beer')) return true;
-        }
-
-        if (targetType === 'wine') return name.includes('wine');
-        if (targetType === 'mild beer') return name.includes('mild beer') || name === 'mild';
-        if (targetType === 'fermented beer') return name.includes('fermented') || name.includes('beer');
-        if (targetType === 'spirit') {
-          return !name.includes('wine') && !name.includes('beer');
-        }
-        return true;
-      })
-      .map(c => c.id);
-
-    return brands.filter(b => {
-      const bCatId = b.category_id || b.categoryId;
-      return !bCatId || catIdsForType.includes(bCatId);
-    });
+    return filtered.map(b => ({
+      id: b.id,
+      name: b.name || b.brand_name
+    }));
   }, [brands, categories, selectedCategoryId, selectedType]);
 
   // 2. Filtered products matching Category / Type & Brand
@@ -225,7 +234,7 @@ export const CanonicalProductSelector: React.FC<CanonicalProductSelectorProps> =
       });
     }
 
-    return Array.from(variants).sort();
+    return Array.from(variants).sort().map(v => ({ id: v, name: v }));
   }, [matchingProducts, rawProducts, selectedBrandId]);
 
   // 4. Allowed Bottle Sizes according to canonical standard
@@ -261,8 +270,8 @@ export const CanonicalProductSelector: React.FC<CanonicalProductSelectorProps> =
     // Skip if still loading or if nothing is selected yet
     if (loading || !rawProducts.length) return;
     
-    // Prevent resolution if we are currently syncing an external selectedProductId
-    if (selectedProductId && lastSyncedIdRef.current === selectedProductId && activeProductId === selectedProductId) {
+    // If this change was triggered by an external prop sync, skip resolution update back to parent
+    if (lastPropSyncIdRef.current === activeProductId && !isInternalChangeRef.current) {
       return;
     }
 
@@ -307,13 +316,13 @@ export const CanonicalProductSelector: React.FC<CanonicalProductSelectorProps> =
           purchaseTpPrice: Number(resolved.purchase_tp_price || resolved.purchasePrice || 0),
           scmCode: scmMap[resolved.id] || resolved.scm_code || undefined,
         };
-        // Only trigger update if this was a user-driven change (not an external sync already in progress)
-        if (lastSyncedIdRef.current !== detail.productId) {
-          onSelectProduct(detail);
-        }
+        
+        // Notify parent of change
+        onSelectProduct(detail);
+        isInternalChangeRef.current = false;
       }
-    } else if (matchingProducts.length === 1 && !selectedVariant && !selectedSizeMl) {
-      // Auto-select single exact product if variant/size not yet specified
+    } else if (matchingProducts.length === 1 && !selectedVariant && !selectedSizeMl && isInternalChangeRef.current) {
+      // Auto-select single exact product if variant/size not yet specified AND user just picked brand
       const sole = matchingProducts[0];
       const vol = Number(sole.volume_ml || sole.volumeMl || sole.pack_size?.volume_ml || 750);
       setSelectedSizeMl(vol);
@@ -336,64 +345,36 @@ export const CanonicalProductSelector: React.FC<CanonicalProductSelectorProps> =
     selectedProductId
   ]);
 
-  const activeProduct = useMemo(() => {
-    return rawProducts.find(p => p.id === activeProductId);
-  }, [rawProducts, activeProductId]);
-
   return (
-    <div className={`rounded-xl border border-slate-200 bg-white shadow-sm ${compact ? 'p-3' : 'p-4 sm:p-5'}`}>
-      <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-3">
-        <div className="flex items-center gap-2">
-          <Layers className="w-4 h-4 text-amber-600" />
-          <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700">
-            Canonical Product Master Cascade
-          </h4>
+    <div className={`transition-all duration-300 ${compact ? 'py-1' : 'bg-white p-5 rounded-2xl border border-slate-200 shadow-sm mb-4'}`}>
+      {!compact && (
+        <div className="flex items-center gap-3 mb-5 pb-4 border-b border-slate-50">
+          <div className="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center text-amber-600 border border-amber-500/20">
+            <Package className="w-5 h-5" />
+          </div>
+          <div>
+            <h3 className="text-sm font-black text-slate-900 uppercase tracking-tight">Master Catalog Selection</h3>
+            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-[0.1em]">Select products from canonical excise master</p>
+          </div>
         </div>
-        {loading && (
-          <span className="text-[11px] text-slate-500 font-medium animate-pulse">Loading catalog...</span>
-        )}
-      </div>
+      )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-        {/* Step 1: Category */}
-        <div>
-          <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">
-            1. Category *
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Brand */}
+        <div className="space-y-1.5">
+          <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 ml-1">
+            Brand Identity
           </label>
-          <CategorySelector
-            value={selectedCategoryId}
-            onChange={catId => {
-              setSelectedCategoryId(catId);
-              const foundCat = categories.find(c => c.id === catId);
-              const pType = foundCat?.product_type || foundCat?.productType || '';
-              setSelectedType(pType);
-              setSelectedBrandId('');
-              setSelectedVariant('');
-              setSelectedSizeMl('');
-              setActiveProductId('');
-              onSelectProduct(null);
-            }}
-            disabled={disabled}
-            placeholder="-- Select Category --"
-            theme="light"
-            className="w-full text-xs font-medium rounded-lg border border-slate-300 bg-slate-50/50 hover:bg-white focus:bg-white focus:ring-2 focus:ring-amber-500 focus:outline-none transition-all disabled:opacity-50 py-1.5"
-          />
-        </div>
-
-        {/* Step 2: Brand */}
-        <div>
-          <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">
-            2. Brand *
-          </label>
-          <select
+          <SearchableSelect
+            options={availableBrands}
             value={selectedBrandId}
-            onChange={e => {
-              const bId = e.target.value;
-              setSelectedBrandId(bId);
+            onChange={val => {
+              isInternalChangeRef.current = true;
+              setSelectedBrandId(val);
               setSelectedVariant('');
               setSelectedSizeMl('');
-              if (bId && !selectedCategoryId) {
-                const foundBrand = brands.find(b => b.id === bId);
+              if (val && !selectedCategoryId) {
+                const foundBrand = brands.find(b => b.id === val);
                 const bCatId = foundBrand?.category_id || foundBrand?.categoryId;
                 if (bCatId) {
                   setSelectedCategoryId(bCatId);
@@ -404,107 +385,65 @@ export const CanonicalProductSelector: React.FC<CanonicalProductSelectorProps> =
               }
             }}
             disabled={disabled}
-            className="w-full px-3 py-2 text-xs font-medium rounded-lg border border-slate-300 bg-slate-50/50 hover:bg-white focus:bg-white focus:ring-2 focus:ring-amber-500 focus:outline-none transition-all disabled:opacity-50"
-          >
-            <option value="">-- Select Brand --</option>
-            {availableBrands.map(b => (
-              <option key={b.id} value={b.id}>
-                {b.name || b.brand_name}
-              </option>
-            ))}
-          </select>
+            placeholder="Select Brand"
+          />
         </div>
 
-        {/* Step 3: Variant */}
-        <div>
-          <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">
-            3. Variant
+        {/* Variant */}
+        <div className="space-y-1.5">
+          <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 ml-1">
+            Product Variant
           </label>
-          <select
+          <SearchableSelect
+            options={availableVariants}
             value={selectedVariant}
-            onChange={e => setSelectedVariant(e.target.value)}
+            onChange={val => {
+              isInternalChangeRef.current = true;
+              setSelectedVariant(val);
+            }}
             disabled={disabled || (!selectedBrandId && availableVariants.length === 0)}
-            className="w-full px-3 py-2 text-xs font-medium rounded-lg border border-slate-300 bg-slate-50/50 hover:bg-white focus:bg-white focus:ring-2 focus:ring-amber-500 focus:outline-none transition-all disabled:opacity-50"
-          >
-            <option value="">-- All Variants --</option>
-            {availableVariants.map(v => (
-              <option key={v} value={v}>
-                {v}
-              </option>
-            ))}
-          </select>
+            placeholder="Select Variant"
+          />
         </div>
 
-        {/* Step 4: Bottle Size */}
-        <div>
-          <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">
-            4. Bottle Size (ml) *
+        {/* Bottle Size */}
+        <div className="space-y-1.5">
+          <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 ml-1">
+            Volume (ML)
           </label>
-          <select
-            value={selectedSizeMl}
-            onChange={e => setSelectedSizeMl(e.target.value ? Number(e.target.value) : '')}
-            disabled={disabled || !selectedType}
-            className="w-full px-3 py-2 text-xs font-medium rounded-lg border border-slate-300 bg-slate-50/50 hover:bg-white focus:bg-white focus:ring-2 focus:ring-amber-500 focus:outline-none transition-all disabled:opacity-50"
-          >
-            <option value="">-- Select Size --</option>
-            {(availableSizes.length > 0 ? availableSizes : allowedSizesForType).map(s => (
-              <option key={s} value={s}>
-                {s} ml
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* Step 5: Packaging */}
-        <div>
-          <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">
-            5. Packaging
-          </label>
-          <select
-            value={selectedPackaging}
-            onChange={e => setSelectedPackaging(e.target.value)}
+          <SearchableSelect
+            options={(availableSizes.length > 0 ? availableSizes : allowedSizesForType).map(s => ({
+              id: String(s),
+              name: `${s} ml`
+            }))}
+            value={String(selectedSizeMl)}
+            onChange={val => {
+              isInternalChangeRef.current = true;
+              setSelectedSizeMl(val ? Number(val) : '');
+            }}
             disabled={disabled}
-            className="w-full px-3 py-2 text-xs font-medium rounded-lg border border-slate-300 bg-slate-50/50 hover:bg-white focus:bg-white focus:ring-2 focus:ring-amber-500 focus:outline-none transition-all disabled:opacity-50"
-          >
-            <option value="">-- All Packaging --</option>
-            {availablePackaging.map(pkg => (
-              <option key={pkg} value={pkg}>
-                {pkg}
-              </option>
-            ))}
-          </select>
+            placeholder="Select Size"
+          />
+        </div>
+
+        {/* Packaging */}
+        <div className="space-y-1.5">
+          <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 ml-1">
+            Package Type
+          </label>
+          <SearchableSelect
+            options={availablePackaging.map(pkg => ({ id: pkg, name: pkg }))}
+            value={selectedPackaging}
+            onChange={val => {
+              isInternalChangeRef.current = true;
+              setSelectedPackaging(val);
+            }}
+            disabled={disabled}
+            placeholder="Select Packaging"
+          />
         </div>
       </div>
-
-      {/* Selected Product Identity Badge */}
-      {activeProduct && (
-        <div className="mt-3.5 pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2 bg-amber-50/40 px-3 py-2 rounded-lg border border-amber-200/60">
-          <div className="flex items-center gap-2">
-            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-            <span className="text-xs font-bold text-slate-900">
-              {activeProduct.name || activeProduct.product_name}
-            </span>
-            <span className="text-[11px] font-mono text-slate-500 bg-white px-1.5 py-0.5 rounded border border-slate-200">
-              SKU: {activeProduct.sku || 'N/A'}
-            </span>
-          </div>
-
-          <div className="flex items-center gap-3 text-xs">
-            <span className="font-medium text-slate-600">
-              MRP: <strong className="text-slate-900">₹{activeProduct.mrp_reference || activeProduct.mrp || '0'}</strong>
-            </span>
-            <span className="font-medium text-slate-600">
-              TP Cost: <strong className="text-slate-900">₹{activeProduct.purchase_tp_price || '0'}</strong>
-            </span>
-            <span className="font-medium text-slate-600">
-              SCM Code:{' '}
-              <strong className="text-amber-700 font-mono">
-                {scmMap[activeProduct.id] || activeProduct.scm_code || 'Pending / Unresolved'}
-              </strong>
-            </span>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
+

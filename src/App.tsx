@@ -6,7 +6,6 @@ import { GlobalSearchModal } from './components/common/GlobalSearchModal';
 import { TutorialModal } from './components/common/TutorialModal';
 import { SetupView } from './components/setup/SetupView';
 import { LoginView } from './components/auth/LoginView';
-import { DashboardView } from './components/dashboard/DashboardView';
 import { InventoryView } from './components/inventory/InventoryView';
 import { ProductListView } from './components/products/ProductListView';
 import { BrandMasterView } from './components/masters/BrandMasterView';
@@ -23,6 +22,7 @@ import { ReportsView } from './components/reports/ReportsView';
 import { BackupRestoreView } from './components/settings/BackupRestoreView';
 import { BarSettingsView } from './components/settings/BarSettingsView';
 import { UserSettingsView } from './components/settings/UserSettingsView';
+import { BarHomeView } from './components/home/BarHomeView';
 import { apiGet, apiPost } from './utils/api';
 import { BarProvider } from './lib/contexts/BarContext';
 import { ToastProvider } from './lib/contexts/ToastContext';
@@ -31,10 +31,10 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
   const [currentRoute, setCurrentRoute] = useState<string>(() => {
     const path = window.location.pathname;
-    if (path && path !== '/' && path !== '') {
+    if (path && path !== '/' && path !== '' && path !== '/dashboard' && path !== '/login') {
       return path;
     }
-    return '/dashboard';
+    return '/bar-home';
   });
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState<boolean>(false);
@@ -84,6 +84,8 @@ export default function App() {
       const path = window.location.pathname;
       if (path && path !== '/') {
         setCurrentRoute(path);
+      } else {
+        setCurrentRoute('/bar-home');
       }
     };
     window.addEventListener('popstate', handlePopState);
@@ -102,11 +104,11 @@ export default function App() {
         checkAndTriggerTutorial(user.id);
         setCurrentRoute(prev => {
           const path = window.location.pathname;
-          if (path && path !== '/' && path !== '/login' && path !== '/setup') {
+          if (path && path !== '/' && path !== '/login' && path !== '/setup' && path !== '/dashboard') {
             return path;
           }
-          if (prev === '/login' || prev === '/setup' || !prev) {
-            return '/dashboard';
+          if (prev === '/login' || prev === '/setup' || prev === '/dashboard' || !prev) {
+            return '/bar-home';
           }
           return prev;
         });
@@ -144,6 +146,7 @@ export default function App() {
     } finally {
       sessionStorage.removeItem('liquorflow_session_token');
       localStorage.removeItem('liquorflow_session_token');
+      localStorage.removeItem('liquorflow_selected_bar_id');
       setCurrentUser(null);
       setCurrentRoute('/login');
       window.history.pushState({}, '', '/login');
@@ -153,10 +156,7 @@ export default function App() {
   const handleLoginSuccess = (user: AuthUser) => {
     setCurrentUser(user);
     checkAndTriggerTutorial(user.id);
-    const targetRoute =
-      window.location.pathname && window.location.pathname !== '/' && window.location.pathname !== '/login'
-        ? window.location.pathname
-        : '/dashboard';
+    const targetRoute = '/bar-home';
     setCurrentRoute(targetRoute);
     window.history.pushState({}, '', targetRoute);
   };
@@ -260,83 +260,91 @@ export default function App() {
             />
 
             <main className="flex-1 pb-16">
-              {currentRoute === '/dashboard' && (
-                <DashboardView language="en" user={currentUser} onRouteChange={handleRouteChange} />
-              )}
+              {(() => {
+                const baseRoute = currentRoute.split('?')[0];
+                return (
+                  <>
+                    {/* Bar Home / Landing */}
+                    {(baseRoute === '/bar-home' || baseRoute === '/' || baseRoute === '') && (
+                      <BarHomeView onNavigate={handleRouteChange} onLogout={handleLogout} />
+                    )}
 
-              {/* Core Operations */}
-              {(currentRoute === '/stock/opening' || currentRoute === '/opening-stock') && (
-                <OpeningStockView />
-              )}
+                    {/* Core Operations */}
+                    {(baseRoute === '/stock/opening' || baseRoute === '/opening-stock') && (
+                      <OpeningStockView />
+                    )}
 
-              {(currentRoute === '/purchases' || currentRoute === '/received-stock') && (
-                <PurchasesView />
-              )}
+                    {(baseRoute === '/purchases' || baseRoute === '/received-stock') && (
+                      <PurchasesView />
+                    )}
 
-              {(currentRoute === '/transactions' || currentRoute === '/sales' || currentRoute.startsWith('/transactions/')) && (
-                <SalesTransactionView />
-              )}
+                    {(baseRoute === '/transactions' || baseRoute === '/sales' || baseRoute.startsWith('/transactions/')) && (
+                      <SalesTransactionView />
+                    )}
 
-              {currentRoute === '/inventory' && (
-                <InventoryView language="en" />
-              )}
+                    {baseRoute === '/inventory' && (
+                      <InventoryView language="en" />
+                    )}
 
-              {currentRoute === '/stock-ledger' && (
-                <StockLedgerView language="en" />
-              )}
+                    {baseRoute === '/stock-ledger' && (
+                      <StockLedgerView language="en" />
+                    )}
 
-              {currentRoute === '/stock/adjustments' && (
-                <StockAdjustmentsView language="en" />
-              )}
+                    {baseRoute === '/stock/adjustments' && (
+                      <StockAdjustmentsView language="en" />
+                    )}
 
-              {currentRoute === '/stock/transfers' && (
-                <StockTransfersView />
-              )}
+                    {baseRoute === '/stock/transfers' && (
+                      <StockTransfersView />
+                    )}
 
-              {currentRoute === '/batches' && (
-                <BatchesView language="en" />
-              )}
+                    {baseRoute === '/batches' && (
+                      <BatchesView language="en" />
+                    )}
 
-              {/* Excise & Audit */}
-              {currentRoute === '/reports' && (
-                <ReportsView />
-              )}
+                    {/* Excise & Audit */}
+                    {baseRoute === '/reports' && (
+                      <ReportsView />
+                    )}
 
-              {(currentRoute === '/scm-code' || currentRoute === '/excise') && (
-                <ScmMasterView />
-              )}
+                    {(baseRoute === '/scm-code' || baseRoute === '/excise') && (
+                      <ScmMasterView />
+                    )}
 
-              {/* Product Masters */}
-              {currentRoute === '/products' && (
-                <div className="page-container px-4 sm:px-6 lg:px-8 py-8">
-                  <ProductListView language="en" />
-                </div>
-              )}
+                    {/* Product Masters */}
+                    {baseRoute === '/products' && (
+                      <div className="page-container px-4 sm:px-6 lg:px-8 py-8">
+                        <ProductListView language="en" />
+                      </div>
+                    )}
 
-              {currentRoute === '/brands' && (
-                <div className="page-container px-4 sm:px-6 lg:px-8 py-8">
-                  <BrandMasterView language="en" />
-                </div>
-              )}
+                    {baseRoute === '/brands' && (
+                      <div className="page-container px-4 sm:px-6 lg:px-8 py-8">
+                        <BrandMasterView language="en" />
+                      </div>
+                    )}
 
-              {currentRoute === '/pack-sizes' && (
-                <div className="page-container px-4 sm:px-6 lg:px-8 py-8">
-                  <PackSizeMasterView language="en" />
-                </div>
-              )}
+                    {baseRoute === '/pack-sizes' && (
+                      <div className="page-container px-4 sm:px-6 lg:px-8 py-8">
+                        <PackSizeMasterView language="en" />
+                      </div>
+                    )}
 
-              {/* System & Settings */}
-              {currentRoute === '/backup-restore' && (
-                <BackupRestoreView />
-              )}
+                    {/* System & Settings */}
+                    {baseRoute === '/backup-restore' && (
+                      <BackupRestoreView />
+                    )}
 
-              {(currentRoute === '/bar-settings' || currentRoute === '/bars') && (
-                <BarSettingsView />
-              )}
+                    {(baseRoute === '/bar-settings' || baseRoute === '/bars') && (
+                      <BarSettingsView />
+                    )}
 
-              {(currentRoute === '/user-settings' || currentRoute === '/settings') && (
-                <UserSettingsView user={currentUser} />
-              )}
+                    {(baseRoute === '/user-settings' || baseRoute === '/settings') && (
+                      <UserSettingsView user={currentUser} />
+                    )}
+                  </>
+                );
+              })()}
             </main>
           </div>
 

@@ -1,50 +1,46 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
-  FileInput,
   Plus,
   RefreshCw,
   Search,
-  CheckCircle2,
-  AlertCircle,
-  Download,
-  Calendar,
-  Layers,
-  FileSpreadsheet,
-  Upload,
-  Lock,
+  Clipboard,
   X,
   Trash2,
-  Clipboard,
+  ChevronRight,
+  Package
 } from 'lucide-react';
+import { format } from 'date-fns';
 import { useBar } from '../../lib/contexts/BarContext';
 import { useToast } from '../../lib/contexts/ToastContext';
 import { apiGet, apiPost } from '../../utils/api';
 import { CanonicalProductSelector, SelectedProductDetail } from '../common/CanonicalProductSelector';
 import { UniversalBulkEntryModal, BulkEntryRow } from '../common/UniversalBulkEntryModal';
+import { ModalShell } from '../common/ModalShell';
 
 export const OpeningStockView: React.FC = () => {
   const { selectedBar } = useBar();
   const { showSuccess, showError } = useToast();
 
   const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [records, setRecords] = useState<any[]>([]);
   const [search, setSearch] = useState('');
 
-  // Single Entry Form State
+  // Add Modal State
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [showPasteModal, setShowPasteModal] = useState(false);
+
+  // Form State
   const [entryDate, setEntryDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
   const [selectedProduct, setSelectedProduct] = useState<SelectedProductDetail | null>(null);
   const [tpNumber, setTpNumber] = useState<string>('');
   const [quantity, setQuantity] = useState<number>(10);
   const [remarks, setRemarks] = useState<string>('');
 
-  // Multi-row Excel / TSV Paste State
-  const [showPasteModal, setShowPasteModal] = useState<boolean>(false);
-
-  // Clear operational records on bar switch
   useEffect(() => {
     setRecords([]);
     setSelectedProduct(null);
+    setShowAddModal(false);
   }, [selectedBar?.id]);
 
   const fetchData = useCallback(async () => {
@@ -56,7 +52,7 @@ export const OpeningStockView: React.FC = () => {
         setRecords(recData.data?.records || []);
       }
     } catch (err: any) {
-      showError(err.message || 'Failed to load opening stock records');
+      showError(err.message || 'Failed to load opening stock records.');
     } finally {
       setLoading(false);
     }
@@ -66,16 +62,15 @@ export const OpeningStockView: React.FC = () => {
     fetchData();
   }, [fetchData]);
 
-  // Handler: Single Opening Stock Submit
   const handleSingleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedBar?.id || selectedBar.id === 'ALL_BARS') {
-      showError('Please select a specific bar before creating opening stock.');
+      showError('Please select a specific bar first.');
       return;
     }
 
     if (!selectedProduct) {
-      showError('Please select a valid product using the cascading selector.');
+      showError('Please select a product.');
       return;
     }
 
@@ -84,7 +79,7 @@ export const OpeningStockView: React.FC = () => {
       return;
     }
 
-    setSaving(true);
+    setSaveStatus('saving');
     try {
       const res = await apiPost('/api/inventory/opening-stock', {
         barId: selectedBar.id,
@@ -96,25 +91,28 @@ export const OpeningStockView: React.FC = () => {
       });
 
       if (res.success) {
+        setSaveStatus('saved');
         showSuccess('Opening stock saved successfully.');
         setQuantity(10);
         setTpNumber('');
         setRemarks('');
+        setSelectedProduct(null);
+        setShowAddModal(false);
         fetchData();
       } else {
         throw new Error(res.error?.message || 'Failed to save opening stock.');
       }
     } catch (err: any) {
       showError(err.message || 'Unable to save. Please try again.');
+      setSaveStatus('idle');
     } finally {
-      setSaving(false);
+      setTimeout(() => setSaveStatus('idle'), 1500);
     }
   };
 
-  // Handler: Universal Bulk Import Add Rows
   const handleAddBulkOpeningStock = async (rows: BulkEntryRow[]) => {
     if (!selectedBar?.id || selectedBar.id === 'ALL_BARS') return;
-    setSaving(true);
+    setSaveStatus('saving');
     try {
       for (const r of rows) {
         if (r.matchedProductId && r.quantity > 0) {
@@ -127,12 +125,12 @@ export const OpeningStockView: React.FC = () => {
           });
         }
       }
-      showSuccess(`Successfully saved batch of ${rows.length} opening stock entries.`);
+      showSuccess(`Successfully saved ${rows.length} opening stock entries.`);
       fetchData();
     } catch (err: any) {
       showError(err.message || 'Batch save failed.');
     } finally {
-      setSaving(false);
+      setSaveStatus('idle');
     }
   };
 
@@ -150,14 +148,11 @@ export const OpeningStockView: React.FC = () => {
 
   if (!selectedBar || selectedBar.id === 'ALL_BARS') {
     return (
-      <div className="page-container px-4 sm:px-6 lg:px-8 py-10 max-w-4xl mx-auto">
-        <div className="p-8 text-center bg-white border border-amber-200 rounded-2xl shadow-sm">
-          <div className="w-14 h-14 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-4 text-amber-700">
-            <Lock className="w-7 h-7" />
-          </div>
-          <h3 className="text-lg font-bold text-slate-900 mb-2">Specific Bar Selection Required</h3>
-          <p className="text-sm text-slate-600 max-w-md mx-auto">
-            Select a specific bar to create or modify operational transactions.
+      <div className="px-4 sm:px-6 py-12 max-w-xl mx-auto text-center">
+        <div className="p-8 bg-white border border-slate-200 rounded-xl">
+          <h2 className="text-base font-bold text-slate-900 mb-1">Select a Bar</h2>
+          <p className="text-xs text-slate-500">
+            Please choose a specific bar outlet to record opening stock.
           </p>
         </div>
       </div>
@@ -165,207 +160,247 @@ export const OpeningStockView: React.FC = () => {
   }
 
   return (
-    <div className="page-container px-4 sm:px-6 lg:px-8 py-8 space-y-6">
-      {/* Header Banner */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
-        <div>
-          <div className="flex items-center gap-2 text-xs font-bold text-amber-600 uppercase tracking-wider mb-1">
-            <FileInput className="w-4 h-4" />
-            Stock Master & Baseline Entry
+    <div className="px-4 sm:px-8 py-8 max-w-7xl mx-auto space-y-8 font-sans text-slate-700">
+      {/* 1. SELECTION CHECK */}
+      {!selectedBar || selectedBar.id === 'ALL_BARS' ? (
+        <div className="px-4 sm:px-6 py-12 max-w-xl mx-auto text-center">
+          <div className="p-12 bg-white border border-slate-200 rounded-3xl shadow-sm">
+            <div className="w-16 h-16 bg-slate-50 text-slate-400 rounded-2xl flex items-center justify-center mx-auto mb-6">
+              <Clipboard className="w-8 h-8" />
+            </div>
+            <h2 className="text-xl font-bold text-slate-900 mb-2 tracking-tight">Select a Bar</h2>
+            <p className="text-sm text-slate-500 leading-relaxed">
+              Please choose a specific bar outlet to record opening stock baseline data.
+            </p>
           </div>
-          <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
-            Opening Stock & Baseline Quantities
-          </h1>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Active Bar:{' '}
-            <span className="font-bold text-slate-800 bg-slate-100 px-2 py-0.5 rounded">
-              {selectedBar.name}
-            </span>
-          </p>
         </div>
-
-        <button
-          onClick={() => setShowPasteModal(true)}
-          className="px-4 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold uppercase tracking-wider rounded-xl shadow-md transition-all flex items-center gap-2 cursor-pointer"
-        >
-          <Clipboard className="w-4 h-4" />
-          📋 Paste / Import / Excel
-        </button>
-      </div>
-
-      {/* Single Entry Form Card */}
-      <form onSubmit={handleSingleSubmit} className="space-y-6">
-        <CanonicalProductSelector
-          onSelectProduct={prod => setSelectedProduct(prod)}
-          selectedProductId={selectedProduct?.productId}
-        />
-
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-          <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider border-b border-slate-100 pb-2">
-            Opening Stock Entry Details
-          </h3>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      ) : (
+        <>
+          {/* 2. SIMPLE PAGE STRUCTURE: Page Title, Short description, Primary Action */}
+          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b border-slate-200 pb-8">
             <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                Opening Date *
-              </label>
-              <input
-                type="date"
-                value={entryDate}
-                onChange={e => setEntryDate(e.target.value)}
-                required
-                className="w-full px-3 py-2 text-xs font-medium rounded-lg border border-slate-300 focus:ring-2 focus:ring-amber-500 focus:outline-none"
-              />
+              <nav className="flex items-center gap-2 text-xs font-medium text-slate-500 mb-2 uppercase tracking-wider">
+                <span>Inventory</span>
+                <ChevronRight className="w-3 h-3" />
+                <span className="text-indigo-600">Opening Stock</span>
+              </nav>
+              <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Opening Stock Registry</h1>
+              <p className="mt-2 text-slate-500 max-w-2xl text-sm leading-relaxed">
+                Initialize baseline inventory levels for {selectedBar.name}. These records serve as the foundation for all subsequent stock movements and excise calculations.
+              </p>
             </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                Initial Quantity (Bottles/Units) *
-              </label>
-              <input
-                type="number"
-                min="1"
-                value={quantity}
-                onChange={e => setQuantity(Math.max(1, parseInt(e.target.value, 10) || 1))}
-                required
-                className="w-full px-3 py-2 text-xs font-medium rounded-lg border border-slate-300 focus:ring-2 focus:ring-amber-500 focus:outline-none"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                TP Number / Reference
-              </label>
-              <input
-                type="text"
-                placeholder="e.g. TP-2026-9042"
-                value={tpNumber}
-                onChange={e => setTpNumber(e.target.value)}
-                className="w-full px-3 py-2 text-xs font-medium rounded-lg border border-slate-300 focus:ring-2 focus:ring-amber-500 focus:outline-none"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                Remarks / Notes
-              </label>
-              <input
-                type="text"
-                placeholder="Baseline stock verified"
-                value={remarks}
-                onChange={e => setRemarks(e.target.value)}
-                className="w-full px-3 py-2 text-xs font-medium rounded-lg border border-slate-300 focus:ring-2 focus:ring-amber-500 focus:outline-none"
-              />
+            <div className="flex flex-wrap gap-3">
+              <button
+                type="button"
+                onClick={() => setShowPasteModal(true)}
+                className="inline-flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-all shadow-sm active:scale-95 cursor-pointer"
+              >
+                <Clipboard className="w-4 h-4 text-slate-400" />
+                <span>Paste from Excel</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowAddModal(true)}
+                className="inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-600 rounded-xl text-sm font-semibold text-white hover:bg-indigo-700 transition-all shadow-md shadow-indigo-200 active:scale-95 cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Add Opening Stock</span>
+              </button>
             </div>
           </div>
 
-          <div className="flex justify-end pt-2">
+          {/* 3. FILTER BAR: Refined search and filters */}
+          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col sm:flex-row gap-4 items-center">
+            <div className="relative flex-1 w-full">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Search by product name, SKU, brand..."
+                className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border-none rounded-xl text-sm focus:ring-2 focus:ring-indigo-500/20 transition-all placeholder:text-slate-400"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
             <button
-              type="submit"
-              disabled={saving || !selectedProduct}
-              className="px-6 py-2.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold uppercase tracking-wider rounded-xl shadow-sm transition-all disabled:opacity-50 flex items-center gap-2 cursor-pointer"
+              type="button"
+              onClick={fetchData}
+              disabled={loading}
+              className="inline-flex items-center gap-2 px-4 py-2.5 text-xs font-bold text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all cursor-pointer whitespace-nowrap"
             >
-              {saving ? (
-                <>
-                  <RefreshCw className="w-4 h-4 animate-spin" />
-                  Saving...
-                </>
-              ) : (
-                <>
-                  <CheckCircle2 className="w-4 h-4" />
-                  Record Opening Stock
-                </>
-              )}
+              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-indigo-600' : ''}`} />
+              Refresh Data
             </button>
           </div>
-        </div>
-      </form>
 
-      {/* Historical Opening Stock Records Table */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden space-y-4 p-5">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="relative">
-            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
-            <input
-              type="text"
-              placeholder="Search recorded opening stocks..."
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              className="pl-8 pr-3 py-1.5 text-xs rounded-lg border border-slate-300 w-64 focus:ring-2 focus:ring-amber-500 focus:outline-none"
+          {/* 4. DATA TABLE: Professional ERP Table Layout */}
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden transition-all hover:shadow-md">
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse text-sm text-left">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-slate-200">
+                    <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Entry Date</th>
+                    <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Product Name</th>
+                    <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Brand / SKU</th>
+                    <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Bottle Size</th>
+                    <th className="px-6 py-4 text-right text-xs font-bold text-slate-500 uppercase tracking-wider">Qty (Bottles)</th>
+                    <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">TP / Ref #</th>
+                    <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Remarks</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {loading ? (
+                    <tr>
+                      <td colSpan={7} className="px-6 py-20 text-center">
+                        <div className="flex flex-col items-center justify-center">
+                          <RefreshCw className="w-10 h-10 mb-3 text-indigo-200 animate-spin" />
+                          <p className="text-slate-400 font-medium">Syncing registry records...</p>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : filteredRecords.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="px-6 py-20 text-center">
+                        <div className="flex flex-col items-center justify-center opacity-40">
+                          <Clipboard className="w-12 h-12 mb-3 text-slate-300" />
+                          <p className="text-slate-500 font-medium">No opening stock records found</p>
+                          <p className="text-xs text-slate-400 mt-1">Initialize your baseline inventory to get started</p>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredRecords.map((r, i) => {
+                      const p = r.product;
+                      const dateStr = r.created_at ? format(new Date(r.created_at), 'dd MMM yyyy') : '—';
+                      return (
+                        <tr key={r.id || i} className="hover:bg-slate-50/50 transition-colors group">
+                          <td className="px-6 py-4 whitespace-nowrap font-medium text-slate-600">
+                            {dateStr}
+                          </td>
+                          <td className="px-6 py-4">
+                            <span className="font-bold text-slate-900">{p?.name || p?.product_name || 'Item'}</span>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="flex flex-col">
+                              <span className="px-1.5 py-0.5 bg-slate-100 text-[10px] font-bold text-slate-600 rounded-sm uppercase tracking-tighter w-fit mb-1">
+                                {p?.brand?.name || p?.brand_name || 'Generic'}
+                              </span>
+                              <span className="text-[11px] text-slate-400 font-mono">SKU: {p?.sku || 'N/A'}</span>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <span className="text-slate-600 font-medium">
+                              {p?.pack_size ? `${p.pack_size.volume_ml} ml` : 'Standard'}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 text-right">
+                            <span className="font-mono font-bold text-indigo-600 text-base">
+                              {r.quantity}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 font-mono text-slate-500 whitespace-nowrap">
+                            {r.reference_number || r.batch_number || '—'}
+                          </td>
+                          <td className="px-6 py-4 text-slate-500 max-w-xs truncate italic text-xs">
+                            {r.remarks || '—'}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* 5. MODALS: Use standardized ModalShell */}
+      <ModalShell
+        isOpen={showAddModal}
+        onClose={() => setShowAddModal(false)}
+        title="Add Opening Stock"
+        subtitle="Initialize baseline inventory for a specific product"
+        icon={<Plus className="w-5 h-5 text-indigo-600" />}
+      >
+        <form onSubmit={handleSingleSubmit} className="p-1 space-y-6">
+          <div className="bg-slate-50/50 p-4 rounded-xl border border-slate-200">
+            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 px-1">Product Selection</label>
+            <CanonicalProductSelector
+              onSelectProduct={prod => setSelectedProduct(prod)}
+              selectedProductId={selectedProduct?.productId}
             />
           </div>
 
-          <button
-            onClick={fetchData}
-            disabled={loading}
-            className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-            Refresh
-          </button>
-        </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+            <div className="space-y-2">
+              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider px-1">Opening Date *</label>
+              <input
+                type="date"
+                required
+                className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500/20 transition-all outline-none"
+                value={entryDate}
+                onChange={e => setEntryDate(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider px-1">Initial Quantity (Bottles) *</label>
+              <input
+                type="number"
+                required
+                min="1"
+                className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-mono focus:ring-2 focus:ring-indigo-500/20 transition-all outline-none"
+                value={quantity}
+                onChange={e => setQuantity(Math.max(1, parseInt(e.target.value, 10) || 1))}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider px-1">TP # / Reference</label>
+              <input
+                type="text"
+                placeholder="e.g. TP-2026-9042"
+                className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-mono focus:ring-2 focus:ring-indigo-500/20 transition-all outline-none"
+                value={tpNumber}
+                onChange={e => setTpNumber(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider px-1">Remarks</label>
+              <input
+                type="text"
+                placeholder="e.g. Opening stock audit"
+                className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500/20 transition-all outline-none"
+                value={remarks}
+                onChange={e => setRemarks(e.target.value)}
+              />
+            </div>
+          </div>
 
-        <div className="overflow-x-auto border border-slate-200 rounded-xl">
-          <table className="w-full text-left text-xs">
-            <thead className="bg-slate-50 border-b border-slate-200 text-slate-700 uppercase font-bold text-[11px]">
-              <tr>
-                <th className="px-4 py-3">Date</th>
-                <th className="px-4 py-3">Product Name</th>
-                <th className="px-4 py-3">SKU</th>
-                <th className="px-4 py-3">Category / Brand</th>
-                <th className="px-4 py-3 text-right">Quantity</th>
-                <th className="px-4 py-3">Reference / Remarks</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {loading ? (
-                <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center text-slate-400">
-                    <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-amber-500" />
-                    Loading opening records...
-                  </td>
-                </tr>
-              ) : filteredRecords.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center text-slate-400">
-                    No opening stock records found for {selectedBar.name}.
-                  </td>
-                </tr>
-              ) : (
-                filteredRecords.map((r, idx) => (
-                  <tr key={idx} className="hover:bg-slate-50/80 transition-colors">
-                    <td className="px-4 py-3 text-slate-600">
-                      {r.created_at?.split('T')[0] || r.transaction_date || 'N/A'}
-                    </td>
-                    <td className="px-4 py-3 font-bold text-slate-900">
-                      {r.product?.name || r.product?.product_name || 'Product'}
-                    </td>
-                    <td className="px-4 py-3 font-mono text-slate-500">{r.product?.sku || '-'}</td>
-                    <td className="px-4 py-3 text-slate-600">
-                      {r.product?.category?.name || '-'} • {r.product?.brand?.name || '-'}
-                    </td>
-                    <td className="px-4 py-3 text-right font-mono font-bold text-slate-900">
-                      +{r.quantity}
-                    </td>
-                    <td className="px-4 py-3 text-slate-500">
-                      {r.batch_number ? `Batch: ${r.batch_number}` : r.remarks || '-'}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+          <div className="flex justify-end gap-3 pt-6 border-t border-slate-100">
+            <button
+              type="button"
+              onClick={() => setShowAddModal(false)}
+              className="px-6 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50 rounded-xl transition-all cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={saveStatus === 'saving' || !selectedProduct}
+              className="px-8 py-2.5 bg-indigo-600 rounded-xl text-sm font-semibold text-white hover:bg-indigo-700 transition-all shadow-md shadow-indigo-200 disabled:opacity-50 disabled:shadow-none cursor-pointer"
+            >
+              {saveStatus === 'saving' ? 'Saving...' : saveStatus === 'saved' ? 'Registry Saved' : 'Initialize Stock'}
+            </button>
+          </div>
+        </form>
+      </ModalShell>
 
-      {/* Universal Bulk Import Modal */}
+      {/* Bulk Entry Modal */}
       <UniversalBulkEntryModal
         isOpen={showPasteModal}
         onClose={() => setShowPasteModal(false)}
         module="opening-stock"
         language="en"
-        onAddRows={(rows) => handleAddBulkOpeningStock(rows)}
+        onAddRows={handleAddBulkOpeningStock}
       />
     </div>
   );
